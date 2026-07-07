@@ -1,0 +1,145 @@
+/* CraftMap-Web palette/tokens - matches the tkinter app's existing dark
+   theme (see craftmap/overlay.py's _configure_button_styles/_build_tree)
+   and the approved station-picker mockup from the same session. This app
+   deliberately commits to a single dark look (it's an always-on-top game
+   overlay, not a document meant to respect a light-mode OS preference),
+   so there's no light-theme branch here. */
+
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c2229;
+  --line: #30363d;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --faint: #5b6470;
+  --accent: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, 0.14);
+  --good: #3fb950;
+  --warn: #f0883e;
+  --danger: #da3633;
+  --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+  --ui: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: 13px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------- drag bar ---------- */
+#dragbar {
+  flex: 0 0 auto;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  cursor: move;
+}
+/* No -webkit-app-region here: that's an Electron/Chromium-shell feature,
+   not something WebView2 (a .NET-embedded Chromium control, not a full
+   Electron-style shell) honors - dragging is real JS pointer-event
+   handling calling Api.move_window(), see js/drag-resize.js. */
+
+#dragbar .grip {
+  color: var(--faint);
+  padding: 0 6px 0 8px;
+  font-size: 12px;
+}
+
+#dragbar .title {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#dragbar .icon-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#dragbar .icon-btn:hover {
+  background: #21262d;
+  color: var(--text);
+}
+
+#dragbar .icon-btn.close-btn:hover {
+  background: var(--danger);
+  color: white;
+}
+
+/* ---------- body placeholder (real screens land here from Milestone 3) ---------- */
+#body {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+/* ---------- inline error banner (see js/api.js) ---------- */
+#error-banner {
+  display: none;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  background: rgba(218, 54, 51, 0.15);
+  border-top: 1px solid var(--danger);
+  color: #ff9a9a;
+  font-size: 11px;
+}
+
+#error-banner.show {
+  display: block;
+}
+
+/* ---------- resize grip ---------- */
+#resize-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
