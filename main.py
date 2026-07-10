@@ -103,6 +103,9 @@ class App:
         # pywebview's Window exposes no visibility getter - track it
         # ourselves since we're the only code path calling show()/hide().
         self.visible = True
+        # Overwritten right after construction (see main()) to match
+        # queue_window's own hidden=/queue_open startup state - starts
+        # False here only as the pre-launch default.
         self.queue_visible = False
         self.queue_pinned = bool(config.load_config().get("queue_pinned", False))
         # Mirrors CraftQueuePanel-integration's _queue_panel_was_visible:
@@ -187,10 +190,31 @@ class App:
                 win32util.pywebview_hwnd(self.queue_window), self.queue_passthrough
             )
 
+    def reconcile_queue_visibility(self):
+        """Self-healing correction for a pywebview/WinForms quirk where the
+        queue window's hidden=True startup trick (Opacity=0 -> Show() ->
+        Hide() -> Opacity=1 - see main()'s on_queue_shown/on_queue_loaded)
+        can leave the native window genuinely visible (accepting clicks,
+        eventually painting real content once interacted with) despite
+        self.queue_visible being False - observed in practice to survive
+        those two reactive hide() calls, likely because Invoke-ing hide()
+        that early races the window/WebView2 control's own initialization.
+        Rather than chase that race precisely, this compares the real OS
+        visibility state against self.queue_visible on every poll tick
+        (already running every 0.25s for click-through sync) and corrects
+        any drift directly - self-healing regardless of what caused it."""
+        hwnd = win32util.pywebview_hwnd(self.queue_window)
+        actually_visible = win32util.is_window_visible(hwnd)
+        if actually_visible and not self.queue_visible:
+            self.queue_window.hide()
+        elif self.queue_visible and not actually_visible:
+            self.queue_window.show()
+
     def poll_input_passthrough(self):
         while not self._poll_stop:
             try:
                 self.sync_input_passthrough()
+                self.reconcile_queue_visibility()
             except Exception:  # pylint: disable=broad-exception-caught
                 pass
             time.sleep(0.25)
@@ -395,6 +419,13 @@ class App:
         self.unregister_hotkey()
         if self.tray_icon is not None:
             self.tray_icon.stop()
+        # Persist whether the queue window was open so the next launch can
+        # start it already-shown (see main()'s queue_open) instead of
+        # always going through the hidden=True creation trick, which is
+        # only needed when the window should actually start hidden.
+        cfg = config.load_config()
+        cfg["queue_open"] = self.queue_visible
+        config.save_config(cfg)
 
 
 def main():
@@ -409,6 +440,7 @@ def main():
     w, h = cfg.get("window_w", 640), cfg.get("window_h", 300)
     qx, qy = cfg.get("queue_x", 400), cfg.get("queue_y", 60)
     qw, qh = cfg.get("queue_w", 320), cfg.get("queue_h", 500)
+    queue_open = cfg.get("queue_open", False)
 
     api = Api()
     window = webview.create_window(
@@ -450,11 +482,19 @@ def main():
         resizable=True,
         background_color="#0d1117",
         easy_drag=False,
-        # Starts hidden regardless of last session's pin/visibility state -
-        # CraftQueuePanel in the tkinter app is lazily created on first use
-        # too (never auto-restored on startup), so this keeps the same
-        # "opt in each session" behavior rather than adding a new one.
-        hidden=True,
+        # Restores last session's open/closed state (queue_open, saved by
+        # App.quit_app) rather than always starting hidden. This also
+        # sidesteps pywebview's hidden=True creation trick (Opacity=0 ->
+        # Show() -> Hide() -> Opacity=1, done to get WebView2 to initialize
+        # while staying invisible) for the common case where the window
+        # should start visible anyway - that trick raced against Windows'
+        # own topmost-window Show() processing (Z-order insertion, DWM
+        # composition) closely enough that the window could occasionally
+        # end up stuck genuinely visible despite the code's intent, same as
+        # the main window above never needs this trick because it's never
+        # asked to start hidden. See App.reconcile_queue_visibility for the
+        # remaining self-healing safety net on the hidden=True path.
+        hidden=not queue_open,
     )
     # Underscore-prefixed: pywebview builds its JS-exposed function list by
     # walking dir(api) and recursing into every non-underscore, non-callable
@@ -465,6 +505,7 @@ def main():
     api._queue_window = queue_window  # pylint: disable=protected-access
 
     app = App(window, queue_window, api)
+    app.queue_visible = queue_open
     api._on_quit = app.quit_app  # pylint: disable=protected-access
     api._app_ctrl = app  # pylint: disable=protected-access
 
@@ -472,6 +513,14 @@ def main():
         hwnd = win32util.pywebview_hwnd(window)
         win32util.set_window_alpha(hwnd, WINDOW_ALPHA)
         threading.Thread(target=app.poll_input_passthrough, daemon=True).start()
+
+        if queue_open:
+            # Restoring queue_open (see above) sets app.queue_visible
+            # directly rather than through _set_queue_visible, since that
+            # happens before this window has loaded and could evaluate_js
+            # into a page that isn't there yet - push the Queue tab's
+            # button state now that it safely can.
+            app._set_queue_visible(True)  # pylint: disable=protected-access
 
         if HOTKEY_AVAILABLE:
             app.toggle_key = toggle_key
@@ -492,19 +541,30 @@ def main():
             app.tray_icon = icon
             threading.Thread(target=icon.run, daemon=True).start()
 
-    def on_queue_loaded():
-        win32util.set_window_alpha(win32util.pywebview_hwnd(queue_window), WINDOW_ALPHA)
+    def on_queue_shown():
         # Defensive: pywebview's own hidden=True handling (winforms.py's
         # create_window) does Opacity=0 -> Show() -> Hide() -> Opacity=1 to
         # get the window/WebView2 control properly initialized while still
         # nominally hidden - if that Show() ever paints a visible frame
-        # before Hide() lands (observed once as a startup flash of just the
-        # window's background color), this re-asserts the hidden state
-        # once the page has actually finished loading.
+        # before Hide() lands, this re-asserts the hidden state as soon as
+        # the native window exists (the `shown` event), rather than waiting
+        # on on_queue_loaded below - `loaded` depends on WebView2 finishing
+        # page navigation, which can lag well behind window creation, and a
+        # visible-but-unloaded queue window (just its background color) sat
+        # on screen for that whole gap until this was added.
+        if not app.queue_visible:
+            queue_window.hide()
+
+    def on_queue_loaded():
+        win32util.set_window_alpha(win32util.pywebview_hwnd(queue_window), WINDOW_ALPHA)
+        # Same re-assertion as on_queue_shown above, in case anything
+        # between `shown` and `loaded` (e.g. WebView2's own navigation-time
+        # compositing) made it visible again.
         if not app.queue_visible:
             queue_window.hide()
 
     window.events.loaded += on_loaded
+    queue_window.events.shown += on_queue_shown
     queue_window.events.loaded += on_queue_loaded
     webview.start(debug=False)
 

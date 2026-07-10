@@ -34,6 +34,8 @@ _user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 _user32.AttachThreadInput.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_int]
 _user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
 _user32.BringWindowToTop.argtypes = [ctypes.c_void_p]
+_user32.IsWindowVisible.restype = ctypes.c_int
+_user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
 
 
 def pywebview_hwnd(window):
@@ -80,6 +82,19 @@ def hwnd_is_foreground(hwnd) -> bool:
         return False
     try:
         return _user32.GetForegroundWindow() == hwnd
+    except Exception:
+        return False
+
+
+def is_window_visible(hwnd) -> bool:
+    """True if hwnd is currently shown on screen (WinForms Visible/OS
+    WS_VISIBLE state) - a raw Win32 check, not pywebview's own Window
+    object, so it reflects the real native state regardless of whether
+    pywebview's own show()/hide() bookkeeping has drifted from it."""
+    if not hwnd:
+        return False
+    try:
+        return bool(_user32.IsWindowVisible(hwnd))
     except Exception:
         return False
 
