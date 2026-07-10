@@ -47,12 +47,20 @@ class Api:
     def __init__(self):
         # Set by main.py right after webview.create_window() - lets any
         # method push a refresh into the other window once it exists
-        # (e.g. Milestone 5's "add to queue" pushing into the queue window).
+        # (e.g. "add to queue" pushing into the queue window).
         self._overlay_window = None
         self._queue_window = None
         # Called by main.py's quit_app to stop the hotkey thread / tray
         # icon / click-through poll loop before the process exits.
         self._on_quit = None
+        # main.py's App instance (see main.py's QueueMixin-ish methods
+        # toggle_queue_window/hide_queue_window/dismiss_queue_window/
+        # on_queue_pin_changed) - the queue window's show/hide/focus state
+        # machine has to live there, not here, since it's the only place
+        # that also knows the *main* window's current visibility (needed
+        # for "unpinning while the main window is hidden hides the queue
+        # too", mirroring craftmap/overlay.py's CraftQueuePanel._toggle_pin).
+        self._queue_ctrl = None
 
     # ---- config ----
 
@@ -352,6 +360,303 @@ class Api:
         config.save_config(cfg)
         return True
 
+    # ---- craft queue window geometry (frontend/queue.html's own drag bar/
+    # resize grip - see frontend/js/drag-resize.js's DragResize.attach) ----
+
+    def get_queue_window_geometry(self):
+        w = self._queue_window
+        return {"x": w.x, "y": w.y, "width": w.width, "height": w.height}
+
+    def move_queue_window(self, x, y):
+        self._queue_window.move(int(x), int(y))
+
+    def resize_queue_window(self, x, y, width, height):
+        self._queue_window.move(int(x), int(y))
+        self._queue_window.resize(int(width), int(height))
+
+    def save_queue_window_geometry(self, x, y, width, height):
+        cfg = config.load_config()
+        cfg["queue_x"], cfg["queue_y"] = int(x), int(y)
+        cfg["queue_w"], cfg["queue_h"] = int(width), int(height)
+        config.save_config(cfg)
+        return True
+
+    def get_queue_split(self):
+        return config.load_config().get("queue_split", 160)
+
+    def save_queue_split(self, split_px):
+        cfg = config.load_config()
+        cfg["queue_split"] = int(split_px)
+        config.save_config(cfg)
+        return True
+
+    # ---- craft queue show/hide/pin (state machine lives on main.py's App -
+    # see self._queue_ctrl above) ----
+
+    def get_queue_pinned(self):
+        return config.load_config().get("queue_pinned", False)
+
+    def toggle_queue_pin(self):
+        cfg = config.load_config()
+        pinned = not cfg.get("queue_pinned", False)
+        cfg["queue_pinned"] = pinned
+        config.save_config(cfg)
+        if self._queue_ctrl is not None:
+            self._queue_ctrl.on_queue_pin_changed(pinned)
+        return pinned
+
+    def toggle_queue_window(self):
+        if self._queue_ctrl is not None:
+            self._queue_ctrl.toggle_queue_window()
+        return True
+
+    def show_queue_window(self):
+        """Always shows (never hides) - used by the recipe panel's
+        '+ Queue' button, mirroring craftmap/overlay.py's
+        Overlay._add_recipe_to_queue calling .show() rather than toggling."""
+        if self._queue_ctrl is not None:
+            self._queue_ctrl.show_queue_window()
+        return True
+
+    def hide_queue_window(self):
+        """Explicit X-button hide - always wins over the pin, unlike
+        dismiss_queue_window (Escape)."""
+        if self._queue_ctrl is not None:
+            self._queue_ctrl.hide_queue_window()
+        return True
+
+    def dismiss_queue_window(self):
+        """Ambient dismiss (Escape) - only hides if not pinned, mirroring
+        craftmap/overlay.py's CraftQueuePanel.dismiss."""
+        if self._queue_ctrl is not None:
+            self._queue_ctrl.dismiss_queue_window()
+        return True
+
+    # ---- craft queue data (frontend/js/queue-panel.js) ----
+
+    def get_craft_queue(self):
+        return [
+            {
+                "queue_id": qid,
+                "recipe_id": rid,
+                "recipe_name": rname,
+                "output_name": oname,
+                "qty": qty,
+                "station": station,
+                "combine": bool(combine),
+                "station_mode": mode,
+            }
+            for qid, rid, rname, oname, qty, station, combine, mode in db.get_craft_queue()
+        ]
+
+    def add_to_queue(self, recipe_id, qty=1.0, station=None):
+        queue_id = db.add_to_queue(recipe_id, qty, station or None)
+        # frontend/js/recipe-panel.js's '+ Queue' button calls this from
+        # index.html, a different window/document than queue.html - unlike
+        # every other queue-mutating method here (which queue-panel.js only
+        # ever calls on itself and already re-fetches locally afterward),
+        # this is the one path where the queue window's own job-list DOM
+        # has no way to know a job was just added unless told.
+        self._notify_queue_window_changed()
+        return queue_id
+
+    def update_queue_qty(self, queue_id, qty):
+        db.update_queue_qty(queue_id, qty)
+        return True
+
+    def update_queue_station(self, queue_id, station, mode="auto"):
+        db.update_queue_station(queue_id, station or None, mode)
+        return True
+
+    def update_queue_combine(self, queue_id, combine):
+        db.update_queue_combine(queue_id, combine)
+        return True
+
+    def remove_from_queue(self, queue_id):
+        db.remove_from_queue(queue_id)
+        return True
+
+    def get_queue_checked_paths(self, queue_id):
+        return list(db.get_queue_checked(queue_id))
+
+    def set_queue_checked_many(self, queue_id, path_keys, checked):
+        db.set_queue_checked_many(queue_id, path_keys, checked)
+        return True
+
+    # Sentinel queue_id for the Totals view's own "All Jobs" aggregate
+    # checked state - SQLite has no FK enforcement on queue_checked, so
+    # reusing an id no real job can have (real ids start at 1) is safe.
+    # Matches craftmap/overlay.py's CraftQueuePanel._TOTALS_QID.
+    _TOTALS_QID = 0
+
+    def clear_all_queue_checked(self):
+        """'Clear done' button - clears every job's checked state plus the
+        Totals view's own aggregate state."""
+        for row in db.get_craft_queue():
+            db.clear_queue_checked(row[0])
+        db.clear_queue_checked(self._TOTALS_QID)
+        return True
+
+    def _notify_queue_window_changed(self):
+        """Push a job-list (+ breakdown, if in Totals mode) refresh into
+        the queue window's own JS - see frontend/js/queue-panel.js's
+        window.QueuePanel.refresh. evaluate_js works even while the queue
+        window is hidden (pywebview keeps its page alive, just OS-hidden),
+        so the job list is already current by the time the user opens it."""
+        if self._queue_window is not None:
+            try:
+                self._queue_window.evaluate_js(
+                    "window.QueuePanel && window.QueuePanel.refresh()"
+                )
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+
+    def get_queue_breakdown_view(self, queue_id):
+        """Everything frontend/js/queue-panel.js needs for one Queue-mode
+        breakdown render, in a single round-trip - same rationale and same
+        depth-limited/on-demand-subtree scheme as get_breakdown_view (reuses
+        get_recipe_subtree, which is queue-agnostic). Reads the job's
+        recipe/qty/station straight from craft_queue rather than taking them
+        as parameters, since update_queue_qty/update_queue_station already
+        persist immediately on commit - there's no ephemeral client-side
+        value to thread through the way recipe-panel.js's qty multiplier
+        is (that one is deliberately never persisted)."""
+        job = next((r for r in db.get_craft_queue() if r[0] == queue_id), None)
+        if job is None:
+            return {"output_name": "", "checked": [], "tree": None}
+        _qid, recipe_id, _rname, output_name, qty, station, _combine, mode = job
+        alt_prefs = db.get_alt_prefs()
+        station_prefs = db.get_station_prefs()
+        tree = resolver.resolve_recipe_tree(
+            output_name,
+            qty_needed=qty,
+            _root_recipe_id=recipe_id,
+            _alt_prefs=alt_prefs,
+            _station_prefs=station_prefs,
+            max_depth=self._INITIAL_RESOLVE_DEPTH,
+        )
+        self._apply_job_station_override(tree, recipe_id, station, mode)
+        checked = list(db.get_queue_checked(queue_id))
+        return {"output_name": output_name, "checked": checked, "tree": tree}
+
+    @staticmethod
+    def _apply_job_station_override(node, recipe_id, station, mode):
+        """A queued job may pin a specific station (distinct from the
+        recipe's own default/primary station or any ingredient-level
+        _station_prefs) - apply it to the already-resolved root node in
+        place, exactly like craftmap/overlay.py's CraftQueuePanel._render_
+        breakdown/_render_totals do inline before reading the node's
+        timing fields."""
+        if not station:
+            return
+        times = db.get_recipe_station_times(recipe_id, station)
+        if not times:
+            return
+        auto_s, manual_s = times
+        node["station"] = station
+        node["auto_craft_seconds"], node["manual_craft_seconds"] = auto_s, manual_s
+        if mode == "manual" and manual_s:
+            node["craft_mode"] = "manual"
+        elif mode == "auto" and auto_s:
+            node["craft_mode"] = "auto"
+        else:
+            node["craft_mode"] = "auto" if auto_s else "manual"
+
+    def get_queue_totals_view(self):
+        """Aggregate raw materials + basic-crafted items across every
+        combine-flagged queued job's FULL (non-depth-limited) tree, plus a
+        per-job breakdown when there's more than one job. Deliberately does
+        this aggregation server-side rather than sending N full trees
+        across the pywebview bridge for the frontend to flatten (as
+        recipe-panel.js's single-recipe Totals mode does with its one
+        already-fetched tree) - a queue can easily have several sizeable
+        trees, and payload *size* is what's expensive over this bridge, not
+        call count (see backend/api.py's module docstring / the recipe-
+        panel debugging notes). Improves on craftmap/overlay.py's
+        CraftQueuePanel._render_totals in one way: that method's combined-
+        entry dict dropped manual_craft_seconds/craft_mode/stations/alts
+        when tallying across jobs (only collect_basic_crafted's per-job
+        entries had them), which silently disabled the station/alt step
+        popover on combined Totals entries. Kept here."""
+        jobs = db.get_craft_queue()
+        alt_prefs = db.get_alt_prefs()
+        station_prefs = db.get_station_prefs()
+        all_raw: dict = {}
+        all_crafted: dict = {}
+        per_job = []
+        combined_count = 0
+        for qid, recipe_id, rname, output_name, qty, station, combine, mode in jobs:
+            node = resolver.resolve_recipe_tree(
+                output_name,
+                qty_needed=qty,
+                _root_recipe_id=recipe_id,
+                _alt_prefs=alt_prefs,
+                _station_prefs=station_prefs,
+            )
+            self._apply_job_station_override(node, recipe_id, station, mode)
+            job_raw = resolver.collect_totals(node)
+            job_crafted = resolver.collect_basic_crafted(node)
+            per_job.append(
+                {
+                    "queue_id": qid,
+                    "recipe_name": rname,
+                    "qty": qty,
+                    "crafted": job_crafted,
+                    "raw": job_raw,
+                }
+            )
+            if not combine:
+                continue
+            combined_count += 1
+            for iname, raw_qty in job_raw.items():
+                all_raw[iname] = all_raw.get(iname, 0) + raw_qty
+            for iname, info in job_crafted.items():
+                entry = all_crafted.setdefault(
+                    iname,
+                    {
+                        "qty": 0.0,
+                        "output_qty": info["output_qty"],
+                        "alts": info.get("alts", []),
+                        "raw_names": set(),
+                        "station": info.get("station"),
+                        "stations": info.get("stations", []),
+                        "auto_craft_seconds": info.get("auto_craft_seconds"),
+                        "manual_craft_seconds": info.get("manual_craft_seconds"),
+                        "craft_mode": info.get("craft_mode", "auto"),
+                        "byproducts": {},
+                    },
+                )
+                entry["qty"] += info["qty"]
+                entry["raw_names"].update(info["raw_names"])
+                for bp in info.get("byproducts", []):
+                    entry["byproducts"][bp["name"]] = (
+                        entry["byproducts"].get(bp["name"], 0.0) + bp["qty"]
+                    )
+
+        for entry in all_crafted.values():
+            entry["raw_names"] = sorted(entry["raw_names"])
+            entry["byproducts"] = [
+                {"name": n, "qty": q} for n, q in sorted(entry["byproducts"].items())
+            ]
+
+        return {
+            "jobs_count": len(jobs),
+            "combined_count": combined_count,
+            "all_crafted": all_crafted,
+            "all_raw": all_raw,
+            "per_job": per_job,
+        }
+
+    def hide_window(self):
+        """Escape-to-hide for the main window (see frontend/index.html) -
+        craftmap/overlay.py's Overlay binds <Escape> to self.hide() the
+        same way; this milestone's frontend/queue.html Escape handler
+        (dismiss_queue_window) made the main window's own long-standing
+        gap here obvious enough to fix alongside it."""
+        if self._queue_ctrl is not None:
+            self._queue_ctrl.hide()
+        return True
+
     # ---- lifecycle ----
 
     def quit_app(self):
@@ -365,6 +670,8 @@ class Api:
         # seconds until it notices the owning process is gone - .destroy()
         # blocks (via WinForms Invoke) until Close() actually completes, so
         # by the time we reach os._exit() there's nothing left to redraw.
+        if self._queue_window is not None:
+            self._queue_window.destroy()
         if self._overlay_window is not None:
             self._overlay_window.destroy()
         # os._exit, not sys.exit: forcibly terminates the daemon hotkey

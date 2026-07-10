@@ -336,3 +336,59 @@ def _node_has_step_options(node):
     return modes_available > 1
 
 
+def collect_totals(node, totals=None):
+    """Aggregate raw-resource leaf quantities across the whole tree - ported
+    verbatim from craftmap/overlay.py's Overlay.collect_totals. Used
+    server-side by Api.get_queue_totals_view to aggregate across every
+    queued job's FULL (non-depth-limited) tree without shipping any of
+    those full trees across the pywebview bridge - only the small
+    aggregated result crosses over. The single-recipe Totals mode in
+    frontend/js/recipe-panel.js instead duplicates this logic in JS
+    (collectTotals in breakdown-tree.js), since there it only ever needs to
+    flatten one already-fetched tree, not combine several."""
+    if totals is None:
+        totals = {}
+    if not node["is_recipe"] and not node["children"]:
+        totals[node["name"]] = totals.get(node["name"], 0) + node["qty"]
+    for child in node["children"]:
+        collect_totals(child, totals)
+    return totals
+
+
+def collect_basic_crafted(node, totals=None):
+    """Aggregate only the most basic crafted items across the whole tree -
+    recipes built entirely from raw materials, with no recipe of their own
+    among their ingredients. Assembly recipes (built from other recipes)
+    are transparently collapsed past so only the base crafting tier
+    surfaces, instead of every intermediate level. Ported verbatim from
+    craftmap/overlay.py's Overlay.collect_basic_crafted - see collect_totals
+    above for why this has a server-side Python copy in addition to
+    breakdown-tree.js's JS one."""
+    if totals is None:
+        totals = {}
+    for child in node["children"]:
+        if not child["is_recipe"]:
+            continue
+        if any(c["is_recipe"] for c in child["children"]):
+            collect_basic_crafted(child, totals)
+        else:
+            entry = totals.setdefault(
+                child["name"],
+                {
+                    "is_recipe": True,
+                    "qty": 0.0,
+                    "output_qty": child.get("output_qty", 1.0),
+                    "alts": child.get("alts", []),
+                    "raw_names": sorted({c["name"] for c in child["children"]}),
+                    "station": child.get("station"),
+                    "stations": child.get("stations", []),
+                    "auto_craft_seconds": child.get("auto_craft_seconds"),
+                    "manual_craft_seconds": child.get("manual_craft_seconds"),
+                    "craft_mode": child.get("craft_mode", "auto"),
+                    "byproducts": child.get("byproducts", []),
+                },
+            )
+            entry["qty"] += child["qty"]
+    return totals
+
+

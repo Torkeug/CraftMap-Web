@@ -18,6 +18,7 @@
         <button class="tab-btn" id="tab-resource" data-mode="resource">Resource</button>
         <button class="tab-btn" id="tab-location" data-mode="location">Location</button>
         <button class="tab-btn" id="tab-recipe" data-mode="recipe">Recipe</button>
+        <button class="tab-btn" id="tab-queue" title="Show/hide the Craft Queue window">Queue</button>
       </div>
       <div id="body">
         <div id="deposits-view">
@@ -85,6 +86,13 @@
               <button class="btn btn-neutral btn-small" id="recipe-new-btn">New</button>
               <span class="qty-sep">&times;</span>
               <input id="recipe-qty" type="text" value="1" />
+              <button
+                class="btn btn-neutral btn-small"
+                id="recipe-add-queue-btn"
+                title="Add this recipe to the Craft Queue"
+              >
+                + Queue
+              </button>
             </div>
             <div id="recipe-mode-tabs">
               <button class="tab-btn mode-btn" id="mode-breakdown" data-mode="breakdown">
@@ -155,6 +163,31 @@
     <script>
       document.getElementById("close-btn").addEventListener("click", () => {
         CraftMapApi.call("quit_app");
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        // Don't hide the whole window if Escape's real job right now is
+        // closing a dropdown suggestion list or the alt-recipe/station
+        // step popup - both already have their own Escape handler, but
+        // neither stops propagation, so this document-level listener
+        // would otherwise also fire on the same keypress.
+        if (document.querySelector(".dropdown-list.show")) return;
+        if (!document.getElementById("step-popup").classList.contains("hidden")) return;
+        CraftMapApi.call("hide_window");
+      });
+
+      DragResize.attach({
+        dragbarEl: document.getElementById("dragbar"),
+        gripEl: document.getElementById("resize-grip"),
+        getGeometry: () => CraftMapApi.call("get_window_geometry"),
+        moveWindow: (x, y) => CraftMapApi.call("move_window", x, y),
+        resizeWindow: (x, y, w, h) => CraftMapApi.call("resize_window", x, y, w, h),
+        saveGeometry: (x, y, w, h) => CraftMapApi.call("save_window_geometry", x, y, w, h),
+        // Just an absolute floor beneath drag-resize.js's own dynamic
+        // measureMinSize (which computes the real per-screen minimum from
+        // the actual rendered layout) - not itself the real guard.
+        minW: 360,
+        minH: 240,
       });
     </script>
   </body>

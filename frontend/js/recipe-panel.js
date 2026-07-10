@@ -27,6 +27,7 @@
   const recipeCombo = document.getElementById("recipe-combo");
   const recipeNewBtn = document.getElementById("recipe-new-btn");
   const recipeQty = document.getElementById("recipe-qty");
+  const recipeAddQueueBtn = document.getElementById("recipe-add-queue-btn");
   const modeBreakdown = document.getElementById("mode-breakdown");
   const modeTotals = document.getElementById("mode-totals");
   const modeUsedin = document.getElementById("mode-usedin");
@@ -822,6 +823,17 @@
     modeBreakdown.addEventListener("click", () => setRecipeMode("breakdown"));
     modeTotals.addEventListener("click", () => setRecipeMode("totals"));
     modeUsedin.addEventListener("click", () => setRecipeMode("usedin"));
+
+    recipeAddQueueBtn.addEventListener("click", async () => {
+      if (viewingRecipeId === null) {
+        CraftMapApi._showError("Select a recipe first.");
+        return;
+      }
+      let qty = parseFloat(recipeQty.value);
+      if (!isFinite(qty) || qty <= 0) qty = 1.0;
+      await CraftMapApi.call("add_to_queue", viewingRecipeId, qty);
+      await CraftMapApi.call("show_queue_window");
+    });
 
     document.getElementById("btn-add-station").addEventListener("click", () => addStationRow());
     document.getElementById("btn-add-output").addEventListener("click", () => addOutputRow());

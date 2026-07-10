@@ -96,7 +96,11 @@
 /* ---------- tree ---------- */
 #deposit-tree {
   flex: 1 1 auto;
-  min-height: 0;
+  /* A real floor, not 0 - otherwise a flex:1 tree is the first thing to
+     get squeezed away to nothing when the window is too small, rather
+     than the window simply refusing to shrink that far (see index.html's
+     DragResize.attach minH). */
+  min-height: 60px;
   overflow: auto;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -422,7 +426,7 @@
 /* ---------- breakdown/totals/used-in tree ---------- */
 #recipe-breakdown-tree {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 60px; /* see #deposit-tree's identical comment */
   overflow: auto;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -679,4 +683,196 @@
   align-items: center;
   gap: 6px;
   margin-top: 6px;
+}
+
+/* Queue tab in the main window's tab row - a toggle button for the
+   separate queue.html window, not a real screen switch (see js/screens.js's
+   comment on tabQueue) - extra left margin visually separates it from the
+   three real screen tabs, matching craftmap/overlay.py's Overlay._btn_
+   queue_panel packing. */
+#tab-queue {
+  margin-left: 8px;
+}
+
+/* ---------- Craft Queue window (frontend/queue.html) ---------- */
+#dragbar .icon-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+#queue-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 6px 0 6px;
+}
+
+#queue-job-list {
+  flex: 0 0 auto;
+  min-height: 40px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+#queue-split {
+  flex: 0 0 auto;
+  height: 5px;
+  cursor: ns-resize;
+  background: var(--panel);
+}
+
+#queue-split:hover {
+  background: var(--line);
+}
+
+#queue-breakdown-tree {
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 0;
+  margin-top: 2px;
+}
+
+.queue-job-empty {
+  color: var(--faint);
+  font-size: 11px;
+  padding: 4px;
+}
+
+.queue-job-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.queue-job-row:hover {
+  background: var(--panel-2);
+}
+
+.queue-job-row.selected {
+  background: var(--accent);
+  color: white;
+}
+
+.queue-job-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-job-qty {
+  width: 44px;
+  box-sizing: border-box;
+  text-align: center;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 2px;
+  font-family: var(--ui);
+  font-size: 10px;
+}
+
+.queue-job-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.queue-job-remove:hover {
+  color: var(--danger);
+}
+
+#queue-add-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 6px 6px;
+}
+
+#queue-add-recipe-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#queue-add-recipe {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#queue-add-qty {
+  width: 44px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  text-align: center;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 4px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#queue-add-recipe:focus,
+#queue-add-qty:focus,
+.queue-job-qty:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ---------- resize min-size measurement (see theme.css's
+   #app.measuring-min-size and frontend/js/drag-resize.js's
+   measureMinSize) - stops every normally space-filling flex:1 pane from
+   stretching to fill the CURRENT window's size during that one
+   measurement pass, so what gets measured is each pane's real natural/
+   floor size instead. Never visible in normal use - applied and removed
+   within a single synchronous reflow at the start of a resize-grip
+   drag. ---------- */
+#app.measuring-min-size #deposits-view,
+#app.measuring-min-size #recipe-view {
+  flex: 0 0 auto;
+}
+
+#app.measuring-min-size #deposit-tree,
+#app.measuring-min-size #recipe-breakdown-tree {
+  flex: 0 0 auto;
+  height: 60px; /* matches their own permanent min-height floor */
+}
+
+#app.measuring-min-size #queue-body {
+  flex: 0 0 auto;
+}
+
+#app.measuring-min-size #queue-breakdown-tree {
+  flex: 0 0 auto;
+  height: 60px;
+}
+
+#app.measuring-min-size #queue-job-list {
+  /* Otherwise this would measure at whatever height the user last left
+     the job-list/breakdown splitter at (frontend/js/queue-panel.js's
+     #queue-split drag can set it arbitrarily tall), not its real floor. */
+  height: 40px;
 }
