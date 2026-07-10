@@ -35,7 +35,20 @@ try:
 except ImportError:
     PYSTRAY_AVAILABLE = False
 
-_FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
+# A frozen PyInstaller --onefile build extracts its bundled data files
+# (see build.bat's --add-data "frontend;frontend") to sys._MEIPASS, a
+# throwaway temp directory - that's the documented, version-independent way
+# to locate them (unlike __file__, whose behavior for the frozen entry
+# script isn't something to rely on across PyInstaller versions). Running
+# from source, sys._MEIPASS doesn't exist, so __file__'s own directory (the
+# real source tree) is used instead. Either way this is a *different*
+# concern from backend/paths.py's DB_PATH/CONFIG_PATH, which must NOT
+# follow the frozen exe into its temp extraction dir - that data
+# intentionally lives in the sibling craftmap/ folder regardless of
+# packaging (see paths.py's own frozen handling, anchored on
+# sys.executable instead).
+_BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+_FRONTEND_DIR = os.path.join(_BASE_DIR, "frontend")
 _INDEX_HTML = os.path.join(_FRONTEND_DIR, "index.html")
 _QUEUE_HTML = os.path.join(_FRONTEND_DIR, "queue.html")
 

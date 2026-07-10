@@ -6,3 +6,6 @@ build/
 dist/
 *.spec
 _spike/
+
+# Compiled binary
+CraftMapWeb.exe
