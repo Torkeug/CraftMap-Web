@@ -104,15 +104,12 @@ body {
   color: white;
 }
 
-/* ---------- body placeholder (real screens land here from Milestone 3) ---------- */
+/* ---------- body (screen content area) ---------- */
 #body {
   flex: 1 1 auto;
   overflow: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--faint);
-  font-size: 12px;
+  flex-direction: column;
 }
 
 /* ---------- inline error banner (see js/api.js) ---------- */

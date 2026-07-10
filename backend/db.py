@@ -267,6 +267,60 @@ def delete_row(row_id):
     conn.close()
 
 
+def get_deposit(row_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT res_type, resource, sector, system_name, planet, status, notes"
+        " FROM deposits WHERE id=?",
+        (row_id,),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
+def find_duplicate_deposit(
+    res_type, resource, sector, system_name, planet, exclude_id=None
+):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    q = (
+        "SELECT id FROM deposits"
+        " WHERE COALESCE(res_type,'')=? AND COALESCE(resource,'')=?"
+        " AND COALESCE(sector,'')=? AND COALESCE(system_name,'')=?"
+        " AND COALESCE(planet,'')=?"
+    )
+    params = [res_type, resource, sector, system_name, planet]
+    if exclude_id is not None:
+        q += " AND id != ?"
+        params.append(exclude_id)
+    cur.execute(q, params)
+    row = cur.fetchone()
+    conn.close()
+    return row
+
+
+def distinct_values_where(column, constraints):
+    """Cascading dropdown query - e.g. distinct `system_name` values given a
+    chosen `sector`. `constraints` is {column: value}; falsy values are
+    ignored so an empty box doesn't over-constrain the query."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    active = [(c, v) for c, v in constraints.items() if v]
+    q = (
+        f"SELECT DISTINCT {column} FROM deposits"
+        f" WHERE {column} IS NOT NULL AND {column} != ''"
+    )
+    if active:
+        q += " AND " + " AND ".join(f"{c} = ?" for c, _ in active)
+    q += f" ORDER BY {column} COLLATE NOCASE"
+    cur.execute(q, [v for _, v in active])
+    vals = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return vals
+
+
 # ---------- Recipe DB ----------
 
 

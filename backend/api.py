@@ -37,9 +37,10 @@ before and after resize() (identical every time) versus across
 consecutive calls (drifting by almost exactly the accumulated size delta).
 """
 
+import datetime
 import os
 
-from . import config
+from . import config, db
 
 
 class Api:
@@ -60,6 +61,109 @@ class Api:
 
     def save_config(self, cfg):
         config.save_config(cfg)
+        return True
+
+    def get_collapsed_nodes(self):
+        return config.load_config().get("collapsed_nodes", [])
+
+    def set_collapsed_nodes(self, collapsed_nodes):
+        cfg = config.load_config()
+        cfg["collapsed_nodes"] = collapsed_nodes
+        config.save_config(cfg)
+        return True
+
+    def get_view_mode(self):
+        return config.load_config().get("view_mode", "resource")
+
+    def set_view_mode(self, mode):
+        cfg = config.load_config()
+        cfg["view_mode"] = mode
+        config.save_config(cfg)
+        return True
+
+    # ---- deposits (frontend/js/deposits.js) ----
+
+    def get_deposits(self, search_text="", allowed_types=None, view_mode="resource"):
+        order = "location" if view_mode == "location" else "resource"
+        rows = db.fetch_all(
+            search_text.lower() if search_text else "", allowed_types, order_by=order
+        )
+        return [
+            {
+                "id": r[0],
+                "res_type": r[1],
+                "resource": r[2],
+                "sector": r[3],
+                "system_name": r[4],
+                "planet": r[5],
+                "status": r[6],
+                "notes": r[7],
+            }
+            for r in rows
+        ]
+
+    def get_deposit(self, row_id):
+        row = db.get_deposit(row_id)
+        if row is None:
+            return None
+        res_type, resource, sector, system_name, planet, status, notes = row
+        return {
+            "res_type": res_type,
+            "resource": resource,
+            "sector": sector,
+            "system_name": system_name,
+            "planet": planet,
+            "status": status,
+            "notes": notes,
+        }
+
+    def get_distinct_values(self, column):
+        return db.distinct_values(column)
+
+    def get_dropdown_values(self, column, constraints):
+        return db.distinct_values_where(column, constraints)
+
+    def add_deposit(
+        self, res_type, resource, sector, system_name, planet, status, notes
+    ):
+        if not planet:
+            raise ValueError("Planet is required.")
+        if db.find_duplicate_deposit(res_type, resource, sector, system_name, planet):
+            raise ValueError(
+                "An entry with the same type, resource, sector, system and"
+                " planet already exists."
+            )
+        logged_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        db.insert_row(
+            res_type, resource, sector, system_name, planet, status, notes, logged_at
+        )
+        return True
+
+    def update_deposit(
+        self, row_id, res_type, resource, sector, system_name, planet, status, notes
+    ):
+        if not planet:
+            raise ValueError("Planet is required.")
+        if db.find_duplicate_deposit(
+            res_type, resource, sector, system_name, planet, exclude_id=row_id
+        ):
+            raise ValueError("Another entry with the same combination already exists.")
+        logged_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        db.update_row(
+            row_id,
+            res_type,
+            resource,
+            sector,
+            system_name,
+            planet,
+            status,
+            notes,
+            logged_at,
+        )
+        return True
+
+    def delete_deposit(self, row_id):
+        db.delete_row(row_id)
         return True
 
     # ---- window geometry (drag/resize - see frontend/js/drag-resize.js) ----

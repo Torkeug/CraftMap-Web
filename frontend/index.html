@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <title>CraftMap Resources</title>
     <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/components.css" />
   </head>
   <body>
     <div id="app">
@@ -13,12 +14,73 @@
         <button class="icon-btn" id="settings-btn" title="Settings">&#9881;</button>
         <button class="icon-btn close-btn" id="close-btn" title="Close">&#10005;</button>
       </div>
-      <div id="body">Milestone 2 shell - real screens land here in later milestones</div>
+      <div id="tab-row">
+        <button class="tab-btn" id="tab-resource" data-mode="resource">Resource</button>
+        <button class="tab-btn" id="tab-location" data-mode="location">Location</button>
+      </div>
+      <div id="body">
+        <div id="deposits-view">
+          <div id="search-row">
+            <input
+              id="search-input"
+              type="text"
+              placeholder="Search resource / sector / system / planet / notes..."
+            />
+          </div>
+          <div id="type-filter"></div>
+          <div id="deposit-tree"></div>
+          <div id="deposit-form">
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Type</label>
+                <input id="f-type" type="text" />
+              </div>
+              <div class="form-field">
+                <label>Resource</label>
+                <input id="f-resource" type="text" />
+              </div>
+              <div class="form-field">
+                <label>Sector</label>
+                <input id="f-sector" type="text" />
+              </div>
+              <div class="form-field">
+                <label>System</label>
+                <input id="f-system" type="text" />
+              </div>
+              <div class="form-field">
+                <label>Planet</label>
+                <input id="f-planet" type="text" />
+              </div>
+              <div class="form-field">
+                <label>Status</label>
+                <select id="f-status">
+                  <option>Free</option>
+                  <option>Claimed</option>
+                  <option>Depleted</option>
+                  <option>Unknown</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-field form-field-full">
+              <label>Notes</label>
+              <input id="f-notes" type="text" />
+            </div>
+            <div class="form-buttons">
+              <button class="btn btn-success" id="btn-add">Add</button>
+              <button class="btn btn-accent" id="btn-update">Update</button>
+              <button class="btn btn-neutral" id="btn-clear">Clear</button>
+              <button class="btn btn-danger" id="btn-delete">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="error-banner"></div>
       <div id="resize-grip">&#9698;</div>
     </div>
     <script src="js/api.js"></script>
     <script src="js/drag-resize.js"></script>
+    <script src="js/dropdown.js"></script>
+    <script src="js/deposits.js"></script>
     <script>
       document.getElementById("close-btn").addEventListener("click", () => {
         CraftMapApi.call("quit_app");

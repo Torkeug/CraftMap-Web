@@ -1,0 +1,305 @@
+/* Screen-level components: view tabs, deposit tree, entry form, and the
+   LiveDropdown popover (js/dropdown.js). Palette tokens come from
+   theme.css - this file only adds the shapes/behaviors specific to these
+   widgets. */
+
+/* ---------- view tabs (Resource / Location - Recipe/Queue land in later
+   milestones) ---------- */
+#tab-row {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px 0 8px;
+  background: var(--bg);
+}
+
+.tab-btn {
+  border: none;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--ui);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.tab-btn:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.tab-btn.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* ---------- deposits screen ---------- */
+#deposits-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+  gap: 4px;
+}
+
+#search-row input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-family: var(--ui);
+  font-size: 12px;
+}
+
+#search-row input::placeholder {
+  color: var(--faint);
+}
+
+#search-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#type-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 18px;
+}
+
+#type-filter .type-filter-label {
+  color: var(--muted);
+}
+
+#type-filter label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#type-filter input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---------- tree ---------- */
+#deposit-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 0;
+}
+
+.tree-node.leaf > .tree-row {
+  cursor: pointer;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px 2px 0;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tree-row.group {
+  cursor: pointer;
+}
+
+.tree-row:hover {
+  background: var(--panel-2);
+}
+
+.tree-row.selected {
+  background: var(--accent) !important;
+  color: white;
+}
+
+.disclosure {
+  display: inline-block;
+  width: 14px;
+  flex: 0 0 auto;
+  text-align: center;
+  color: var(--faint);
+  font-size: 9px;
+  transition: transform 0.1s;
+}
+
+.tree-node.collapsed > .tree-row .disclosure {
+  transform: rotate(-90deg);
+}
+
+.tree-node.collapsed > .tree-children {
+  display: none;
+}
+
+.tree-children {
+  margin-left: 14px;
+}
+
+.tree-label.type {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.tree-label.resource {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.tree-label.sector,
+.tree-label.loc_sec {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.tree-label.system,
+.tree-label.loc_sys {
+  color: #d2a8ff;
+  font-weight: 600;
+}
+
+.tree-label.planet,
+.tree-label.loc_pla {
+  color: var(--text);
+}
+
+.tree-label.loc_entry {
+  color: var(--text);
+}
+
+.tree-label.loc_sum {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---------- entry form ---------- */
+#deposit-form {
+  flex: 0 0 auto;
+  padding-top: 4px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.form-field label {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+
+.form-field input,
+.form-field select {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+.form-field input:focus,
+.form-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.form-field-full {
+  margin-top: 6px;
+}
+
+.form-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.btn {
+  border: none;
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-family: var(--ui);
+  font-size: 11px;
+  cursor: pointer;
+  color: white;
+}
+
+.btn-success {
+  background: var(--good);
+}
+
+.btn-accent {
+  background: var(--accent);
+}
+
+.btn-neutral {
+  background: #30363d;
+}
+
+.btn-danger {
+  background: var(--danger);
+  margin-left: auto;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+}
+
+/* ---------- LiveDropdown popover (js/dropdown.js) ---------- */
+.dropdown-list {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 50;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-top: 2px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.dropdown-list.show {
+  display: block;
+}
+
+.dropdown-item {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item:hover,
+.dropdown-item.active {
+  background: var(--accent);
+  color: white;
+}
