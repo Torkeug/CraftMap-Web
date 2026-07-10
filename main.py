@@ -81,6 +81,14 @@ class _AlreadyRunningApi:
         self._window = None
 
     def close(self):
+        # Best-effort: hand focus back to the already-running instance's
+        # main window (a separate process - see find_window_by_title's own
+        # docstring for why FindWindowW is the only way to reach it) before
+        # this dialog goes away, so dismissing it doesn't just drop the user
+        # back to the desktop.
+        hwnd = win32util.find_window_by_title("CraftMap Resources")
+        if hwnd:
+            win32util.force_foreground_window(hwnd)
         if self._window is not None:
             self._window.destroy()
 

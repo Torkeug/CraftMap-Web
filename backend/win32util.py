@@ -36,6 +36,8 @@ _user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
 _user32.BringWindowToTop.argtypes = [ctypes.c_void_p]
 _user32.IsWindowVisible.restype = ctypes.c_int
 _user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
+_user32.FindWindowW.restype = ctypes.c_void_p
+_user32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
 
 
 def pywebview_hwnd(window):
@@ -151,6 +153,15 @@ def set_click_through(hwnd, enabled: bool):
 
 def redraw_window(hwnd):
     _user32.RedrawWindow(hwnd, None, None, _RDW_FLAGS)
+
+
+def find_window_by_title(title: str):
+    """Resolve a top-level window's HWND by its exact title text. Used to
+    focus the already-running instance's main window from a second, blocked
+    launch (see main.py's _AlreadyRunningApi) - that's a separate process
+    with no in-process Window object to call force_foreground_window on
+    directly, so FindWindowW is the only way to get an hwnd for it at all."""
+    return _user32.FindWindowW(None, title)
 
 
 def check_single_instance(mutex_name="CraftMap_SingleInstance") -> bool:
