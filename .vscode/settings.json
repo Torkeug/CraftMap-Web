@@ -1,0 +1,9 @@
+{
+    "VsCodeTaskButtons.tasks": [
+        {
+            "label": "$(package) Build CraftMap.exe",
+            "task": "Build CraftMap.exe",
+            "tooltip": "Run build.bat to produce CraftMap.exe"
+        }
+    ]
+}
