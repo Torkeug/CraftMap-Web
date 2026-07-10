@@ -69,6 +69,119 @@ def _make_tray_image():
     return img
 
 
+class _AlreadyRunningApi:
+    """Minimal js_api for the "already running" notice window - just enough
+    to let its OK button close itself. _window is underscore-prefixed per
+    backend/api.py's own rule: a plain attribute holding a pywebview Window
+    would make pywebview's dir()-walking function discovery recurse into
+    the native WinForms object graph and crash (see that module's
+    docstring)."""
+
+    def __init__(self):
+        self._window = None
+
+    def close(self):
+        if self._window is not None:
+            self._window.destroy()
+
+
+_ALREADY_RUNNING_HTML = """<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #0d1117; color: #c9d1d9;
+    font-family: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
+    font-size: 13px; user-select: none; -webkit-user-select: none;
+    overflow: hidden;
+  }
+  #box {
+    box-sizing: border-box;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+  }
+  #header {
+    padding: 8px 10px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    font-size: 12px; font-weight: 600;
+  }
+  #body {
+    flex: 1;
+    display: flex; align-items: center;
+    padding: 14px 16px;
+    line-height: 1.4;
+  }
+  #buttons {
+    display: flex; justify-content: flex-end;
+    padding: 0 12px 20px;
+  }
+  button {
+    border: none; border-radius: 4px;
+    padding: 5px 14px;
+    font-family: inherit; font-size: 11px;
+    cursor: pointer; color: white;
+    background: #1f6feb;
+    outline: none;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:focus { outline: none; box-shadow: none; }
+</style>
+</head>
+<body>
+  <div id="box">
+    <div id="header">CraftMap</div>
+    <div id="body">CraftMap is already running.</div>
+    <div id="buttons"><button autofocus onclick="pywebview.api.close()">OK</button></div>
+  </div>
+</body>
+</html>
+"""
+
+
+def _show_already_running_dialog():
+    """A second launch while an instance already holds the single-instance
+    mutex (see win32util.check_single_instance) needs to tell the user
+    something - the build is --noconsole, so a bare print() here is
+    silently swallowed. A themed pywebview window (matching theme.css's
+    palette) rather than a native MessageBoxW, since the latter can't be
+    restyled to match the rest of the app, and pywebview is already how
+    every other bit of UI here gets built."""
+    dlg_w, dlg_h = 300, 150
+
+    # This process never creates the already-running instance's window (it
+    # exits before getting that far), so there's no live geometry to center
+    # against here - config.json's window_x/y/w/h (kept current by every
+    # drag/resize via Api.save_window_geometry) is the closest available
+    # stand-in for "where the main window currently is".
+    cfg = config.load_config()
+    win_x = cfg.get("window_x", 60)
+    win_y = cfg.get("window_y", 60)
+    win_w = cfg.get("window_w", 640)
+    win_h = cfg.get("window_h", 300)
+    dlg_x = int(win_x + (win_w - dlg_w) / 2)
+    dlg_y = int(win_y + (win_h - dlg_h) / 2)
+
+    api = _AlreadyRunningApi()
+    window = webview.create_window(
+        "CraftMap",
+        html=_ALREADY_RUNNING_HTML,
+        js_api=api,
+        width=dlg_w,
+        height=dlg_h,
+        x=dlg_x,
+        y=dlg_y,
+        resizable=False,
+        frameless=True,
+        on_top=True,
+        background_color="#0d1117",
+    )
+    api._window = window  # pylint: disable=protected-access
+    webview.start(debug=False)
+
+
 class App:
     """Owns the two-window visibility/focus/click-through state machine
     that used to live as Overlay + CraftQueuePanel instance attributes in
@@ -464,7 +577,7 @@ def _create_queue_window(app):
 
 def main():
     if not win32util.check_single_instance():
-        print("CraftMap is already running.")
+        _show_already_running_dialog()
         return
 
     db.init_db()
