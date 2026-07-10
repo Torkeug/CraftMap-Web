@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="css/components.css" />
   </head>
   <body>
-    <div id="app">
+    <div id="app" class="resources-app">
       <div id="dragbar">
         <span class="grip">&#8942;&#8942;</span>
         <span class="title" id="title-text">CraftMap Resources</span>
@@ -184,19 +184,6 @@
       document.getElementById("close-btn").addEventListener("click", () => {
         CraftMapApi.call("quit_app");
       });
-      document.addEventListener("keydown", (e) => {
-        if (e.key !== "Escape") return;
-        // Don't hide the whole window if Escape's real job right now is
-        // closing a dropdown suggestion list, the alt-recipe/station step
-        // popup, or the hotkey settings dialog - each already has its own
-        // Escape handler, but none of them stop propagation, so this
-        // document-level listener would otherwise also fire on the same
-        // keypress.
-        if (document.querySelector(".dropdown-list.show")) return;
-        if (!document.getElementById("step-popup").classList.contains("hidden")) return;
-        if (!document.getElementById("settings-dialog").classList.contains("hidden")) return;
-        CraftMapApi.call("hide_window");
-      });
 
       DragResize.attach({
         dragbarEl: document.getElementById("dragbar"),
@@ -206,9 +193,11 @@
         resizeWindow: (x, y, w, h) => CraftMapApi.call("resize_window", x, y, w, h),
         saveGeometry: (x, y, w, h) => CraftMapApi.call("save_window_geometry", x, y, w, h),
         // Just an absolute floor beneath drag-resize.js's own dynamic
-        // measureMinSize (which computes the real per-screen minimum from
-        // the actual rendered layout) - not itself the real guard.
-        minW: 360,
+        // measureMinSize (which measures the actual rendered height at a
+        // fixed 624px width - see theme.css's #app.measuring-min-size) -
+        // not itself the real guard, but kept matching that 624 so this
+        // number stays in sync if that width ever changes.
+        minW: 624,
         minH: 240,
       });
     </script>

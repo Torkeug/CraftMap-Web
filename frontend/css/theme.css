@@ -58,10 +58,35 @@ body {
    back whatever size the window already happens to be. Paired with
    components.css's .measuring-min-size overrides, which stop the
    normally space-filling flex:1 panes (trees, screens) from doing the
-   same stretching at a level down. */
+   same stretching at a level down. This is the Craft Queue window's rule -
+   it has only one screen's worth of content to measure, so content-derived
+   width is fine there; see .resources-app.measuring-min-size below for why
+   the main window (shared #app id, hence the extra class scope) needs a
+   fixed width instead. */
 #app.measuring-min-size {
   width: max-content;
   height: auto;
+}
+
+/* Main "CraftMap Resources" window only (index.html's #app carries this
+   extra class - queue.html's does not, so the rule above still applies to
+   the Craft Queue window unchanged). Width is a fixed 624px rather than
+   derived from content: #type-filter (js/deposits.js's dynamically-rebuilt
+   resource-type checkboxes) is a flex-wrap: wrap container, and CSS's
+   intrinsic sizing keywords get its contribution wrong in opposite ways for
+   the two screens (deposits/recipe) this window switches between - max-
+   content sums every chip as if laid out on one unwrapped line (arbitrarily
+   wide depending on how many distinct res_type values exist in the DB, even
+   though it wraps into several rows fine at any reasonable width), while
+   min-content fixed that but then undersized the recipe view's own single-
+   line controls. 624px is simply the recipe view's own real natural
+   minimum (its widest content is a single non-wrapping row), and every
+   deposits-view element - including #type-filter, which actually gets to
+   wrap at this width instead of being measured as one giant unwrapped line
+   - comfortably fits within it too, so one shared constant works for both
+   screens without re-deriving it per resize. */
+#app.resources-app.measuring-min-size {
+  width: 624px;
 }
 
 /* ---------- drag bar ---------- */

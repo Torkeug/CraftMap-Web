@@ -200,8 +200,23 @@
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
+}
+
+.form-field {
+  /* Grid items default to min-width: auto, which - like flexbox's
+     identical flex-basis-auto trap (see #recipe-sel-left etc.'s
+     min-width: 0) - falls back to the child <input>'s own min-content
+     size (its browser-default intrinsic width, ~170-190px) whenever an
+     ancestor is sizing itself to content instead of a definite width.
+     That's exactly what happens during DragResize's measuring pass (see
+     theme.css's #app.measuring-min-size), where #deposits-view is made
+     shrink-to-fit to find its real floor size - without this, .form-grid
+     falls back to each of its 6 columns' min-content width instead of
+     the ~0 the minmax(0, 1fr) tracks above allow, ballooning the
+     measured minimum window width far past what the form actually needs. */
+  min-width: 0;
 }
 
 .form-field label {
@@ -292,17 +307,18 @@
 /* ---------- LiveDropdown popover (js/dropdown.js) ---------- */
 .dropdown-list {
   display: none;
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 100%;
+  /* left/top or bottom/width/max-height are set inline by
+     dropdown.js's _position() - viewport-fixed rather than anchored via
+     top:100% in normal flow, so it can flip above the input and clamp to
+     the available space when there isn't room below (see _position's
+     comment). */
+  position: fixed;
   z-index: 50;
   max-height: 160px;
   overflow-y: auto;
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 4px;
-  margin-top: 2px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 

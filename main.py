@@ -74,11 +74,10 @@ class App:
     that used to live as Overlay + CraftQueuePanel instance attributes in
     craftmap/overlay.py - see toggle()/hide()/sync_input_passthrough()
     (ports of Overlay's same-named methods) and toggle_queue_window()/
-    show_queue_window()/hide_queue_window()/dismiss_queue_window()/
-    on_queue_pin_changed() (ports of CraftQueuePanel's show/hide/pin
-    methods, called here instead of on a separate panel object since
-    pywebview's Window is much thinner than a Tk Toplevel - no reason to
-    wrap it in its own class)."""
+    show_queue_window()/hide_queue_window()/on_queue_pin_changed() (ports
+    of CraftQueuePanel's show/hide/pin methods, called here instead of on a
+    separate panel object since pywebview's Window is much thinner than a
+    Tk Toplevel - no reason to wrap it in its own class)."""
 
     def __init__(self, window, queue_window, api):
         self.window = window
@@ -208,16 +207,16 @@ class App:
             time.sleep(0.25)
 
     # ----- craft queue window (see backend/api.py's toggle_queue_window/
-    # show_queue_window/hide_queue_window/dismiss_queue_window/
-    # toggle_queue_pin, which delegate here via Api._app_ctrl) -----
+    # show_queue_window/hide_queue_window/toggle_queue_pin, which delegate
+    # here via Api._app_ctrl) -----
 
     def _set_queue_visible(self, value):
         self.queue_visible = value
         try:
             # Keeps the main window's Queue tab button in sync - it can't
             # see these transitions on its own, since the queue window can
-            # also be shown/hidden from its own X button, Escape, the pin
-            # toggle, or the global hotkey cascading both windows together.
+            # also be shown/hidden from its own X button, the pin toggle,
+            # or the global hotkey cascading both windows together.
             state = "true" if value else "false"
             self.window.evaluate_js(f"window.QueueTab && window.QueueTab.setActive({state})")
         except Exception:  # pylint: disable=broad-exception-caught
@@ -255,18 +254,11 @@ class App:
             self.sync_input_passthrough()
 
     def hide_queue_window(self):
-        """Explicit X-button hide - always wins over the pin, unlike
-        dismiss_queue_window (Escape)."""
+        """X-button hide."""
         if self.queue_visible:
             self.queue_window.hide()
             self._set_queue_visible(False)
             self.sync_input_passthrough()
-
-    def dismiss_queue_window(self):
-        """Ambient dismiss (Escape) - only hides if not pinned, mirroring
-        craftmap/overlay.py's CraftQueuePanel.dismiss."""
-        if not self.queue_pinned:
-            self.hide_queue_window()
 
     def on_queue_pin_changed(self, pinned):
         self.queue_pinned = pinned

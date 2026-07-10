@@ -17,11 +17,12 @@ class LiveDropdown {
 
     this.list = document.createElement("div");
     this.list.className = "dropdown-list";
-    const parent = input.parentElement;
-    if (getComputedStyle(parent).position === "static") {
-      parent.style.position = "relative";
-    }
-    parent.appendChild(this.list);
+    // position: fixed (see components.css) computes its own viewport
+    // coordinates in _position() below, so unlike the old top:100%-within-
+    // parent scheme this doesn't need the parent to be a positioned
+    // ancestor - and fixed positioning already escapes any scrollable
+    // ancestor's overflow clipping on its own.
+    input.parentElement.appendChild(this.list);
 
     input.addEventListener("input", () => this._refresh());
     input.addEventListener("focus", () => this._refresh());
@@ -51,7 +52,7 @@ class LiveDropdown {
       this._hide();
       return;
     }
-    for (const v of matches.slice(0, 50)) {
+    for (const v of matches) {
       const item = document.createElement("div");
       item.className = "dropdown-item";
       item.textContent = v;
@@ -62,6 +63,32 @@ class LiveDropdown {
       this.list.appendChild(item);
     }
     this.list.classList.add("show");
+    this._position();
+  }
+
+  // Positions the list in viewport coordinates (position: fixed in CSS)
+  // rather than trusting top:100% within the input's own parent - both
+  // windows are small, frameless, and never scroll, so an input near the
+  // bottom has no room below it for the list to grow into and it was
+  // getting clipped against the window edge. Flips above the input when
+  // there's more room up there than down, mirroring breakdown-tree.js's
+  // step-popup flip logic.
+  _position() {
+    const rect = this.input.getBoundingClientRect();
+    const preferredMax = 160; // matches components.css's .dropdown-list max-height
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    this.list.style.left = `${rect.left}px`;
+    this.list.style.width = `${rect.width}px`;
+    if (spaceBelow < preferredMax && spaceAbove > spaceBelow) {
+      this.list.style.top = "";
+      this.list.style.bottom = `${window.innerHeight - rect.top}px`;
+      this.list.style.maxHeight = `${Math.max(60, Math.min(preferredMax, spaceAbove - 4))}px`;
+    } else {
+      this.list.style.bottom = "";
+      this.list.style.top = `${rect.bottom}px`;
+      this.list.style.maxHeight = `${Math.max(60, Math.min(preferredMax, spaceBelow - 4))}px`;
+    }
   }
 
   _choose(value) {
@@ -85,6 +112,13 @@ class LiveDropdown {
       e.preventDefault();
       this._choose(items[this._activeIndex].textContent);
     } else if (e.key === "Escape") {
+      // Without this, index.html/queue.html's own document-level Escape
+      // handler (which hides the whole window, guarded by checking for
+      // ".dropdown-list.show") still runs right after this bubbles up -
+      // this handler already removed that very class via _hide() by then
+      // (input-level bubble listeners fire before document-level ones),
+      // so the guard sees nothing open and hides the window too.
+      e.stopPropagation();
       this._hide();
     }
   }

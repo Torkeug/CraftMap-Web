@@ -19,19 +19,21 @@
  * become the final window state right as the drag stops.
  */
 const DragResize = (function () {
-  // The true minimum a window can shrink to without squashing its current
-  // screen's layout depends on which screen is showing (deposits vs.
-  // recipe vs. queue) and isn't a single number that's safe to hardcode -
-  // a fixed-width control like the recipe combobox, or a form section
-  // that grows with however many station/output rows exist, can each
-  // shift it. Rather than guess a constant (and risk being wrong the way
-  // a hardcoded one was), measure the CURRENT screen's actual natural
-  // size: css/theme.css's #app.measuring-min-size and css/components.css's
-  // matching overrides free every normally space-filling flex:1 pane from
-  // stretching to fill the window's current (possibly generous) size for
-  // one synchronous reflow, so #app.scrollWidth/scrollHeight reports what
-  // the layout genuinely needs instead of just echoing back whatever size
-  // the window already happens to be.
+  // The true minimum HEIGHT a window can shrink to without squashing its
+  // current screen's layout depends on which screen is showing (deposits
+  // vs. recipe vs. queue) and isn't a single number that's safe to
+  // hardcode - a form section that grows with however many station/output
+  // rows exist can shift it. Rather than guess a constant, measure the
+  // CURRENT screen's actual natural height: css/theme.css's
+  // #app.measuring-min-size (fixed at a constant 624px width - see its own
+  // comment for why WIDTH specifically isn't measured the same way) and
+  // css/components.css's matching overrides free every normally space-
+  // filling flex:1 pane from stretching to fill the window's current
+  // (possibly generous) height for one synchronous reflow, so
+  // #app.scrollHeight reports what the layout genuinely needs instead of
+  // just echoing back whatever size the window already happens to be.
+  // scrollWidth is still read below as a safety net in case some screen's
+  // content ever genuinely overflows 624px, not as the primary measurement.
   // Extra headroom added on top of the raw measured height - the measured
   // number is the layout's exact natural height with no slack at all, so
   // anything not perfectly captured by the measuring-min-size overrides

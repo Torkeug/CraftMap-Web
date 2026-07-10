@@ -421,17 +421,9 @@ class Api:
         return True
 
     def hide_queue_window(self):
-        """Explicit X-button hide - always wins over the pin, unlike
-        dismiss_queue_window (Escape)."""
+        """X-button hide."""
         if self._app_ctrl is not None:
             self._app_ctrl.hide_queue_window()
-        return True
-
-    def dismiss_queue_window(self):
-        """Ambient dismiss (Escape) - only hides if not pinned, mirroring
-        craftmap/overlay.py's CraftQueuePanel.dismiss."""
-        if self._app_ctrl is not None:
-            self._app_ctrl.dismiss_queue_window()
         return True
 
     # ---- global hotkey / settings dialog (state lives on main.py's App -
@@ -672,16 +664,6 @@ class Api:
             "all_raw": all_raw,
             "per_job": per_job,
         }
-
-    def hide_window(self):
-        """Escape-to-hide for the main window (see frontend/index.html) -
-        craftmap/overlay.py's Overlay binds <Escape> to self.hide() the
-        same way; this milestone's frontend/queue.html Escape handler
-        (dismiss_queue_window) made the main window's own long-standing
-        gap here obvious enough to fix alongside it."""
-        if self._app_ctrl is not None:
-            self._app_ctrl.hide()
-        return True
 
     # ---- lifecycle ----
 

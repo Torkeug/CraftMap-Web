@@ -44,16 +44,6 @@
       document.getElementById("close-btn").addEventListener("click", () => {
         CraftMapApi.call("hide_queue_window");
       });
-      document.addEventListener("keydown", (e) => {
-        if (e.key !== "Escape") return;
-        // See index.html's identical guard - a dropdown suggestion list or
-        // the step popup already handles its own Escape and doesn't stop
-        // propagation, so this document-level listener would otherwise
-        // also dismiss the whole window on the same keypress.
-        if (document.querySelector(".dropdown-list.show")) return;
-        if (!document.getElementById("step-popup").classList.contains("hidden")) return;
-        CraftMapApi.call("dismiss_queue_window");
-      });
 
       DragResize.attach({
         dragbarEl: document.getElementById("dragbar"),
