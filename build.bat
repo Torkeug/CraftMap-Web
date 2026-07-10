@@ -1,8 +1,8 @@
 @echo off
-echo Building CraftMapWeb.exe...
-.venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --icon icon.ico --name CraftMapWeb --clean --distpath . --add-data "frontend;frontend" main.py
+echo Building CraftMap.exe...
+.venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --icon icon.ico --name CraftMap --clean --distpath . --add-data "frontend;frontend" main.py
 if %ERRORLEVEL% == 0 (
-    echo Done! CraftMapWeb.exe updated.
+    echo Done! CraftMap.exe updated.
 ) else (
     echo Build failed.
 )

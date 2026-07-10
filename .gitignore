@@ -8,7 +8,7 @@ dist/
 _spike/
 
 # Compiled binary
-CraftMapWeb.exe
+CraftMap.exe
 
 # User data & local config (shared with the retired tkinter app; see
 # NOTICE.md - resources.db is populated entirely from your own entries and

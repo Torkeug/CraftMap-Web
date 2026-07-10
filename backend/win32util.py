@@ -3,11 +3,11 @@
 detection, click-through, composited-window flicker reduction, and the
 single-instance mutex check.
 
-Ported from craftmap/win32util.py (the tkinter app) for craftmap-web,
-which is pywebview-based instead - see pywebview_hwnd() below, which
-replaces the original's Tk-specific root_hwnd(widget). Every other
-function here is unchanged: they're plain ctypes calls against a raw
-HWND, agnostic to which GUI toolkit produced that window.
+Ported from the retired tkinter app's own win32util.py for this
+pywebview-based rewrite - see pywebview_hwnd() below, which replaces the
+original's Tk-specific root_hwnd(widget). Every other function here is
+unchanged: they're plain ctypes calls against a raw HWND, agnostic to
+which GUI toolkit produced that window.
 """
 
 import ctypes
@@ -138,7 +138,7 @@ def redraw_window(hwnd):
     _user32.RedrawWindow(hwnd, None, None, _RDW_FLAGS)
 
 
-def check_single_instance(mutex_name="CraftMapWeb_SingleInstance") -> bool:
+def check_single_instance(mutex_name="CraftMap_SingleInstance") -> bool:
     """True if this is the only running instance. Holds a named mutex for
     the lifetime of the process as the actual enforcement mechanism; the
     return value just reports whether we won the race."""

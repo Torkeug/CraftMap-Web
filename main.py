@@ -1,4 +1,4 @@
-"""CraftMap-Web entrypoint.
+"""CraftMap entrypoint.
 
 Creates the main overlay window (deposit tracker + recipe panel) and the
 separate always-on-top Craft Queue window, wires frameless/topmost/
@@ -399,7 +399,7 @@ class App:
 
 def main():
     if not win32util.check_single_instance():
-        print("CraftMap-Web is already running.")
+        print("CraftMap is already running.")
         return
 
     db.init_db()
@@ -488,7 +488,7 @@ def main():
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Exit", lambda: api.quit_app()),
             )
-            icon = pystray.Icon("CraftMapWeb", _make_tray_image(), "CraftMap-Web", menu)
+            icon = pystray.Icon("CraftMap", _make_tray_image(), "CraftMap", menu)
             app.tray_icon = icon
             threading.Thread(target=icon.run, daemon=True).start()
 
