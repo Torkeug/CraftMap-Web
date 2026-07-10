@@ -9,3 +9,9 @@ _spike/
 
 # Compiled binary
 CraftMapWeb.exe
+
+# User data & local config (shared with the retired tkinter app; see
+# NOTICE.md - resources.db is populated entirely from your own entries and
+# was never meant to be tracked)
+resources.db
+config.json

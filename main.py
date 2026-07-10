@@ -494,6 +494,15 @@ def main():
 
     def on_queue_loaded():
         win32util.set_window_alpha(win32util.pywebview_hwnd(queue_window), WINDOW_ALPHA)
+        # Defensive: pywebview's own hidden=True handling (winforms.py's
+        # create_window) does Opacity=0 -> Show() -> Hide() -> Opacity=1 to
+        # get the window/WebView2 control properly initialized while still
+        # nominally hidden - if that Show() ever paints a visible frame
+        # before Hide() lands (observed once as a startup flash of just the
+        # window's background color), this re-asserts the hidden state
+        # once the page has actually finished loading.
+        if not app.queue_visible:
+            queue_window.hide()
 
     window.events.loaded += on_loaded
     queue_window.events.loaded += on_queue_loaded
