@@ -7,7 +7,9 @@ translucent, custom drag/resize, click-through-when-unfocused polling
 single-instance mutex.
 """
 
+import json
 import os
+import queue as pyqueue
 import sys
 import threading
 import time
@@ -73,6 +75,17 @@ class App:
         self.queue_passthrough = False
         self.tray_icon = None
         self.hotkey_handle = None
+        self.toggle_key = None
+        # Guards against a hotkey firing immediately after change_hotkey()
+        # re-registers it, while the keys that make up the new combo are
+        # still physically held from capturing it - see change_hotkey.
+        self.hotkey_suppressed = False
+        # Bumped by start_hotkey_capture/cancel_hotkey_capture so an
+        # in-flight _capture_hotkey_worker thread can tell it's been
+        # superseded/cancelled and should quietly stop instead of applying
+        # a stale capture.
+        self.hotkey_capture_id = 0
+        self.hotkey_capture_lock = threading.Lock()
         self._poll_stop = False
         # pywebview's Window exposes no visibility getter - track it
         # ourselves since we're the only code path calling show()/hide().
@@ -171,7 +184,7 @@ class App:
 
     # ----- craft queue window (see backend/api.py's toggle_queue_window/
     # show_queue_window/hide_queue_window/dismiss_queue_window/
-    # toggle_queue_pin, which delegate here via Api._queue_ctrl) -----
+    # toggle_queue_pin, which delegate here via Api._app_ctrl) -----
 
     def _set_queue_visible(self, value):
         self.queue_visible = value
@@ -219,15 +232,154 @@ class App:
         if not pinned and not self.visible:
             self.hide_queue_window()
 
-    # ----- lifecycle -----
+    # ----- global hotkey / settings dialog (see backend/api.py's
+    # start_hotkey_capture/cancel_hotkey_capture/get_toggle_key, which
+    # delegate here via Api._app_ctrl) -----
 
-    def quit_app(self):
-        self._poll_stop = True
+    def _on_hotkey(self):
+        if self.hotkey_suppressed:
+            return
+        # Never call self.toggle() directly from here: it runs
+        # win32util.force_foreground_window's AttachThreadInput dance, and
+        # doing that *inside* keyboard's own low-level hook thread (the
+        # thread actively processing this very hotkey's key events) can
+        # corrupt modifier-key state system-wide - this was the actual
+        # cause of Alt getting reported as stuck down elsewhere after using
+        # the toggle hotkey. The tkinter app avoided this the same way,
+        # marshalling onto its own main thread via self.after(0, self.toggle)
+        # instead of running toggle() on the hook thread - here that means
+        # handing off to a plain throwaway thread instead.
+        threading.Thread(target=self.toggle, daemon=True).start()
+
+    def register_hotkey(self):
+        if HOTKEY_AVAILABLE and self.toggle_key:
+            self.hotkey_handle = keyboard.add_hotkey(self.toggle_key, self._on_hotkey)
+
+    def unregister_hotkey(self):
         if HOTKEY_AVAILABLE and self.hotkey_handle is not None:
             try:
                 keyboard.remove_hotkey(self.hotkey_handle)
             except Exception:  # pylint: disable=broad-exception-caught
                 pass
+            self.hotkey_handle = None
+
+    def change_hotkey(self, new_key):
+        """Re-register the global hotkey and persist to config. Returns
+        (ok, message) - message is the new key on success, an error
+        description on failure. Mirrors craftmap/overlay.py's Overlay.
+        change_hotkey."""
+        self.unregister_hotkey()
+        if HOTKEY_AVAILABLE:
+            try:
+                self.hotkey_handle = keyboard.add_hotkey(new_key, self._on_hotkey)
+            except (ValueError, ImportError) as exc:
+                # Malformed/unsupported combo - restore the previous
+                # binding rather than leaving the app with none at all.
+                self.register_hotkey()
+                return False, str(exc)
+            # The keys making up new_key are still physically held right
+            # now (the user just pressed them to capture this combo) - the
+            # keyboard library can treat that as an immediate trigger the
+            # instant it's registered, firing toggle() and stealing OS
+            # focus right back out from under the settings dialog that's
+            # still open. Ignore hotkey fires for a short guard window
+            # after every rebind - mirrors the tkinter app's identical
+            # _hotkey_suppressed guard.
+            self.hotkey_suppressed = True
+
+            def _clear_suppress():
+                time.sleep(0.5)
+                self.hotkey_suppressed = False
+
+            threading.Thread(target=_clear_suppress, daemon=True).start()
+        self.toggle_key = new_key
+        cfg = config.load_config()
+        cfg["toggle_key"] = new_key
+        config.save_config(cfg)
+        return True, new_key
+
+    def start_hotkey_capture(self):
+        """Begin listening for the next key combo on a background thread;
+        the settings dialog is told the result via evaluate_js (see
+        _push_hotkey_result) once the user releases the final (non-
+        modifier) key. Reuses the keyboard library's own event capture and
+        get_hotkey_name formatting instead of reimplementing a browser-
+        keyevent-to-hotkey-name mapping table client-side, which would need
+        its own translation table with no guarantee of matching quirky key
+        names already in real use (config.json's "alt+twosuperior")."""
+        if not HOTKEY_AVAILABLE:
+            return False
+        with self.hotkey_capture_lock:
+            self.hotkey_capture_id += 1
+            capture_id = self.hotkey_capture_id
+        # Don't let the CURRENT hotkey fire mid-capture - an easy edge case
+        # (rebinding onto the same combo, or just habit) would otherwise
+        # show/focus the main window and bury the settings dialog under it,
+        # mirroring the tkinter dialog's _start_listening.
+        self.unregister_hotkey()
+        threading.Thread(
+            target=self._capture_hotkey_worker, args=(capture_id,), daemon=True
+        ).start()
+        return True
+
+    def cancel_hotkey_capture(self):
+        with self.hotkey_capture_lock:
+            self.hotkey_capture_id += 1  # stale-marks any in-flight worker
+        self.register_hotkey()  # restore the (unchanged) hotkey removed above
+
+    def _capture_hotkey_worker(self, capture_id):
+        result_q = pyqueue.Queue()
+        hooked = keyboard.hook(result_q.put, suppress=True)
+        pressed_names = []
+        try:
+            while True:
+                with self.hotkey_capture_lock:
+                    if self.hotkey_capture_id != capture_id:
+                        return  # cancelled, or superseded by a newer capture
+                try:
+                    event = result_q.get(timeout=0.1)
+                except pyqueue.Empty:
+                    continue
+                if event.event_type == keyboard.KEY_DOWN:
+                    if event.name not in pressed_names:
+                        pressed_names.append(event.name)
+                elif event.event_type == keyboard.KEY_UP:
+                    if keyboard.is_modifier(event.name):
+                        # Releasing a held modifier without committing to a
+                        # final key shouldn't finalize the combo - just stop
+                        # tracking it and keep listening, mirroring the
+                        # tkinter dialog's _on_key_release.
+                        if event.name in pressed_names:
+                            pressed_names.remove(event.name)
+                        continue
+                    combo = (
+                        keyboard.get_hotkey_name(pressed_names)
+                        if pressed_names
+                        else event.name
+                    )
+                    with self.hotkey_capture_lock:
+                        if self.hotkey_capture_id != capture_id:
+                            return  # cancelled while finishing up
+                    ok, message = self.change_hotkey(combo)
+                    self._push_hotkey_result(ok, message)
+                    return
+        finally:
+            keyboard.unhook(hooked)
+
+    def _push_hotkey_result(self, ok, message):
+        try:
+            payload = json.dumps({"ok": ok, "message": message})
+            self.window.evaluate_js(
+                f"window.HotkeySettings && window.HotkeySettings.onCaptureResult({payload})"
+            )
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
+    # ----- lifecycle -----
+
+    def quit_app(self):
+        self._poll_stop = True
+        self.unregister_hotkey()
         if self.tray_icon is not None:
             self.tray_icon.stop()
 
@@ -301,7 +453,7 @@ def main():
 
     app = App(window, queue_window, api)
     api._on_quit = app.quit_app  # pylint: disable=protected-access
-    api._queue_ctrl = app  # pylint: disable=protected-access
+    api._app_ctrl = app  # pylint: disable=protected-access
 
     def on_loaded():
         hwnd = win32util.pywebview_hwnd(window)
@@ -309,21 +461,8 @@ def main():
         threading.Thread(target=app.poll_input_passthrough, daemon=True).start()
 
         if HOTKEY_AVAILABLE:
-            # Never call app.toggle() directly from this callback: it runs
-            # win32util.force_foreground_window's AttachThreadInput dance,
-            # and doing that *inside* keyboard's own low-level hook thread
-            # (the thread actively processing this very hotkey's key
-            # events) can corrupt modifier-key state system-wide - this
-            # was the actual cause of Alt getting reported as stuck down
-            # elsewhere after using the toggle hotkey. The tkinter app
-            # avoided this the same way, marshalling onto its own main
-            # thread via self.after(0, self.toggle) instead of running
-            # toggle() on the hook thread - here that means handing off
-            # to a plain throwaway thread instead.
-            app.hotkey_handle = keyboard.add_hotkey(
-                toggle_key,
-                lambda: threading.Thread(target=app.toggle, daemon=True).start(),
-            )
+            app.toggle_key = toggle_key
+            app.register_hotkey()
         else:
             print("NOTE: 'keyboard' module not found, global hotkey disabled.")
 

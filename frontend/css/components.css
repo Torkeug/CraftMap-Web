@@ -876,3 +876,81 @@
      #queue-split drag can set it arbitrarily tall), not its real floor. */
   height: 40px;
 }
+
+/* ---------- hotkey settings dialog (frontend/js/settings.js) - a DOM
+   modal, not a second pywebview window (see settings.js's module
+   docstring). position:fixed takes it out of normal flow, so it's not
+   picked up by the resize min-size measurement above. ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal-box {
+  width: 260px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.modal-body {
+  padding: 14px 16px;
+}
+
+.modal-field-label {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+#hotkey-display {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+#hotkey-error {
+  min-height: 14px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--danger);
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.modal-buttons .btn {
+  flex: 1 1 auto;
+}

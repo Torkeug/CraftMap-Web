@@ -153,6 +153,25 @@
       <div id="resize-grip">&#9698;</div>
     </div>
     <div id="step-popup" class="step-popup hidden"></div>
+    <div id="settings-dialog" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span>Hotkey Settings</span>
+          <button class="icon-btn close-btn" id="settings-close-btn" title="Close">
+            &#10005;
+          </button>
+        </div>
+        <div class="modal-body">
+          <label class="modal-field-label">Hide/show key</label>
+          <div id="hotkey-display">F1</div>
+          <div id="hotkey-error"></div>
+          <div class="modal-buttons">
+            <button class="btn btn-neutral" id="hotkey-rebind-btn">Rebind</button>
+            <button class="btn btn-neutral" id="hotkey-close-btn">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <script src="js/api.js"></script>
     <script src="js/drag-resize.js"></script>
     <script src="js/dropdown.js"></script>
@@ -160,6 +179,7 @@
     <script src="js/breakdown-tree.js"></script>
     <script src="js/recipe-panel.js"></script>
     <script src="js/screens.js"></script>
+    <script src="js/settings.js"></script>
     <script>
       document.getElementById("close-btn").addEventListener("click", () => {
         CraftMapApi.call("quit_app");
@@ -167,12 +187,14 @@
       document.addEventListener("keydown", (e) => {
         if (e.key !== "Escape") return;
         // Don't hide the whole window if Escape's real job right now is
-        // closing a dropdown suggestion list or the alt-recipe/station
-        // step popup - both already have their own Escape handler, but
-        // neither stops propagation, so this document-level listener
-        // would otherwise also fire on the same keypress.
+        // closing a dropdown suggestion list, the alt-recipe/station step
+        // popup, or the hotkey settings dialog - each already has its own
+        // Escape handler, but none of them stop propagation, so this
+        // document-level listener would otherwise also fire on the same
+        // keypress.
         if (document.querySelector(".dropdown-list.show")) return;
         if (!document.getElementById("step-popup").classList.contains("hidden")) return;
+        if (!document.getElementById("settings-dialog").classList.contains("hidden")) return;
         CraftMapApi.call("hide_window");
       });
 

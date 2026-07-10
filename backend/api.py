@@ -53,14 +53,16 @@ class Api:
         # Called by main.py's quit_app to stop the hotkey thread / tray
         # icon / click-through poll loop before the process exits.
         self._on_quit = None
-        # main.py's App instance (see main.py's QueueMixin-ish methods
-        # toggle_queue_window/hide_queue_window/dismiss_queue_window/
-        # on_queue_pin_changed) - the queue window's show/hide/focus state
-        # machine has to live there, not here, since it's the only place
-        # that also knows the *main* window's current visibility (needed
-        # for "unpinning while the main window is hidden hides the queue
-        # too", mirroring craftmap/overlay.py's CraftQueuePanel._toggle_pin).
-        self._queue_ctrl = None
+        # main.py's App instance - both the queue window's show/hide/focus
+        # state machine (toggle_queue_window/hide_queue_window/dismiss_
+        # queue_window/on_queue_pin_changed) and the global hotkey/settings
+        # dialog (start_hotkey_capture/cancel_hotkey_capture/change_hotkey)
+        # have to live there, not here: App is the only place that also
+        # knows the *main* window's current visibility (needed for
+        # "unpinning while the main window is hidden hides the queue too",
+        # mirroring craftmap/overlay.py's CraftQueuePanel._toggle_pin) and
+        # already owns the hotkey thread/handle.
+        self._app_ctrl = None
 
     # ---- config ----
 
@@ -391,7 +393,7 @@ class Api:
         return True
 
     # ---- craft queue show/hide/pin (state machine lives on main.py's App -
-    # see self._queue_ctrl above) ----
+    # see self._app_ctrl above) ----
 
     def get_queue_pinned(self):
         return config.load_config().get("queue_pinned", False)
@@ -401,35 +403,59 @@ class Api:
         pinned = not cfg.get("queue_pinned", False)
         cfg["queue_pinned"] = pinned
         config.save_config(cfg)
-        if self._queue_ctrl is not None:
-            self._queue_ctrl.on_queue_pin_changed(pinned)
+        if self._app_ctrl is not None:
+            self._app_ctrl.on_queue_pin_changed(pinned)
         return pinned
 
     def toggle_queue_window(self):
-        if self._queue_ctrl is not None:
-            self._queue_ctrl.toggle_queue_window()
+        if self._app_ctrl is not None:
+            self._app_ctrl.toggle_queue_window()
         return True
 
     def show_queue_window(self):
         """Always shows (never hides) - used by the recipe panel's
         '+ Queue' button, mirroring craftmap/overlay.py's
         Overlay._add_recipe_to_queue calling .show() rather than toggling."""
-        if self._queue_ctrl is not None:
-            self._queue_ctrl.show_queue_window()
+        if self._app_ctrl is not None:
+            self._app_ctrl.show_queue_window()
         return True
 
     def hide_queue_window(self):
         """Explicit X-button hide - always wins over the pin, unlike
         dismiss_queue_window (Escape)."""
-        if self._queue_ctrl is not None:
-            self._queue_ctrl.hide_queue_window()
+        if self._app_ctrl is not None:
+            self._app_ctrl.hide_queue_window()
         return True
 
     def dismiss_queue_window(self):
         """Ambient dismiss (Escape) - only hides if not pinned, mirroring
         craftmap/overlay.py's CraftQueuePanel.dismiss."""
-        if self._queue_ctrl is not None:
-            self._queue_ctrl.dismiss_queue_window()
+        if self._app_ctrl is not None:
+            self._app_ctrl.dismiss_queue_window()
+        return True
+
+    # ---- global hotkey / settings dialog (state lives on main.py's App -
+    # see self._app_ctrl above) ----
+
+    def get_toggle_key(self):
+        if self._app_ctrl is not None and self._app_ctrl.toggle_key:
+            return self._app_ctrl.toggle_key
+        return config.load_config().get("toggle_key", "F1")
+
+    def start_hotkey_capture(self):
+        """Begin listening for the next hotkey combo; the settings dialog
+        (frontend/js/settings.js) is told the result asynchronously via
+        window.HotkeySettings.onCaptureResult, since the actual keypress
+        capture runs on a background thread in main.py's App (blocking a
+        js_api call on a real OS-level key-hook wait would be unsafe - see
+        App._capture_hotkey_worker)."""
+        if self._app_ctrl is not None:
+            return self._app_ctrl.start_hotkey_capture()
+        return False
+
+    def cancel_hotkey_capture(self):
+        if self._app_ctrl is not None:
+            self._app_ctrl.cancel_hotkey_capture()
         return True
 
     # ---- craft queue data (frontend/js/queue-panel.js) ----
@@ -653,8 +679,8 @@ class Api:
         same way; this milestone's frontend/queue.html Escape handler
         (dismiss_queue_window) made the main window's own long-standing
         gap here obvious enough to fix alongside it."""
-        if self._queue_ctrl is not None:
-            self._queue_ctrl.hide()
+        if self._app_ctrl is not None:
+            self._app_ctrl.hide()
         return True
 
     # ---- lifecycle ----
