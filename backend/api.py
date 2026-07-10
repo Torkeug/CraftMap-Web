@@ -217,6 +217,9 @@ class Api:
         ingredient_names = db.distinct_ingredient_names()
         return sorted(set(produced + resource_names + ingredient_names), key=str.lower)
 
+    def get_basic_resources(self):
+        return db.get_basic_resources()
+
     def get_recipes_using_ingredient(self, ingredient_name):
         return [
             {
@@ -266,6 +269,27 @@ class Api:
     def set_station_pref(self, ingredient_name, station, mode="auto"):
         db.set_station_pref(ingredient_name, station, mode)
         return True
+
+    # ---- resource sources (frontend/js/sources.js) ----
+
+    def get_resource_sources(self, resource_name):
+        return [
+            {"name": n, "concentration": c}
+            for n, c in db.get_resource_sources(resource_name)
+        ]
+
+    def set_resource_sources(self, resource_name, sources):
+        """sources: [{name, concentration}] - concentration may be None."""
+        db.set_resource_sources(
+            resource_name, [(s["name"], s.get("concentration")) for s in sources]
+        )
+        return True
+
+    def get_all_resource_source_names(self):
+        return db.get_all_resource_source_names()
+
+    def get_resources_with_sources(self):
+        return db.get_resources_with_sources()
 
     def get_deposits_for_ingredient(self, resource_name):
         return [

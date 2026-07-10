@@ -155,6 +155,18 @@ def init_db():
             PRIMARY KEY (queue_id, path_key)
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS resource_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            resource_name TEXT NOT NULL,
+            source_name TEXT NOT NULL,
+            concentration REAL,
+            UNIQUE (resource_name, source_name)
+        )
+    """)
+    c.execute("PRAGMA table_info(resource_sources)")
+    if "concentration" not in [row[1] for row in c.fetchall()]:
+        c.execute("ALTER TABLE resource_sources ADD COLUMN concentration REAL")
     conn.commit()
     conn.close()
 
@@ -360,6 +372,23 @@ def distinct_ingredient_names():
     c = conn.cursor()
     c.execute(
         "SELECT DISTINCT ingredient_name FROM recipe_ingredients"
+        " ORDER BY ingredient_name COLLATE NOCASE"
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_basic_resources():
+    """Ingredient names that are never produced by any recipe's output -
+    i.e. raw materials with no craft chain of their own (mined/gathered, not
+    crafted). Lets the recipe combo's Used-In lookup work for these too,
+    not just actual recipes."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT DISTINCT ingredient_name FROM recipe_ingredients"
+        " WHERE ingredient_name NOT IN (SELECT DISTINCT item_name FROM recipe_outputs)"
         " ORDER BY ingredient_name COLLATE NOCASE"
     )
     rows = c.fetchall()
@@ -811,6 +840,79 @@ def clear_queue_checked(queue_id):
     c.execute("DELETE FROM queue_checked WHERE queue_id=?", (queue_id,))
     conn.commit()
     conn.close()
+
+
+# ---------- Resource sources (dedicated Sources tab) ----------
+
+
+def get_resource_sources(resource_name):
+    """(source_name, concentration) pairs for the node types that yield a
+    given raw resource - distinct from `deposits`, which tracks specific
+    manually-logged in-game locations, not general node-type categories.
+    `concentration` is what % of that node's primary-yield rolls land on
+    this resource (its proba weight vs its kind-0 sibling items', from the
+    game's own resource-generation data - see
+    tools/backfill_resource_sources.py); None for hand-entered rows with no
+    game-data match. Highest concentration first (best sources first), then
+    name for ties/nulls."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT source_name, concentration FROM resource_sources"
+        " WHERE resource_name=?"
+        " ORDER BY concentration IS NULL, concentration DESC, source_name COLLATE NOCASE",
+        (resource_name,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def set_resource_sources(resource_name, sources):
+    """Replace the full set of source nodes for a resource in one go - same
+    replace-all-on-save pattern as save_recipe's ingredients/outputs.
+    `sources` is a list of (source_name, concentration) tuples;
+    concentration may be None."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM resource_sources WHERE resource_name=?", (resource_name,))
+    deduped = {}
+    for name, conc in sources:
+        name = name.strip()
+        if name:
+            deduped[name] = conc
+    c.executemany(
+        "INSERT OR IGNORE INTO resource_sources"
+        " (resource_name, source_name, concentration) VALUES (?, ?, ?)",
+        [(resource_name, n, c_) for n, c_ in deduped.items()],
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_all_resource_source_names():
+    """Distinct source node names already logged, for autocomplete."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT DISTINCT source_name FROM resource_sources ORDER BY source_name COLLATE NOCASE"
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_resources_with_sources():
+    """Distinct resource names that have at least one source node logged -
+    for the Sources tab's own resource combo."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT DISTINCT resource_name FROM resource_sources ORDER BY resource_name COLLATE NOCASE"
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
 
 
 def set_queue_checked_many(queue_id, path_keys, checked):

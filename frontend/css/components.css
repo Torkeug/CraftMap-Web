@@ -627,6 +627,19 @@
   margin: 4px 0 2px 0;
 }
 
+/* #recipe-edit-form's fields are all readonly (see js/recipe-panel.js's
+   top-of-file comment) - dim them and drop the focus ring so they read as
+   display-only rather than inviting a click to edit. */
+#recipe-edit-form input[readonly] {
+  color: var(--muted);
+  cursor: default;
+}
+
+#recipe-edit-form input[readonly]:focus {
+  outline: none;
+  border-color: var(--line);
+}
+
 .station-row,
 .output-row,
 .ingredient-row {
@@ -681,24 +694,87 @@
   margin-bottom: 4px;
 }
 
-.row-remove-btn {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
+/* ---------- sources screen (resource -> gatherable node names) ---------- */
+#sources-view {
+  display: none; /* toggled by js/screens.js */
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+  gap: 4px;
 }
 
-.row-remove-btn:hover {
-  color: var(--danger);
-}
-
-#recipe-form-buttons {
+#sources-selector-row {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 4px;
+}
+
+#sources-selector-row label {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+#sources-combo {
+  width: 220px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#sources-combo:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.source-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.source-row.source-row-header {
+  color: var(--faint);
+  font-size: 9px;
+  padding: 0 4px;
+}
+
+.source-row.source-row-header .col-hint {
+  width: 60px;
+}
+
+.source-row-name {
+  flex: 1 1 auto;
+}
+
+.source-row-conc {
+  width: 60px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.source-row-empty {
+  color: var(--muted);
+}
+
+#sources-rows.scroll-rows {
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px;
 }
 
 /* Queue tab in the main window's tab row - a toggle button for the
@@ -867,12 +943,14 @@
    within a single synchronous reflow at the start of a resize-grip
    drag. ---------- */
 #app.measuring-min-size #deposits-view,
-#app.measuring-min-size #recipe-view {
+#app.measuring-min-size #recipe-view,
+#app.measuring-min-size #sources-view {
   flex: 0 0 auto;
 }
 
 #app.measuring-min-size #deposit-tree,
-#app.measuring-min-size #recipe-breakdown-tree {
+#app.measuring-min-size #recipe-breakdown-tree,
+#app.measuring-min-size #sources-rows {
   flex: 0 0 auto;
   height: 60px; /* matches their own permanent min-height floor */
 }

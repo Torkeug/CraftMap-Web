@@ -1,10 +1,16 @@
 /* Recipe panel: combobox/quantity selector, Breakdown/Totals/Used-In tree
- * modes, and the recipe edit form. Direct port of craftmap/overlay.py's
- * recipe-panel section (_build_recipe_panel, _refresh_recipe_breakdown,
- * _refresh_totals_view, _refresh_usedin_view, _on_breakdown_click,
- * save_recipe_action/delete_recipe_action). The checkbox-cascade tree
- * itself and the alt-recipe/station step popover are shared with the
- * Craft Queue panel - see frontend/js/breakdown-tree.js.
+ * modes, and the (read-only) recipe detail form. Direct port of
+ * craftmap/overlay.py's recipe-panel section (_build_recipe_panel,
+ * _refresh_recipe_breakdown, _refresh_totals_view, _refresh_usedin_view,
+ * _on_breakdown_click). The checkbox-cascade tree itself and the
+ * alt-recipe/station step popover are shared with the Craft Queue panel -
+ * see frontend/js/breakdown-tree.js.
+ *
+ * The station/output/ingredient rows below are display-only (readonly
+ * inputs, no add/remove/save/delete) - recipes are verified against the
+ * game's own data (see tools/verify_recipes_match_game_data.py) and hand-
+ * editing them here would let that drift. To change a recipe, re-run
+ * tools/backfill_recipe_metadata.py against updated game data.
  */
 (function () {
   const {
@@ -25,7 +31,6 @@
   // ---- DOM refs ----
   const tree = document.getElementById("recipe-breakdown-tree");
   const recipeCombo = document.getElementById("recipe-combo");
-  const recipeNewBtn = document.getElementById("recipe-new-btn");
   const recipeQty = document.getElementById("recipe-qty");
   const recipeAddQueueBtn = document.getElementById("recipe-add-queue-btn");
   const modeBreakdown = document.getElementById("mode-breakdown");
@@ -44,6 +49,11 @@
   let recipeMode = "breakdown"; // 'breakdown' | 'totals' | 'usedin'
   let viewingRecipeId = null; // recipe shown in both the tree and the edit form
   let usedinRecipeId = null;
+  // Item name backing Used-In mode when there's no recipe id to derive it
+  // from - i.e. a basic/raw resource selected straight from the combo
+  // (see selectBasicResource). Ignored whenever usedinRecipeId is set,
+  // since that case derives the current output name live instead.
+  let usedinItemName = "";
   let usedinNavigatedAway = false;
   let stationRows = [];
   let outputRows = [];
@@ -367,7 +377,10 @@
   // ---- mode: used in ----
   async function renderUsedinMode() {
     const viewId = usedinRecipeId;
-    const itemName = viewId !== null ? await CraftMapApi.call("get_recipe_output_name", viewId) : "";
+    const itemName =
+      viewId !== null
+        ? await CraftMapApi.call("get_recipe_output_name", viewId)
+        : usedinItemName;
     if (!itemName) {
       const wrapper = document.createElement("div");
       wrapper.className = "bd-node";
@@ -381,14 +394,14 @@
       row.appendChild(spacer);
       const labelEl = document.createElement("span");
       labelEl.className = "bd-label";
-      labelEl.textContent = "Select a recipe above to see where it's used.";
+      labelEl.textContent = "Select a recipe or raw resource above to see where it's used.";
       row.appendChild(labelEl);
       wrapper.appendChild(row);
       tree.appendChild(wrapper);
       return;
     }
     const rows = await CraftMapApi.call("get_recipes_using_ingredient", itemName);
-    const recipeName_ = await CraftMapApi.call("get_recipe_name", viewId);
+    const recipeName_ = viewId !== null ? await CraftMapApi.call("get_recipe_name", viewId) : "";
 
     const { wrapper, childrenEl } = makeBdNode({
       tagClass: "root",
@@ -398,12 +411,16 @@
     });
     // Clicking the header (not a specific result) loads this item into the
     // edit form without leaving Used-In mode - matches usedin_header in
-    // overlay.py's _on_breakdown_click.
-    wrapper.querySelector(".bd-label").addEventListener("click", async () => {
-      if (viewId !== null && recipeName_) {
-        await loadRecipeIntoForm(viewId, recipeName_);
-      }
-    });
+    // overlay.py's _on_breakdown_click. Only wired up when viewing an
+    // actual recipe's output - a basic resource (viewId === null) has no
+    // recipe of its own to load.
+    if (viewId !== null) {
+      wrapper.querySelector(".bd-label").addEventListener("click", async () => {
+        if (recipeName_) {
+          await loadRecipeIntoForm(viewId, recipeName_);
+        }
+      });
+    }
     tree.appendChild(wrapper);
 
     if (!rows.length) {
@@ -551,42 +568,32 @@
     await refreshBreakdown();
   }
 
-  // ---- edit form: dynamic rows ----
-  function makeRemoveButton(onRemove) {
-    const btn = document.createElement("button");
-    btn.className = "row-remove-btn";
-    btn.textContent = "×";
-    btn.addEventListener("click", onRemove);
-    return btn;
-  }
-
+  // ---- detail form: read-only rows ----
+  // Plain readonly <input>s (rather than <span>s) so the existing
+  // station/output/ingredient-row styling applies unchanged and values
+  // stay selectable/copyable - just no add/remove/edit affordances.
   function addStationRow(station = "", auto = "", manual = "") {
     const rowEl = document.createElement("div");
     rowEl.className = "station-row";
     const stationInput = document.createElement("input");
     stationInput.type = "text";
     stationInput.value = station;
+    stationInput.readOnly = true;
     const autoInput = document.createElement("input");
     autoInput.type = "text";
     autoInput.value = auto;
     autoInput.className = "narrow-input";
+    autoInput.readOnly = true;
     const manualInput = document.createElement("input");
     manualInput.type = "text";
     manualInput.value = manual;
     manualInput.className = "narrow-input";
+    manualInput.readOnly = true;
     rowEl.appendChild(stationInput);
     rowEl.appendChild(autoInput);
     rowEl.appendChild(manualInput);
-    const row = { stationInput, autoInput, manualInput, rowEl };
-    const removeBtn = makeRemoveButton(() => {
-      if (stationRows.length <= 1) return;
-      stationRows = stationRows.filter((r) => r !== row);
-      rowEl.remove();
-    });
-    rowEl.appendChild(removeBtn);
     stationRowsEl.appendChild(rowEl);
-    new LiveDropdown(stationInput, { getValues: () => CraftMapApi.call("get_all_stations") });
-    stationRows.push(row);
+    stationRows.push({ stationInput, autoInput, manualInput, rowEl });
   }
 
   function clearStationRows() {
@@ -601,22 +608,16 @@
     nameInput.type = "text";
     nameInput.value = name;
     nameInput.className = "wide-input";
+    nameInput.readOnly = true;
     const qtyInput = document.createElement("input");
     qtyInput.type = "text";
     qtyInput.value = String(qty);
     qtyInput.className = "narrow-input";
+    qtyInput.readOnly = true;
     rowEl.appendChild(nameInput);
     rowEl.appendChild(qtyInput);
-    const row = { nameInput, qtyInput, rowEl };
-    const removeBtn = makeRemoveButton(() => {
-      if (outputRows.length <= 1) return;
-      outputRows = outputRows.filter((r) => r !== row);
-      rowEl.remove();
-    });
-    rowEl.appendChild(removeBtn);
     outputRowsEl.appendChild(rowEl);
-    new LiveDropdown(nameInput, { getValues: () => CraftMapApi.call("get_all_output_names") });
-    outputRows.push(row);
+    outputRows.push({ nameInput, qtyInput, rowEl });
   }
 
   function clearOutputRows() {
@@ -631,23 +632,16 @@
     nameInput.type = "text";
     nameInput.value = name;
     nameInput.className = "wide-input";
+    nameInput.readOnly = true;
     const qtyInput = document.createElement("input");
     qtyInput.type = "text";
     qtyInput.value = String(qty);
     qtyInput.className = "narrow-input";
+    qtyInput.readOnly = true;
     rowEl.appendChild(nameInput);
     rowEl.appendChild(qtyInput);
-    const row = { nameInput, qtyInput, rowEl };
-    const removeBtn = makeRemoveButton(() => {
-      ingredientRows = ingredientRows.filter((r) => r !== row);
-      rowEl.remove();
-    });
-    rowEl.appendChild(removeBtn);
     ingredientRowsEl.appendChild(rowEl);
-    new LiveDropdown(nameInput, {
-      getValues: () => CraftMapApi.call("get_all_ingredient_options"),
-    });
-    ingredientRows.push(row);
+    ingredientRows.push({ nameInput, qtyInput, rowEl });
     ingredientRowsEl.scrollTop = ingredientRowsEl.scrollHeight;
   }
 
@@ -656,7 +650,7 @@
     ingredientRows = [];
   }
 
-  // ---- form load/clear/save/delete ----
+  // ---- form load/clear ----
   async function loadRecipeIntoForm(recipeId, rname) {
     if (recipeId !== viewingRecipeId) {
       // A genuinely different recipe's path_keys don't mean anything to
@@ -674,12 +668,10 @@
     for (const s of stations) {
       addStationRow(s.station, s.auto !== null && s.auto !== undefined ? fmtNum(s.auto) : "", s.manual !== null && s.manual !== undefined ? fmtNum(s.manual) : "");
     }
-    if (!stationRows.length) addStationRow();
 
     clearOutputRows();
     const outputs = await CraftMapApi.call("get_recipe_outputs", recipeId);
     for (const o of outputs) addOutputRow(o.name, o.qty);
-    if (!outputRows.length) addOutputRow();
 
     clearIngredientRows();
     const ingredients = await CraftMapApi.call("get_recipe_ingredients", recipeId);
@@ -688,125 +680,50 @@
     await refreshBreakdown();
   }
 
-  function clearRecipeForm() {
+  // A basic/raw resource has no recipe of its own - nothing to breakdown or
+  // show in the detail form, so just clear it and jump straight to Used-In
+  // mode for it, keyed by name rather than a recipe id (see usedinItemName).
+  async function selectBasicResource(name) {
     viewingRecipeId = null;
     renderer.resetExpandState();
-    recipeCombo.value = "";
+    recipeCombo.value = name;
     recipeName.value = "";
     clearStationRows();
-    addStationRow();
     clearOutputRows();
-    addOutputRow();
     clearIngredientRows();
-    tree.innerHTML = "";
+    usedinRecipeId = null;
+    usedinItemName = name;
+    usedinNavigatedAway = false;
+    recipeMode = "usedin";
+    updateModeTabs();
+    await refreshBreakdown();
   }
 
   async function onRecipeComboCommit() {
     const name = recipeCombo.value.trim();
+    if (!name) return;
     const recipeId = await CraftMapApi.call("get_recipe_by_name", name);
-    if (recipeId === null) return;
-    usedinRecipeId = recipeId;
-    usedinNavigatedAway = false;
-    await loadRecipeIntoForm(recipeId, name);
-  }
-
-  async function saveRecipeAction() {
-    const name = recipeName.value.trim();
-    if (!name) {
-      CraftMapApi._showError("Recipe name is required.");
+    if (recipeId !== null) {
+      usedinRecipeId = recipeId;
+      usedinNavigatedAway = false;
+      await loadRecipeIntoForm(recipeId, name);
       return;
     }
-    const ingredients = [];
-    for (const row of ingredientRows) {
-      const ingName = row.nameInput.value.trim();
-      if (!ingName) continue;
-      const qty = parseFloat(row.qtyInput.value.trim());
-      if (!isFinite(qty)) {
-        CraftMapApi._showError(`Invalid quantity for '${ingName}'.`);
-        return;
-      }
-      ingredients.push({ name: ingName, qty });
+    const basics = await CraftMapApi.call("get_basic_resources");
+    if (basics.includes(name)) {
+      await selectBasicResource(name);
     }
-    if (!ingredients.length) {
-      CraftMapApi._showError("Add at least one ingredient.");
-      return;
-    }
-    const outputs = [];
-    for (const row of outputRows) {
-      const outName = row.nameInput.value.trim();
-      if (!outName) continue;
-      const qty = parseFloat(row.qtyInput.value.trim());
-      if (!isFinite(qty) || qty <= 0) {
-        CraftMapApi._showError(`Invalid quantity for output '${outName}'.`);
-        return;
-      }
-      outputs.push({ name: outName, qty });
-    }
-    if (!outputs.length) {
-      CraftMapApi._showError("Add at least one output.");
-      return;
-    }
-    const existingId = await CraftMapApi.call("get_recipe_by_name", name);
-    if (existingId !== null && existingId !== viewingRecipeId) {
-      CraftMapApi._showError(`A recipe named '${name}' already exists.`);
-      return;
-    }
-    const stations = [];
-    for (const row of stationRows) {
-      const stName = row.stationInput.value.trim();
-      if (!stName) continue;
-      const autoStr = row.autoInput.value.trim();
-      const manualStr = row.manualInput.value.trim();
-      const auto = autoStr ? parseFloat(autoStr) : null;
-      const manual = manualStr ? parseFloat(manualStr) : null;
-      if ((autoStr && !isFinite(auto)) || (manualStr && !isFinite(manual))) {
-        CraftMapApi._showError("Craft time must be a number of seconds.");
-        return;
-      }
-      stations.push({ station: stName, auto, manual });
-    }
-    if (!stations.length) {
-      CraftMapApi._showError("Add at least one station.");
-      return;
-    }
-
-    let rid;
-    try {
-      rid = await CraftMapApi.call(
-        "save_recipe",
-        viewingRecipeId,
-        name,
-        outputs,
-        ingredients,
-        stations
-      );
-    } catch (e) {
-      return;
-    }
-    viewingRecipeId = rid;
-    recipeCombo.value = name;
-    // forceFull: saving can change this recipe's own ingredients/outputs/
-    // stations while its id stays the same, so the id-based cache check
-    // alone wouldn't notice the tree needs re-resolving.
-    await refreshBreakdown({ forceFull: true });
-  }
-
-  async function deleteRecipeAction() {
-    if (viewingRecipeId === null) {
-      CraftMapApi._showError("Select a recipe first.");
-      return;
-    }
-    if (!confirm("Delete this recipe?")) return;
-    await CraftMapApi.call("delete_recipe", viewingRecipeId);
-    clearRecipeForm();
   }
 
   // ---- init ----
   async function init() {
     new LiveDropdown(recipeCombo, {
       getValues: async () => {
-        const recipes = await CraftMapApi.call("get_all_recipes");
-        return recipes.map((r) => r.name);
+        const [recipes, basics] = await Promise.all([
+          CraftMapApi.call("get_all_recipes"),
+          CraftMapApi.call("get_basic_resources"),
+        ]);
+        return [...recipes.map((r) => r.name), ...basics];
       },
       onSelect: onRecipeComboCommit,
     });
@@ -814,7 +731,6 @@
       if (e.key === "Enter") onRecipeComboCommit();
     });
 
-    recipeNewBtn.addEventListener("click", clearRecipeForm);
     recipeQty.addEventListener("keydown", (e) => {
       if (e.key === "Enter") refreshBreakdown();
     });
@@ -835,17 +751,6 @@
       await CraftMapApi.call("show_queue_window");
     });
 
-    document.getElementById("btn-add-station").addEventListener("click", () => addStationRow());
-    document.getElementById("btn-add-output").addEventListener("click", () => addOutputRow());
-    document
-      .getElementById("btn-add-ingredient")
-      .addEventListener("click", () => addIngredientRow());
-    document.getElementById("btn-recipe-save").addEventListener("click", saveRecipeAction);
-    document.getElementById("btn-recipe-clear").addEventListener("click", clearRecipeForm);
-    document.getElementById("btn-recipe-delete").addEventListener("click", deleteRecipeAction);
-
-    addStationRow();
-    addOutputRow();
     updateModeTabs();
 
     // This tree gets noticeably less vertical space than the deposit

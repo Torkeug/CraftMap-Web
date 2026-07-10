@@ -18,6 +18,7 @@
         <button class="tab-btn" id="tab-resource" data-mode="resource">Resource</button>
         <button class="tab-btn" id="tab-location" data-mode="location">Location</button>
         <button class="tab-btn" id="tab-recipe" data-mode="recipe">Recipe</button>
+        <button class="tab-btn" id="tab-sources" data-mode="sources">Sources</button>
         <button class="tab-btn" id="tab-queue" title="Show/hide the Craft Queue window">Queue</button>
       </div>
       <div id="body">
@@ -81,9 +82,8 @@
             <div id="recipe-sel-left">
               <label>Recipe:</label>
               <div id="recipe-combo-wrap" class="dropdown-anchor">
-                <input id="recipe-combo" type="text" placeholder="Select a recipe..." />
+                <input id="recipe-combo" type="text" placeholder="Select a recipe or raw resource..." />
               </div>
-              <button class="btn btn-neutral btn-small" id="recipe-new-btn">New</button>
               <span class="qty-sep">&times;</span>
               <input id="recipe-qty" type="text" value="1" />
               <button
@@ -112,7 +112,7 @@
           <div id="recipe-edit-form">
             <div class="form-row">
               <label>Name:</label>
-              <input id="recipe-name" type="text" />
+              <input id="recipe-name" type="text" readonly />
             </div>
 
             <div class="recipe-subsection-label">Stations:</div>
@@ -121,7 +121,6 @@
                 <span></span>
                 <span class="col-hint">Auto (s)</span>
                 <span class="col-hint">Manual (s)</span>
-                <span></span>
               </div>
               <div id="recipe-station-rows"></div>
             </div>
@@ -131,22 +130,26 @@
 
             <div class="recipe-subsection-label">Ingredients:</div>
             <div id="recipe-ingredient-rows" class="scroll-rows"></div>
+          </div>
+        </div>
 
-            <div id="recipe-form-buttons">
-              <button class="btn btn-neutral btn-small" id="btn-add-station">
-                + Station
-              </button>
-              <button class="btn btn-neutral btn-small" id="btn-add-output">
-                + Output
-              </button>
-              <button class="btn btn-neutral btn-small" id="btn-add-ingredient">
-                + Ingredient
-              </button>
-              <button class="btn btn-success" id="btn-recipe-save">Save</button>
-              <button class="btn btn-neutral" id="btn-recipe-clear">Clear</button>
-              <button class="btn btn-danger" id="btn-recipe-delete">Delete</button>
+        <div id="sources-view">
+          <div id="sources-selector-row">
+            <label>Resource:</label>
+            <div id="sources-combo-wrap" class="dropdown-anchor">
+              <input
+                id="sources-combo"
+                type="text"
+                placeholder="Select a raw resource..."
+              />
             </div>
           </div>
+          <div class="recipe-subsection-label">Source nodes:</div>
+          <div class="source-row source-row-header">
+            <span></span>
+            <span class="col-hint">Concentration</span>
+          </div>
+          <div id="sources-rows" class="scroll-rows"></div>
         </div>
       </div>
       <div id="error-banner"></div>
@@ -178,6 +181,7 @@
     <script src="js/deposits.js"></script>
     <script src="js/breakdown-tree.js"></script>
     <script src="js/recipe-panel.js"></script>
+    <script src="js/sources.js"></script>
     <script src="js/screens.js"></script>
     <script src="js/settings.js"></script>
     <script>

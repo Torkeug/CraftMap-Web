@@ -41,6 +41,38 @@ for review before you decide how to merge.
 - **`craft_values.json`** — per-station economy constants (power cost, price
   decay, etc), keyed by `craftKind` (matches `where` in recipes).
 
+- **`resource_nodes.json`** — 121 raw `resource` sheet rows (asteroid
+  clusters, planetary deposits, geysers, crackable shells, shipwrecks, etc -
+  this sheet backs `resGen`/`asteroidResGen`/`wreckResGen` generation, so it
+  covers every kind of gatherable node), filtered to only those that
+  actually encode a material yield. A node's `type` (enum: `Default`,
+  `Gravite`, `Node`, `Deposit`, `Shell`, `Geyser`, `Pool`, `ShipWreck`,
+  `ShipWreckPart`, `Biological`, `BiologicalRoot`, `Deco`, `Decal`)
+  determines which of four shapes that takes:
+  - `Node`/`ShipWreckPart`/`BiologicalRoot`: `items`:
+    `[{item, kind, proba, qtyMin, qtyMax}, ...]` — item ids yielded when
+    gathering this node. `kind` is `0` for the node's primary material
+    (its yield is guaranteed each gather, split across kind-0 siblings by
+    `proba` weight), `1` for a rarer "rare find" bonus roll gated by the
+    node's own `generation.secondaryProba`/`secondaryMax` (e.g.
+    `CarbonCluster_Coal`'s primary yield is `Carbon`, but it can also
+    rarely turn up a `Diamond`).
+  - `Deposit`/`Pool`: `props.depositItem` — a single guaranteed item id,
+    auto-drilled by the Extractor building (e.g. `CoalDeposit` →
+    `Carbon`, `VitriolDeposit` → `Vitriol`). No randomness, no `items` list.
+  - `Geyser`: `props.geyser.fluid` — same idea, passively collected (e.g.
+    `MercuryGeyser` → `Mercury`).
+  - `Shell`/`ShipWreck`: `props.loot`:
+    `[{proba, items: [{item, qtyMin, qtyMax}, ...]}, ...]` — a list of
+    bundles; cracking the shell/salvaging the wreck picks ONE bundle
+    (weighted by that bundle's own `proba`) and every item in it drops
+    together, e.g. `BasaltShell` has a Sandstone+IronNugget bundle and a
+    separate Sandstone+TitaniumOre bundle among others.
+
+  Exploration-only markers (`Gravite`/`Default` - scannable points with no
+  material yield) and other resource types without a concrete item encoded
+  here (`Biological`, `Deco`, `Decal`) are excluded.
+
 ## How this differs from `resources.db`'s recipe tables
 
 | | `resources.db` (`recipes`/`recipe_ingredients`) | game data (`craft_recipes.json`) |
