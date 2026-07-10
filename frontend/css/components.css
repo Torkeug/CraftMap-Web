@@ -3,8 +3,8 @@
    theme.css - this file only adds the shapes/behaviors specific to these
    widgets. */
 
-/* ---------- view tabs (Resource / Location - Recipe/Queue land in later
-   milestones) ---------- */
+/* ---------- view tabs (Resource / Location / Recipe - Queue panel lands
+   in a later milestone) ---------- */
 #tab-row {
   flex: 0 0 auto;
   display: flex;
@@ -320,4 +320,363 @@
 .dropdown-item.active {
   background: var(--accent);
   color: white;
+}
+
+.btn-small {
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+/* ---------- recipe panel ---------- */
+#recipe-view {
+  display: none; /* toggled by js/screens.js */
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+  gap: 4px;
+}
+
+#recipe-selector-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#recipe-sel-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+#recipe-sel-left label {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.dropdown-anchor {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+#recipe-combo {
+  width: 220px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#recipe-combo:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.qty-sep {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#recipe-qty {
+  width: 44px;
+  box-sizing: border-box;
+  text-align: center;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 4px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#recipe-qty:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#recipe-mode-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+
+.mode-btn {
+  border-radius: 4px;
+}
+
+.mode-btn.active {
+  box-shadow: none;
+  background: var(--accent);
+  color: white;
+}
+
+/* ---------- breakdown/totals/used-in tree ---------- */
+#recipe-breakdown-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 0;
+}
+
+.bd-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 2px 6px 2px 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.bd-row:hover {
+  background: var(--panel-2);
+}
+
+.bd-node.collapsed > .bd-children {
+  display: none;
+}
+
+.bd-children {
+  margin-left: 14px;
+}
+
+.bd-label {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.bd-label.has-options {
+  cursor: pointer;
+}
+
+.bd-label.has-options:hover {
+  text-decoration: underline;
+}
+
+.cb-icon,
+.cb-icon-spacer {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin: 3px 6px 0 0;
+}
+
+.cb-icon {
+  border: 1px solid var(--faint);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+}
+
+.cb-icon.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.cb-icon.checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 3px;
+  height: 6px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.bd-row.root .bd-label,
+.bd-row.total_header .bd-label {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.bd-row.section .bd-label {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.bd-row.ingredient .bd-label {
+  color: var(--text);
+}
+
+.bd-row.done .bd-label {
+  color: #6e7681;
+}
+
+.bd-row.location .bd-label {
+  color: var(--good);
+  font-size: 11px;
+}
+
+.bd-row.usedin-result {
+  cursor: pointer;
+}
+
+/* ---------- step popup (alt-recipe / station+mode picker) ---------- */
+.step-popup {
+  position: fixed;
+  z-index: 100;
+  min-width: 180px;
+  max-width: 320px;
+  background: #1a2029;
+  border: 1px solid #3a4350;
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  padding-bottom: 4px;
+}
+
+.step-popup.hidden {
+  display: none;
+}
+
+.step-section-label {
+  color: var(--faint);
+  font-size: 9px;
+  padding: 6px 8px 1px 8px;
+}
+
+.step-option {
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.step-option.selected {
+  background: #242c3d;
+  color: #dce8ff;
+}
+
+.step-option:hover {
+  background: #2a3244;
+}
+
+.step-separator {
+  height: 1px;
+  background: var(--line);
+  margin: 3px 4px;
+}
+
+/* ---------- recipe edit form ---------- */
+#recipe-edit-form {
+  flex: 0 0 auto;
+  padding-top: 4px;
+  overflow: auto;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.form-row label {
+  color: var(--muted);
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+
+.form-row input {
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+.recipe-subsection-label {
+  color: var(--muted);
+  font-size: 10px;
+  margin: 4px 0 2px 0;
+}
+
+.station-row,
+.output-row,
+.ingredient-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.station-row.station-header {
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.station-row.station-header .col-hint {
+  width: 90px;
+}
+
+.station-row input,
+.output-row input,
+.ingredient-row input {
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+.station-row input:not(.narrow-input) {
+  width: 140px;
+}
+
+.narrow-input {
+  width: 60px;
+}
+
+.wide-input {
+  width: 200px;
+}
+
+#recipe-station-rows,
+#recipe-output-rows {
+  margin-bottom: 4px;
+}
+
+#recipe-ingredient-rows.scroll-rows {
+  max-height: 110px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+.row-remove-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.row-remove-btn:hover {
+  color: var(--danger);
+}
+
+#recipe-form-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
 }

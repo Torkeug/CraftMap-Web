@@ -89,12 +89,14 @@ def resolve_recipe_tree(
     _alt_prefs=None,
     _stations_by_recipe=None,
     _station_prefs=None,
+    max_depth=None,
+    _depth=0,
 ):
     """
     Recursively build a breakdown tree for `name`.
     Returns: {'name', 'qty', 'is_recipe', 'output_qty', 'recipe_name', 'children',
               'alts', 'byproducts', 'station', 'auto_craft_seconds',
-              'manual_craft_seconds', 'stations'}
+              'manual_craft_seconds', 'stations', 'truncated'}
     'alts' lists every other recipe producing the same output — shown as collapsible branches.
     'byproducts' lists this recipe's other outputs (besides `name`), scaled to
     the same craft count — populated for multi-output recipes.
@@ -103,6 +105,14 @@ def resolve_recipe_tree(
     _root_recipe_id: forces a specific recipe at the top level (for alternate recipe views).
     _alt_prefs: {ingredient_name: recipe_id} of user-selected alternate recipes.
     _station_prefs: {ingredient_name: station} of user-selected preferred stations.
+    max_depth: stop recursing past this many levels below the root (None = no
+    limit) - a node that would have had children but hit the limit comes back
+    with 'children': [] and 'truncated': True instead, so the caller can tell
+    "genuinely no children" apart from "not resolved yet" and fetch that one
+    node's own subtree later (see get_recipe_subtree) instead of paying to
+    resolve - and transmit across the pywebview bridge - a potentially huge
+    tree in one call when most of it may never even be looked at (a
+    breakdown tree UI starts with almost everything collapsed).
     """
     if _recipe_map is None or _ing_map is None or _outputs_by_recipe is None:
         (
@@ -165,41 +175,17 @@ def resolve_recipe_tree(
             for n, q in recipe_outputs
             if n != actual_output
         ]
-        sub_visited = _visited | {name}
-        for ing_name, ing_qty in _ing_map.get(recipe_id, []):
-            child = resolve_recipe_tree(
-                ing_name,
-                crafts * ing_qty,
-                sub_visited,
-                _recipe_map,
-                _ing_map,
-                _outputs_by_recipe,
-                _alts_by_output=_alts_by_output,
-                _recipe_name_by_id=_recipe_name_by_id,
-                _recipe_meta_by_id=_recipe_meta_by_id,
-                _alt_prefs=_alt_prefs,
-                _stations_by_recipe=_stations_by_recipe,
-                _station_prefs=_station_prefs,
-            )
-            children.append(child)
-        # Find every other recipe that produces the same output
-        for alt_rid, alt_rname, alt_oqty in (_alts_by_output or {}).get(
-            actual_output, []
-        ):
-            if alt_rid == recipe_id:
-                continue
-            alt_crafts = math.ceil(qty_needed / alt_oqty)
-            alt_outputs = _outputs_by_recipe.get(alt_rid, [(actual_output, alt_oqty)])
-            alt_byproducts = [
-                {"name": n, "qty": alt_crafts * q}
-                for n, q in alt_outputs
-                if n != actual_output
-            ]
-            alt_children = []
-            for ing_name, ing_qty in _ing_map.get(alt_rid, []):
-                alt_child = resolve_recipe_tree(
+
+    truncated = False
+    if is_recipe:
+        if max_depth is not None and _depth >= max_depth:
+            truncated = True
+        else:
+            sub_visited = _visited | {name}
+            for ing_name, ing_qty in _ing_map.get(recipe_id, []):
+                child = resolve_recipe_tree(
                     ing_name,
-                    alt_crafts * ing_qty,
+                    crafts * ing_qty,
                     sub_visited,
                     _recipe_map,
                     _ing_map,
@@ -210,18 +196,54 @@ def resolve_recipe_tree(
                     _alt_prefs=_alt_prefs,
                     _stations_by_recipe=_stations_by_recipe,
                     _station_prefs=_station_prefs,
+                    max_depth=max_depth,
+                    _depth=_depth + 1,
                 )
-                alt_children.append(alt_child)
-            alts.append(
-                {
-                    "recipe_id": alt_rid,
-                    "recipe_name": alt_rname,
-                    "output_qty": alt_oqty,
-                    "children": alt_children,
-                    "byproducts": alt_byproducts,
-                    "stations": (_stations_by_recipe or {}).get(alt_rid, []),
-                }
-            )
+                children.append(child)
+            # Find every other recipe that produces the same output
+            for alt_rid, alt_rname, alt_oqty in (_alts_by_output or {}).get(
+                actual_output, []
+            ):
+                if alt_rid == recipe_id:
+                    continue
+                alt_crafts = math.ceil(qty_needed / alt_oqty)
+                alt_outputs = _outputs_by_recipe.get(
+                    alt_rid, [(actual_output, alt_oqty)]
+                )
+                alt_byproducts = [
+                    {"name": n, "qty": alt_crafts * q}
+                    for n, q in alt_outputs
+                    if n != actual_output
+                ]
+                alt_children = []
+                for ing_name, ing_qty in _ing_map.get(alt_rid, []):
+                    alt_child = resolve_recipe_tree(
+                        ing_name,
+                        alt_crafts * ing_qty,
+                        sub_visited,
+                        _recipe_map,
+                        _ing_map,
+                        _outputs_by_recipe,
+                        _alts_by_output=_alts_by_output,
+                        _recipe_name_by_id=_recipe_name_by_id,
+                        _recipe_meta_by_id=_recipe_meta_by_id,
+                        _alt_prefs=_alt_prefs,
+                        _stations_by_recipe=_stations_by_recipe,
+                        _station_prefs=_station_prefs,
+                        max_depth=max_depth,
+                        _depth=_depth + 1,
+                    )
+                    alt_children.append(alt_child)
+                alts.append(
+                    {
+                        "recipe_id": alt_rid,
+                        "recipe_name": alt_rname,
+                        "output_qty": alt_oqty,
+                        "children": alt_children,
+                        "byproducts": alt_byproducts,
+                        "stations": (_stations_by_recipe or {}).get(alt_rid, []),
+                    }
+                )
 
     return {
         "name": name,
@@ -237,6 +259,7 @@ def resolve_recipe_tree(
         "manual_craft_seconds": manual_craft_seconds,
         "craft_mode": craft_mode,
         "stations": stations,
+        "truncated": truncated,
     }
 
 

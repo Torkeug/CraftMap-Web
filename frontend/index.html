@@ -17,6 +17,7 @@
       <div id="tab-row">
         <button class="tab-btn" id="tab-resource" data-mode="resource">Resource</button>
         <button class="tab-btn" id="tab-location" data-mode="location">Location</button>
+        <button class="tab-btn" id="tab-recipe" data-mode="recipe">Recipe</button>
       </div>
       <div id="body">
         <div id="deposits-view">
@@ -73,14 +74,83 @@
             </div>
           </div>
         </div>
+
+        <div id="recipe-view">
+          <div id="recipe-selector-row">
+            <div id="recipe-sel-left">
+              <label>Recipe:</label>
+              <div id="recipe-combo-wrap" class="dropdown-anchor">
+                <input id="recipe-combo" type="text" placeholder="Select a recipe..." />
+              </div>
+              <button class="btn btn-neutral btn-small" id="recipe-new-btn">New</button>
+              <span class="qty-sep">&times;</span>
+              <input id="recipe-qty" type="text" value="1" />
+            </div>
+            <div id="recipe-mode-tabs">
+              <button class="tab-btn mode-btn" id="mode-breakdown" data-mode="breakdown">
+                Breakdown
+              </button>
+              <button class="tab-btn mode-btn" id="mode-totals" data-mode="totals">
+                Totals
+              </button>
+              <button class="tab-btn mode-btn" id="mode-usedin" data-mode="usedin">
+                Used In
+              </button>
+            </div>
+          </div>
+
+          <div id="recipe-breakdown-tree"></div>
+
+          <div id="recipe-edit-form">
+            <div class="form-row">
+              <label>Name:</label>
+              <input id="recipe-name" type="text" />
+            </div>
+
+            <div class="recipe-subsection-label">Stations:</div>
+            <div id="recipe-stations">
+              <div class="station-row station-header">
+                <span></span>
+                <span class="col-hint">Auto (s)</span>
+                <span class="col-hint">Manual (s)</span>
+                <span></span>
+              </div>
+              <div id="recipe-station-rows"></div>
+            </div>
+
+            <div class="recipe-subsection-label">Outputs:</div>
+            <div id="recipe-output-rows"></div>
+
+            <div class="recipe-subsection-label">Ingredients:</div>
+            <div id="recipe-ingredient-rows" class="scroll-rows"></div>
+
+            <div id="recipe-form-buttons">
+              <button class="btn btn-neutral btn-small" id="btn-add-station">
+                + Station
+              </button>
+              <button class="btn btn-neutral btn-small" id="btn-add-output">
+                + Output
+              </button>
+              <button class="btn btn-neutral btn-small" id="btn-add-ingredient">
+                + Ingredient
+              </button>
+              <button class="btn btn-success" id="btn-recipe-save">Save</button>
+              <button class="btn btn-neutral" id="btn-recipe-clear">Clear</button>
+              <button class="btn btn-danger" id="btn-recipe-delete">Delete</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div id="error-banner"></div>
       <div id="resize-grip">&#9698;</div>
     </div>
+    <div id="step-popup" class="step-popup hidden"></div>
     <script src="js/api.js"></script>
     <script src="js/drag-resize.js"></script>
     <script src="js/dropdown.js"></script>
     <script src="js/deposits.js"></script>
+    <script src="js/recipe-panel.js"></script>
+    <script src="js/screens.js"></script>
     <script>
       document.getElementById("close-btn").addEventListener("click", () => {
         CraftMapApi.call("quit_app");

@@ -81,6 +81,58 @@ def test_craft_count_rounds_up_with_ceil(db):
     assert iron_bar["qty"] == 2  # 2 crafts * 1 iron bar each
 
 
+def test_max_depth_truncates_and_flags_it(db):
+    db.save_recipe(
+        None,
+        "Iron Bar",
+        outputs=[("Iron Bar", 1)],
+        ingredients=[("Iron Ore", 2)],
+        stations=DEFAULT_STATIONS,
+    )
+    db.save_recipe(
+        None,
+        "Gear",
+        outputs=[("Gear", 1)],
+        ingredients=[("Iron Bar", 3)],
+        stations=DEFAULT_STATIONS,
+    )
+
+    # depth 0 = Gear itself, depth 1 = Iron Bar - Iron Bar's own children
+    # (Iron Ore) get cut off at max_depth=1.
+    tree = db.resolve_recipe_tree("Gear", qty_needed=1, max_depth=1)
+
+    assert tree["truncated"] is False
+    iron_bar = tree["children"][0]
+    assert iron_bar["name"] == "Iron Bar"
+    assert iron_bar["is_recipe"] is True
+    assert iron_bar["truncated"] is True
+    assert iron_bar["children"] == []
+    # Truncation shouldn't affect this node's own metadata/qty scaling.
+    assert iron_bar["qty"] == 3
+
+    # Resuming from the truncated node with a fresh top-level call (as
+    # get_recipe_subtree does) reproduces its real children.
+    resumed = db.resolve_recipe_tree(
+        "Iron Bar", qty_needed=iron_bar["qty"], _visited=frozenset({"Gear"})
+    )
+    assert resumed["truncated"] is False
+    assert resumed["children"][0]["name"] == "Iron Ore"
+    assert resumed["children"][0]["qty"] == 6
+
+
+def test_max_depth_none_matches_unbounded_resolve(db):
+    db.save_recipe(
+        None,
+        "Iron Bar",
+        outputs=[("Iron Bar", 1)],
+        ingredients=[("Iron Ore", 2)],
+        stations=DEFAULT_STATIONS,
+    )
+    unbounded = db.resolve_recipe_tree("Iron Bar", qty_needed=1)
+    explicit_none = db.resolve_recipe_tree("Iron Bar", qty_needed=1, max_depth=None)
+    assert unbounded == explicit_none
+
+
 def test_multi_level_nesting(db):
     db.save_recipe(
         None,
