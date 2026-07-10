@@ -166,7 +166,21 @@ def main():
         threading.Thread(target=app.poll_input_passthrough, daemon=True).start()
 
         if HOTKEY_AVAILABLE:
-            app.hotkey_handle = keyboard.add_hotkey(toggle_key, app.toggle)
+            # Never call app.toggle() directly from this callback: it runs
+            # win32util.force_foreground_window's AttachThreadInput dance,
+            # and doing that *inside* keyboard's own low-level hook thread
+            # (the thread actively processing this very hotkey's key
+            # events) can corrupt modifier-key state system-wide - this
+            # was the actual cause of Alt getting reported as stuck down
+            # elsewhere after using the toggle hotkey. The tkinter app
+            # avoided this the same way, marshalling onto its own main
+            # thread via self.after(0, self.toggle) instead of running
+            # toggle() on the hook thread - here that means handing off
+            # to a plain throwaway thread instead.
+            app.hotkey_handle = keyboard.add_hotkey(
+                toggle_key,
+                lambda: threading.Thread(target=app.toggle, daemon=True).start(),
+            )
         else:
             print("NOTE: 'keyboard' module not found, global hotkey disabled.")
 
