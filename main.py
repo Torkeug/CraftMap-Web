@@ -142,6 +142,13 @@ def main():
         # compositor catches up and paints the real page, so the default
         # white flashes at the border unless it's overridden here.
         background_color="#0d1117",
+        # pywebview's own built-in drag-anywhere behavior for frameless
+        # windows (defaults to True!) - runs independently of and on top
+        # of frontend/js/drag-resize.js's own #dragbar-scoped dragging,
+        # so leaving it enabled meant clicking ANYWHERE in the window
+        # dragged it, and dragging from the title bar specifically had
+        # two separate drag mechanisms fighting each other at once.
+        easy_drag=False,
     )
     # Underscore-prefixed: pywebview builds its JS-exposed function list by
     # walking dir(api) and recursing into every non-underscore, non-callable

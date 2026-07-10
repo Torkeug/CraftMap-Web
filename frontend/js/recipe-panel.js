@@ -1,184 +1,26 @@
 /* Recipe panel: combobox/quantity selector, Breakdown/Totals/Used-In tree
- * modes, checkbox-cascade tree, alt-recipe/station step popup, and the
- * recipe edit form. Direct port of craftmap/overlay.py's recipe-panel
- * section (_build_recipe_panel, _refresh_recipe_breakdown,
+ * modes, and the recipe edit form. Direct port of craftmap/overlay.py's
+ * recipe-panel section (_build_recipe_panel, _refresh_recipe_breakdown,
  * _refresh_totals_view, _refresh_usedin_view, _on_breakdown_click,
- * save_recipe_action/delete_recipe_action, _StepPopup).
- *
- * The tree is real DOM (one .bd-node per row) instead of a ttk.Treeview,
- * so click handlers can be attached directly per row instead of needing
- * an iid->info lookup table and manual dispatch-by-click-position the
- * way overlay.py's _on_breakdown_click did - and CSS text-wrap replaces
- * _wrap_label's manual pixel-measurement entirely.
+ * save_recipe_action/delete_recipe_action). The checkbox-cascade tree
+ * itself and the alt-recipe/station step popover are shared with the
+ * Craft Queue panel - see frontend/js/breakdown-tree.js.
  */
 (function () {
-  // ---- pure helpers ported from overlay.py / backend/resolver.py ----
-
-  function fmtNum(n) {
-    // Python's f"{x:g}" - trims trailing zeros and a trailing decimal point.
-    if (!isFinite(n)) return String(n);
-    if (Number.isInteger(n)) return String(n);
-    return parseFloat(n.toPrecision(12)).toString();
-  }
-
-  function formatDuration(seconds) {
-    const total = Math.round(seconds);
-    const h = Math.floor(total / 3600);
-    const rem = total % 3600;
-    const m = Math.floor(rem / 60);
-    const s = rem % 60;
-    const parts = [];
-    if (h) parts.push(`${h}h`);
-    if (m) parts.push(`${m}m`);
-    if (s || !parts.length) parts.push(`${s}s`);
-    return parts.join(" ");
-  }
-
-  function remainingPart(seconds) {
-    if (!seconds || seconds <= 0) return null;
-    return `  ${formatDuration(seconds)} left`;
-  }
-
-  function formatCraftMetaSuffix(station, perCraftSeconds, mode, remainingSeconds) {
-    mode = mode || "auto";
-    const parts = [];
-    if (station) parts.push(`@ ${station} · ${mode[0].toUpperCase()}${mode.slice(1)}`);
-    const rem = remainingPart(remainingSeconds);
-    if (rem) parts.push(rem.trim());
-    if (perCraftSeconds) parts.push(`${formatDuration(perCraftSeconds)}/craft`);
-    if (!parts.length) return "";
-    return "  " + parts.join("  ");
-  }
-
-  function formatByproductsSuffix(byproducts) {
-    if (!byproducts || !byproducts.length) return "";
-    const parts = byproducts.map((b) => `+${fmtNum(b.qty)} ${b.name}`);
-    return "  (" + parts.join(", ") + ")";
-  }
-
-  function nodeCrafts(node) {
-    if (!node.is_recipe) return 0;
-    return Math.ceil(node.qty / (node.output_qty || 1.0));
-  }
-
-  function nodeActiveSeconds(node) {
-    const mode = node.craft_mode || "auto";
-    const seconds = mode === "auto" ? node.auto_craft_seconds : node.manual_craft_seconds;
-    return [seconds, mode];
-  }
-
-  function nodeOwnTime(node) {
-    const [seconds] = nodeActiveSeconds(node);
-    if (!seconds) return 0.0;
-    return seconds * nodeCrafts(node);
-  }
-
-  function nodePathKey(node, pathParts) {
-    return [...pathParts, node.name].join("|");
-  }
-
-  // Mirrors resolver._collect_path_keys exactly (same recursion, same
-  // nodePathKey/_node_path_key formula) - computed locally instead of
-  // round-tripped through Api.collect_path_keys/toggle_checked_cascade,
-  // since sending the *entire* resolved tree back to Python as a call
-  // argument just to walk it turned out to cost 200ms+ on a ~100-node
-  // tree (payload marshaling size, not call-count, is what's expensive
-  // over this pywebview/pythonnet bridge - confirmed by timing every
-  // call: plain small-payload calls run in single-digit ms regardless of
-  // how many of them fire, but the two calls carrying a full tree in
-  // either direction each took several hundred ms). collect_path_keys
-  // is simple and low-risk enough to duplicate here; resolve_recipe_tree
-  // itself stays server-side.
-  function collectPathKeysJs(node, pathParts) {
-    const keys = [nodePathKey(node, pathParts)];
-    for (const child of node.children) {
-      keys.push(...collectPathKeysJs(child, [...pathParts, node.name]));
-    }
-    return keys;
-  }
-
-  // A checkbox cascade must see the *whole* subtree, but a node the user
-  // never actually expanded may still be sitting there as a truncated
-  // stub (empty children, see resolve_recipe_tree's max_depth) - fetch
-  // whatever's still missing before collectPathKeysJs walks it, or a
-  // check on an unexpanded deep node would silently only toggle itself.
-  // No-ops (no extra round-trip) for anything already resolved, which
-  // covers the common case of checking something already visible.
-  async function ensureFullyResolved(node, pathParts) {
-    if (node.truncated) {
-      const subtree = await CraftMapApi.call(
-        "get_recipe_subtree",
-        node.name,
-        node.qty,
-        pathParts
-      );
-      node.children = subtree.children;
-      node.truncated = subtree.truncated;
-      node.alts = subtree.alts;
-    }
-    for (const child of node.children) {
-      await ensureFullyResolved(child, [...pathParts, node.name]);
-    }
-  }
-
-  function subtreeRemainingSeconds(node, pathParts, checked) {
-    if (checked.has(nodePathKey(node, pathParts))) return 0.0;
-    let total = nodeOwnTime(node);
-    for (const child of node.children) {
-      total += subtreeRemainingSeconds(child, [...pathParts, node.name], checked);
-    }
-    return total;
-  }
-
-  function nodeHasStepOptions(node) {
-    if (!node.is_recipe) return false;
-    if (node.alts && node.alts.length) return true;
-    let modesAvailable = 0;
-    for (const st of node.stations || []) {
-      if (st[1]) modesAvailable++;
-      if (st[2]) modesAvailable++;
-    }
-    return modesAvailable > 1;
-  }
-
-  function collectTotals(node, totals) {
-    totals = totals || {};
-    if (!node.is_recipe && node.children.length === 0) {
-      totals[node.name] = (totals[node.name] || 0) + node.qty;
-    }
-    for (const child of node.children) collectTotals(child, totals);
-    return totals;
-  }
-
-  function collectBasicCrafted(node, totals) {
-    totals = totals || {};
-    for (const child of node.children) {
-      if (!child.is_recipe) continue;
-      if (child.children.some((c) => c.is_recipe)) {
-        collectBasicCrafted(child, totals);
-      } else {
-        if (!totals[child.name]) {
-          totals[child.name] = {
-            is_recipe: true,
-            qty: 0.0,
-            output_qty: child.output_qty || 1.0,
-            alts: child.alts || [],
-            stations: child.stations || [],
-            raw_names: [...new Set(child.children.map((c) => c.name))].sort((a, b) =>
-              a.toLowerCase().localeCompare(b.toLowerCase())
-            ),
-            station: child.station,
-            auto_craft_seconds: child.auto_craft_seconds,
-            manual_craft_seconds: child.manual_craft_seconds,
-            craft_mode: child.craft_mode || "auto",
-            byproducts: child.byproducts || [],
-          };
-        }
-        totals[child.name].qty += child.qty;
-      }
-    }
-    return totals;
-  }
+  const {
+    fmtNum,
+    formatCraftMetaSuffix,
+    formatByproductsSuffix,
+    nodeActiveSeconds,
+    nodePathKey,
+    collectPathKeysJs,
+    ensureFullyResolved,
+    subtreeRemainingSeconds,
+    nodeHasStepOptions,
+    collectTotals,
+    collectBasicCrafted,
+    buildIngredientLabel,
+  } = BreakdownTree;
 
   // ---- DOM refs ----
   const tree = document.getElementById("recipe-breakdown-tree");
@@ -192,192 +34,19 @@
   const stationRowsEl = document.getElementById("recipe-station-rows");
   const outputRowsEl = document.getElementById("recipe-output-rows");
   const ingredientRowsEl = document.getElementById("recipe-ingredient-rows");
-  const stepPopup = document.getElementById("step-popup");
+  const stepPopupEl = document.getElementById("step-popup");
+
+  const renderer = BreakdownTree.createRenderer({ treeEl: tree, stepPopupEl });
+  const { makeBdNode, appendDepositLocations, openStepPopup } = renderer;
 
   // ---- state ----
   let recipeMode = "breakdown"; // 'breakdown' | 'totals' | 'usedin'
   let viewingRecipeId = null; // recipe shown in both the tree and the edit form
   let usedinRecipeId = null;
   let usedinNavigatedAway = false;
-  let recipeRootOpen = true;
-  // Every node's expand/collapse state survives a tree rebuild (checkbox
-  // clicks, quantity changes, alt/station picks all rebuild the whole
-  // tree) - tracked by path_key since node identity itself doesn't
-  // survive a rebuild. overlay.py's tkinter version only kept the root's
-  // state across a rebuild and re-collapsed everything else every time;
-  // that read as "the tree collapsed on me" here since a click anywhere
-  // deep in a large expanded tree wiped out all that manual drilling-down.
-  let openNodeKeys = new Set();
-  // A checkbox click's own visual feedback only lands after the full
-  // collect_path_keys + set_checked_many + refreshBreakdown round-trip
-  // (a few hundred ms of real IPC latency) - with nothing shown in the
-  // meantime, an impatient second click before that lands fires the same
-  // toggle again, flipping it right back off (or on) and netting no
-  // visible change at all, which looked exactly like "cascade doesn't
-  // work." This guard makes every checkbox a no-op while one toggle for
-  // this tree is still in flight.
-  let breakdownBusy = false;
   let stationRows = [];
   let outputRows = [];
   let ingredientRows = [];
-
-  // ---- checkbox icon ----
-  function makeCheckboxIcon(checked) {
-    const span = document.createElement("span");
-    span.className = "cb-icon " + (checked ? "checked" : "unchecked");
-    return span;
-  }
-
-  // ---- breakdown tree row builders ----
-  function makeBdNode({
-    tagClass,
-    label,
-    checked,
-    hasChildren,
-    onToggleCheck,
-    onOpenStep,
-    key,
-    onFirstExpand,
-  }) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "bd-node";
-    if (key) wrapper.dataset.key = key;
-    const startsOpen =
-      key === "recipe_root" ? recipeRootOpen : key && openNodeKeys.has(key);
-    if (hasChildren && !startsOpen) {
-      wrapper.classList.add("collapsed");
-    }
-
-    const row = document.createElement("div");
-    row.className = "bd-row " + tagClass;
-
-    const disc = document.createElement("span");
-    disc.className = "disclosure";
-    let expandLoaded = !onFirstExpand;
-    if (hasChildren) {
-      disc.textContent = "▸";
-      disc.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        const wasCollapsed = wrapper.classList.contains("collapsed");
-        // Deposit-location lookups are a real IPC round-trip here (unlike
-        // the tkinter app, where the same lookup was an in-process SQLite
-        // call) - fetching them eagerly for every raw-resource leaf in a
-        // large tree meant dozens of sequential round-trips per render,
-        // which is what made a checkbox click on a big subtree look like
-        // it "didn't cascade" (the tree was still mid-render when checked).
-        // Deferring the fetch to first-expand means a render only ever
-        // pays for the nodes actually visible.
-        if (wasCollapsed && !expandLoaded) {
-          expandLoaded = true;
-          await onFirstExpand(childrenEl);
-        }
-        wrapper.classList.toggle("collapsed");
-        const nowOpen = !wrapper.classList.contains("collapsed");
-        if (key === "recipe_root") {
-          recipeRootOpen = nowOpen;
-        } else if (key) {
-          if (nowOpen) openNodeKeys.add(key);
-          else openNodeKeys.delete(key);
-        }
-      });
-    }
-    row.appendChild(disc);
-
-    if (checked !== undefined) {
-      const cb = makeCheckboxIcon(checked);
-      cb.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if (breakdownBusy) return;
-        breakdownBusy = true;
-        // Instant feedback before the round-trip lands, so the click
-        // doesn't feel like it did nothing (see breakdownBusy above).
-        // Flips whichever way it's currently facing - not hardcoded to
-        // "checked", since this same handler also unchecks.
-        cb.classList.toggle("checked");
-        cb.classList.toggle("unchecked");
-        cb.classList.add("pending");
-        try {
-          await onToggleCheck();
-        } finally {
-          breakdownBusy = false;
-        }
-      });
-      row.appendChild(cb);
-    } else {
-      const spacer = document.createElement("span");
-      spacer.className = "cb-icon-spacer";
-      row.appendChild(spacer);
-    }
-
-    const labelEl = document.createElement("span");
-    labelEl.className = "bd-label";
-    labelEl.textContent = label;
-    row.appendChild(labelEl);
-
-    if (onOpenStep) {
-      labelEl.classList.add("has-options");
-      labelEl.addEventListener("click", (e) => onOpenStep(e));
-    }
-
-    wrapper.appendChild(row);
-    const childrenEl = document.createElement("div");
-    childrenEl.className = "bd-children";
-    wrapper.appendChild(childrenEl);
-
-    // A node that starts open (the root, or one the user previously
-    // expanded) needs its children built right away, same as a real
-    // expand-click would - but nothing here waited for a click, so drive
-    // it directly and hand the caller a promise to await instead of
-    // firing it from inside the disclosure's click handler.
-    let expandPromise = Promise.resolve();
-    if (startsOpen && hasChildren && onFirstExpand && !expandLoaded) {
-      expandLoaded = true;
-      expandPromise = onFirstExpand(childrenEl);
-    }
-
-    return { wrapper, childrenEl, expandPromise };
-  }
-
-  function makeLocationRow(text) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "bd-node";
-    const row = document.createElement("div");
-    row.className = "bd-row location";
-    const disc = document.createElement("span");
-    disc.className = "disclosure";
-    row.appendChild(disc);
-    const spacer = document.createElement("span");
-    spacer.className = "cb-icon-spacer";
-    row.appendChild(spacer);
-    const labelEl = document.createElement("span");
-    labelEl.className = "bd-label";
-    labelEl.textContent = text;
-    row.appendChild(labelEl);
-    wrapper.appendChild(row);
-    return wrapper;
-  }
-
-  async function appendDepositLocations(childrenEl, resourceName, indent) {
-    const locs = await CraftMapApi.call("get_deposits_for_ingredient", resourceName);
-    for (const loc of locs) {
-      const parts = [loc.sector, loc.system_name, loc.planet].filter(Boolean);
-      let text = `${indent}\u{1F4CD} ${parts.join(" / ")}`;
-      if (loc.status && loc.status !== "Unknown" && loc.status !== "") {
-        text += `  [${loc.status}]`;
-      }
-      childrenEl.appendChild(makeLocationRow(text));
-    }
-  }
-
-  function buildIngredientLabel(node) {
-    const qtyStr = fmtNum(node.qty);
-    let label = `${qtyStr}×  ${node.name}`;
-    const usedRecipe = node.recipe_name || node.name;
-    if (usedRecipe && usedRecipe !== node.name) label += `  [${usedRecipe}]`;
-    if (nodeHasStepOptions(node)) label += "  ▾";
-    const [activeSeconds, activeMode] = nodeActiveSeconds(node);
-    return { label, activeSeconds, activeMode };
-  }
 
   async function insertBreakdownNode(parentEl, node, recipeId, pathParts, checked) {
     const pathKey = nodePathKey(node, pathParts);
@@ -392,16 +61,13 @@
     const isRawLeaf = !node.is_recipe && !hasChildren && !node.truncated;
     const hasOptions = nodeHasStepOptions(node);
     // Building a node's children (recursively, all the way down) is
-    // deferred behind the SAME onFirstExpand mechanism as the deposit-
-    // location lookup above - not just the fetch, the DOM construction
-    // itself. Recursing into every descendant unconditionally on every
-    // render meant a checkbox click on a ~100-node tree rebuilt all ~100
-    // rows every time even though at most a handful were ever visible
-    // (everything but the root starts collapsed) - this makes a render's
-    // cost proportional to what's actually expanded, not the tree's total
-    // size. makeBdNode fires this immediately (instead of waiting for a
-    // click) for anything that starts open, i.e. the root and anything
-    // the user had already expanded.
+    // deferred behind onFirstExpand - not just the deposit-location
+    // fetch, the DOM construction itself. Recursing into every
+    // descendant unconditionally on every render meant a checkbox click
+    // on a ~100-node tree rebuilt all ~100 rows every time even though at
+    // most a handful were ever visible (everything but the root starts
+    // collapsed) - this makes a render's cost proportional to what's
+    // actually expanded, not the tree's total size.
     const { wrapper, childrenEl, expandPromise } = makeBdNode({
       tagClass: isDone ? "done" : "ingredient",
       label,
@@ -415,7 +81,20 @@
         await refreshBreakdown();
       },
       onOpenStep: hasOptions
-        ? (e) => openStepPopup(e.currentTarget, node, node.name, false)
+        ? (e) =>
+            openStepPopup(
+              e.currentTarget,
+              node,
+              false,
+              async (alt) => {
+                await CraftMapApi.call("set_alt_pref", node.name, alt.recipe_id);
+                await refreshBreakdown({ forceFull: true });
+              },
+              async (stName, mode) => {
+                await CraftMapApi.call("set_station_pref", node.name, stName, mode);
+                await refreshBreakdown({ forceFull: true });
+              }
+            )
         : null,
       onFirstExpand: node.truncated
         ? async (el) => {
@@ -453,119 +132,6 @@
     await expandPromise;
   }
 
-  // ---- step popup (alt-recipe / station+mode picker) ----
-  function closeStepPopup() {
-    stepPopup.classList.add("hidden");
-    stepPopup.innerHTML = "";
-    document.removeEventListener("mousedown", onStepPopupOutsideClick, true);
-    document.removeEventListener("keydown", onStepPopupEscape, true);
-  }
-
-  function onStepPopupOutsideClick(e) {
-    if (!stepPopup.contains(e.target)) closeStepPopup();
-  }
-
-  function onStepPopupEscape(e) {
-    if (e.key === "Escape") closeStepPopup();
-  }
-
-  function addPopupOption(label, selected, onPick) {
-    const row = document.createElement("div");
-    row.className = "step-option" + (selected ? " selected" : "");
-    row.textContent = (selected ? "●  " : "    ") + label;
-    row.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      onPick();
-      closeStepPopup();
-    });
-    stepPopup.appendChild(row);
-  }
-
-  function addPopupSectionLabel(text) {
-    const lbl = document.createElement("div");
-    lbl.className = "step-section-label";
-    lbl.textContent = text;
-    stepPopup.appendChild(lbl);
-  }
-
-  function openStepPopup(anchorEl, node, ingredientName, isRoot) {
-    stepPopup.innerHTML = "";
-    const alts = node.alts || [];
-    if (alts.length) {
-      addPopupSectionLabel("ALTERNATE RECIPE");
-      for (const alt of alts) {
-        addPopupOption(alt.recipe_name, false, async () => {
-          if (isRoot) {
-            // loadRecipeIntoForm already refreshes (with a new recipe id,
-            // so the tree cache below invalidates on its own) - an extra
-            // call here would just re-fetch the same thing a second time.
-            await loadRecipeIntoForm(alt.recipe_id, alt.recipe_name);
-          } else {
-            await CraftMapApi.call("set_alt_pref", ingredientName, alt.recipe_id);
-            await refreshBreakdown({ forceFull: true });
-          }
-        });
-      }
-    }
-
-    const stations = node.stations || [];
-    let modesAvailable = 0;
-    for (const st of stations) {
-      if (st[1]) modesAvailable++;
-      if (st[2]) modesAvailable++;
-    }
-    if (modesAvailable > 1) {
-      if (alts.length) {
-        const sep = document.createElement("div");
-        sep.className = "step-separator";
-        stepPopup.appendChild(sep);
-      }
-      addPopupSectionLabel("STATION & MODE");
-      const curStation = node.station;
-      const curMode = node.craft_mode || "auto";
-      for (const [stName, stAuto, stManual] of stations) {
-        if (stAuto) {
-          addPopupOption(
-            `${stName} · Auto  (${formatDuration(stAuto)}/craft)`,
-            stName === curStation && curMode === "auto",
-            async () => {
-              await CraftMapApi.call("set_station_pref", ingredientName, stName, "auto");
-              await refreshBreakdown({ forceFull: true });
-            }
-          );
-        }
-        if (stManual) {
-          addPopupOption(
-            `${stName} · Manual  (${formatDuration(stManual)}/craft)`,
-            stName === curStation && curMode === "manual",
-            async () => {
-              await CraftMapApi.call("set_station_pref", ingredientName, stName, "manual");
-              await refreshBreakdown({ forceFull: true });
-            }
-          );
-        }
-      }
-    }
-
-    if (!stepPopup.children.length) return;
-
-    stepPopup.classList.remove("hidden");
-    const rect = anchorEl.getBoundingClientRect();
-    const popRect = stepPopup.getBoundingClientRect();
-    let x = rect.left;
-    let y = rect.bottom;
-    const w = Math.max(popRect.width, 180);
-    if (x + w > window.innerWidth) x = window.innerWidth - w;
-    if (y + popRect.height > window.innerHeight) y = Math.max(0, rect.top - popRect.height);
-    stepPopup.style.left = `${Math.max(0, x)}px`;
-    stepPopup.style.top = `${y}px`;
-
-    setTimeout(() => {
-      document.addEventListener("mousedown", onStepPopupOutsideClick, true);
-      document.addEventListener("keydown", onStepPopupEscape, true);
-    }, 0);
-  }
-
   // ---- mode: breakdown ----
   // Pure render - takes already-fetched data so a plain checkbox toggle
   // (which only changes `checked`) doesn't need to re-resolve the whole
@@ -594,7 +160,7 @@
       label: rootLabel,
       checked: rootIsDone,
       hasChildren: node.children.length > 0,
-      key: "recipe_root",
+      isRoot: true,
       onToggleCheck: async () => {
         await ensureFullyResolved(node, []);
         const keys = collectPathKeysJs(node, []);
@@ -602,20 +168,34 @@
         await refreshBreakdown();
       },
       onOpenStep: rootHasOptions
-        ? (e) => openStepPopup(e.currentTarget, node, outputName, true)
+        ? (e) =>
+            openStepPopup(
+              e.currentTarget,
+              node,
+              true,
+              async (alt) => {
+                // loadRecipeIntoForm already refreshes (with a new recipe
+                // id, so the tree cache invalidates on its own).
+                await loadRecipeIntoForm(alt.recipe_id, alt.recipe_name);
+              },
+              async (stName, mode) => {
+                await CraftMapApi.call("set_station_pref", outputName, stName, mode);
+                await refreshBreakdown({ forceFull: true });
+              }
+            )
         : null,
       onFirstExpand: async (el) => {
         for (const child of node.children) {
-          // pathParts must be [node.name] here, not [] - collect_path_keys
-          // (the persistence side, run when the root's own checkbox
-          // cascades) threads path_parts + [node.name] into each child, so
-          // a child's real stored path_key is "<rootName>|<childName>".
-          // Rendering with [] here would compute just "<childName>" and
-          // never match what got persisted, permanently showing every
-          // child as unchecked after a root-checkbox cascade - a real bug
-          // in the original tkinter app (overlay.py's
-          // _refresh_recipe_breakdown has this same mismatch) that's worth
-          // fixing here rather than faithfully reproducing.
+          // pathParts must be [node.name] here, not [] - the persisted
+          // cascade keys (written when the root's own checkbox toggles)
+          // are prefixed with the root's name, so a child's real path_key
+          // is "<rootName>|<childName>". Rendering with [] here would
+          // compute just "<childName>" and never match what got
+          // persisted, permanently showing every child as unchecked
+          // after a root-checkbox cascade - a real bug in the original
+          // tkinter app (overlay.py's _refresh_recipe_breakdown has this
+          // same mismatch) that's worth fixing here rather than
+          // faithfully reproducing.
           await insertBreakdownNode(el, child, recipeId, [node.name], checked);
         }
       },
@@ -655,7 +235,7 @@
       label: rootLabel,
       checked: rootIsDone,
       hasChildren: true,
-      key: "recipe_root",
+      isRoot: true,
       onToggleCheck: async () => {
         await ensureFullyResolved(node, []);
         const keys = collectPathKeysJs(node, []);
@@ -663,7 +243,19 @@
         await refreshBreakdown();
       },
       onOpenStep: rootHasOptions
-        ? (e) => openStepPopup(e.currentTarget, node, outputName, true)
+        ? (e) =>
+            openStepPopup(
+              e.currentTarget,
+              node,
+              true,
+              async (alt) => {
+                await loadRecipeIntoForm(alt.recipe_id, alt.recipe_name);
+              },
+              async (stName, mode) => {
+                await CraftMapApi.call("set_station_pref", outputName, stName, mode);
+                await refreshBreakdown({ forceFull: true });
+              }
+            )
         : null,
     });
     tree.appendChild(wrapper);
@@ -724,7 +316,20 @@
             await refreshBreakdown();
           },
           onOpenStep: hasOptions
-            ? (e) => openStepPopup(e.currentTarget, info, resName, false)
+            ? (e) =>
+                openStepPopup(
+                  e.currentTarget,
+                  info,
+                  false,
+                  async (alt) => {
+                    await CraftMapApi.call("set_alt_pref", resName, alt.recipe_id);
+                    await refreshBreakdown({ forceFull: true });
+                  },
+                  async (stName, mode) => {
+                    await CraftMapApi.call("set_station_pref", resName, stName, mode);
+                    await refreshBreakdown({ forceFull: true });
+                  }
+                )
             : null,
         });
         craftChildren.appendChild(entryWrapper);
@@ -788,7 +393,7 @@
       tagClass: "root",
       label: `Recipes using  "${itemName}"`,
       hasChildren: true,
-      key: "recipe_root",
+      isRoot: true,
     });
     // Clicking the header (not a specific result) loads this item into the
     // edit form without leaving Used-In mode - matches usedin_header in
@@ -1057,8 +662,7 @@
       // this tree - only reset expand state when the *subject* changes,
       // not on every refresh of the recipe already being viewed (that's
       // the whole point of tracking it at all).
-      recipeRootOpen = true;
-      openNodeKeys = new Set();
+      renderer.resetExpandState();
     }
     viewingRecipeId = recipeId;
     recipeCombo.value = rname;
@@ -1085,8 +689,7 @@
 
   function clearRecipeForm() {
     viewingRecipeId = null;
-    recipeRootOpen = true;
-    openNodeKeys = new Set();
+    renderer.resetExpandState();
     recipeCombo.value = "";
     recipeName.value = "";
     clearStationRows();

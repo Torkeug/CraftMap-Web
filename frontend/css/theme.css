@@ -56,7 +56,7 @@ body {
   align-items: center;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  cursor: move;
+  cursor: default;
 }
 /* No -webkit-app-region here: that's an Electron/Chromium-shell feature,
    not something WebView2 (a .NET-embedded Chromium control, not a full
