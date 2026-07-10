@@ -101,16 +101,51 @@ def humanize(id_str):
     return re.sub(r"\s+", " ", s).strip()
 
 
-def propose_name(craft, items):
+def build_alt_groups(recipes):
+    """primary output item id -> every craft that has it as its primary
+    (first) output - i.e. the set of alternate recipes for that item."""
+    groups = defaultdict(list)
+    for craft in recipes:
+        if craft.get("outputs"):
+            groups[craft["outputs"][0]["item"]].append(craft)
+    return groups
+
+
+def qualifier_ingredient(craft, siblings, items):
+    """An ingredient name that sets `craft` apart from its sibling alt-recipes
+    for the same output (mirrors picking the recipe's 'main' distinguishing
+    material, e.g. Iron vs Copper vs Titanium Metal Sheet)."""
+    my_inputs = [i["item"] for i in craft["inputs"]]
+    other_inputs = set()
+    for s in siblings:
+        if s is not craft:
+            other_inputs.update(i["item"] for i in s["inputs"])
+    for item_id in my_inputs:
+        if item_id not in other_inputs:
+            return item_name(items, item_id)
+    return item_name(items, my_inputs[0]) if my_inputs else None
+
+
+def propose_name(craft, items, alt_groups=None):
     primary_item = craft["outputs"][0]["item"]
     primary_name = item_name(items, primary_item)
-    craft_id = craft["id"]
-    if craft_id == primary_item:
+    siblings = alt_groups.get(primary_item, []) if alt_groups else []
+    if len(siblings) <= 1:
         return primary_name
+
+    qualifier = qualifier_ingredient(craft, siblings, items)
+    if qualifier:
+        return f"{primary_name} ({qualifier})"
+
+    # Last resort (no distinguishing ingredient found): fall back to a
+    # humanized fragment of the craft id, stripped of the purely
+    # informational "BP_"/"Patch_" build-menu-category prefixes.
+    craft_id = craft["id"]
     prefix = primary_item + "_"
     if craft_id.startswith(prefix):
-        return f"{primary_name} {humanize(craft_id[len(prefix):])}"
-    return humanize(craft_id)
+        return f"{primary_name} ({humanize(craft_id[len(prefix):])})"
+    stripped = re.sub(r"^(BP_|Patch_)", "", craft_id)
+    return f"{primary_name} ({humanize(stripped)})"
 
 
 def build_game_index(items, recipes):
@@ -142,6 +177,7 @@ def enrich(items, recipes, item_tags):
 
     matched = 0
     skipped = []
+    newly_matched = []
     for rid, rname, out_name in db_recipes:
         c.execute(
             "SELECT ingredient_name, quantity FROM recipe_ingredients WHERE recipe_id=?",
@@ -183,6 +219,7 @@ def enrich(items, recipes, item_tags):
             )
             existing.add(_norm(oname))
         matched += 1
+        newly_matched.append((rid, craft, rname))
 
     conn.commit()
     conn.close()
@@ -197,6 +234,7 @@ def enrich(items, recipes, item_tags):
             print(
                 f"  - {rname!r} (produces {out_name!r}): {n_candidates} game candidates"
             )
+    return newly_matched
 
 
 def load_buildings_by_tag():
@@ -323,11 +361,59 @@ def get_matched_craft_ids():
     return ids
 
 
+def fix_names(items, recipes):
+    """Recompute `name` for every matched recipe (game_craft_id set) via the
+    same alt-aware propose_name() logic, so alt-recipe siblings stay
+    consistently named regardless of whether they were originally hand-typed
+    or backfilled later - e.g. without this, adding a new alt-recipe for an
+    output that already had one lone hand-entered recipe left the old one
+    bare ('Mercury') while the new one got a qualifier ('Mercury (Mercury
+    Bottle)'). Renaming is safe: nothing besides display keys off `name` -
+    recipe_alt_prefs/recipe_station_prefs/craft_queue/checked-state all key
+    off the recipe's `id`, which never changes here."""
+    alt_groups = build_alt_groups(recipes)
+    crafts_by_id = {c["id"]: c for c in recipes}
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, name, game_craft_id FROM recipes"
+        " WHERE game_craft_id IS NOT NULL AND game_craft_id != ''"
+    )
+    rows = c.fetchall()
+    c.execute("SELECT id, name FROM recipes")
+    existing_names = {name for _, name in c.fetchall()}
+
+    renamed = 0
+    for rid, old_name, craft_id in rows:
+        craft = crafts_by_id.get(craft_id)
+        if craft is None:
+            continue
+        proposed = propose_name(craft, items, alt_groups)
+        if proposed == old_name:
+            continue
+        new_name = proposed
+        suffix = 2
+        while new_name in existing_names and new_name != old_name:
+            new_name = f"{proposed} [{suffix}]"
+            suffix += 1
+        c.execute("UPDATE recipes SET name=? WHERE id=?", (new_name, rid))
+        existing_names.discard(old_name)
+        existing_names.add(new_name)
+        print(f"  renamed {old_name!r} -> {new_name!r}")
+        renamed += 1
+
+    conn.commit()
+    conn.close()
+    print(f"Renamed {renamed} of {len(rows)} matched recipes.")
+
+
 def report_missing(items, recipes, item_tags):
     matched_ids = get_matched_craft_ids()
     missing = [
         r for r in recipes if r["id"] not in matched_ids and r.get("outputs")
     ]
+    alt_groups = build_alt_groups(recipes)
     by_cat = defaultdict(list)
     for r in missing:
         by_cat[r.get("category") or "(none)"].append(r)
@@ -345,7 +431,7 @@ def report_missing(items, recipes, item_tags):
         lines.append(f"## {cat} ({len(entries)})")
         lines.append("")
         for craft in entries:
-            name = propose_name(craft, items)
+            name = propose_name(craft, items, alt_groups)
             station = (
                 item_tags.get(craft.get("where"), {}).get("label")
                 or craft.get("where")
@@ -390,6 +476,7 @@ def main():
         report_missing(items, recipes, item_tags)
     else:
         enrich(items, recipes, item_tags)
+        fix_names(items, recipes)
         enrich_stations(recipes, item_tags)
 
 
