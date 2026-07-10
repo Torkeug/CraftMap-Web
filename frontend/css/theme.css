@@ -127,6 +127,34 @@ body {
   display: block;
 }
 
+/* ---------- scrollbars (WebView2 is Chromium-based, so -webkit-scrollbar
+   works) - matches the tkinter app's "Thin.Vertical.TScrollbar" style
+   (overlay.py's _build_tree): 6px, dark trough, flat thumb, brighten on
+   hover/press. Global, not scoped to one container, since the default
+   OS-themed scrollbar is light and clashes with the dark UI everywhere
+   it can appear (the tree, dropdown lists, an overflowing body). ---------- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--panel);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #58a6ff;
+}
+
 /* ---------- resize grip ---------- */
 #resize-grip {
   position: absolute;
