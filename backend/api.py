@@ -198,6 +198,16 @@ class Api:
     def quit_app(self):
         if self._on_quit is not None:
             self._on_quit()
+        # Close the WinForms window first so WebView2/WinForms run their
+        # normal teardown (disposing the CoreWebView2 controller, releasing
+        # the DWM-composited surface) before the process disappears.
+        # Skipping straight to os._exit() on a layered/topmost/GPU-
+        # composited window leaves DWM showing a stale frame for a few
+        # seconds until it notices the owning process is gone - .destroy()
+        # blocks (via WinForms Invoke) until Close() actually completes, so
+        # by the time we reach os._exit() there's nothing left to redraw.
+        if self._overlay_window is not None:
+            self._overlay_window.destroy()
         # os._exit, not sys.exit: forcibly terminates the daemon hotkey
         # thread/tray icon thread too, same rationale as the tkinter app's
         # quit_app (a plain exit would otherwise hang on those threads).
