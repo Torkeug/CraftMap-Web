@@ -211,6 +211,7 @@
 .form-field select {
   width: 100%;
   box-sizing: border-box;
+  height: 26px;
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);
@@ -218,6 +219,23 @@
   padding: 4px 6px;
   font-family: var(--ui);
   font-size: 11px;
+}
+
+/* Native <select> chrome (the built-in dropdown arrow control) carries
+   its own intrinsic sizing that doesn't line up with <input> even with
+   identical padding/border/height - strip it and draw a plain CSS arrow
+   instead so the two controls render pixel-identical. */
+.form-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) center,
+    calc(100% - 8px) center;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  padding-right: 18px;
 }
 
 .form-field input:focus,
