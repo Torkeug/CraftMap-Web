@@ -51,6 +51,35 @@ def test_get_basic_resources_excludes_recipe_outputs(api):
     assert basics == ["Iron Ore"]
 
 
+def test_get_basic_resources_includes_byproduct_only_outputs(api):
+    # Azurite Stone's recipe yields Azurite Stone (primary) and Malachite
+    # Stone (byproduct) - Malachite Stone has no recipe of its own name, so
+    # it should still count as "basic" (mined, not craftable by that name).
+    api.save_recipe(
+        None,
+        "Azurite Stone",
+        outputs=[
+            {"name": "Azurite Stone", "qty": 2},
+            {"name": "Malachite Stone", "qty": 8},
+        ],
+        ingredients=[{"name": "Copper Ingot", "qty": 50}],
+        stations=DEFAULT_STATIONS,
+    )
+    api.save_recipe(
+        None,
+        "Copper Ingot (Malachite Stone)",
+        outputs=[{"name": "Copper Ingot", "qty": 4}],
+        ingredients=[{"name": "Malachite Stone", "qty": 4}],
+        stations=DEFAULT_STATIONS,
+    )
+    basics = api.get_basic_resources()
+    json.dumps(basics)
+    assert "Malachite Stone" in basics
+    # Copper Ingot is still excluded - it IS a primary output (of the
+    # "Copper Ingot (Malachite Stone)" recipe).
+    assert "Copper Ingot" not in basics
+
+
 def test_resource_sources_round_trip(api):
     assert api.get_resource_sources("a-Carbon") == []
     assert (

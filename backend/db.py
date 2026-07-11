@@ -380,15 +380,22 @@ def distinct_ingredient_names():
 
 
 def get_basic_resources():
-    """Ingredient names that are never produced by any recipe's output -
+    """Ingredient names that are never the *primary* output of any recipe -
     i.e. raw materials with no craft chain of their own (mined/gathered, not
-    crafted). Lets the recipe combo's Used-In lookup work for these too,
-    not just actual recipes."""
+    crafted), plus items that are only ever a secondary/byproduct output
+    (e.g. Malachite Stone, an 8x byproduct of the Azurite Stone recipe) and
+    so have no recipe of their own name to pick in the combo. Lets the
+    recipe combo's Used-In lookup work for these too, not just actual
+    recipes."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
         "SELECT DISTINCT ingredient_name FROM recipe_ingredients"
-        " WHERE ingredient_name NOT IN (SELECT DISTINCT item_name FROM recipe_outputs)"
+        " WHERE ingredient_name NOT IN ("
+        "   SELECT item_name FROM recipe_outputs ro"
+        "   WHERE ro.id = (SELECT MIN(id) FROM recipe_outputs ro2"
+        "                  WHERE ro2.recipe_id = ro.recipe_id)"
+        " )"
         " ORDER BY ingredient_name COLLATE NOCASE"
     )
     rows = c.fetchall()
