@@ -23,6 +23,8 @@
     recipeView.style.display = "none";
     sourcesView.style.display = "none";
     wrecksView.style.display = "none";
+    tabResource.classList.remove("active");
+    tabLocation.classList.remove("active");
     tabRecipe.classList.remove("active");
     tabSources.classList.remove("active");
     tabWrecks.classList.remove("active");
@@ -31,6 +33,10 @@
   function showDeposits() {
     hideAll();
     depositsView.style.display = "flex";
+    // Resource/Location's own active state is deposits.js's concern (its
+    // sub-tab), not tracked here - restore whichever one matches its
+    // current sub-view now that hideAll() just cleared both.
+    if (window.DepositsTabs) window.DepositsTabs.updateTabs();
   }
 
   function showRecipe() {
