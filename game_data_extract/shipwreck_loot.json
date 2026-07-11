@@ -1,0 +1,6959 @@
+{
+  "_meta": {
+    "source": "shipbuilder/pak_out/data.cdb (SpaceCraft), via extract_shipwreck_loot.py",
+    "description": "Per-sector shipwreck rare-loot-crate analysis: reachable loot levels, and per-item (Patch/Blueprint) drop odds by sector, derived from sector.generation.wreckResGen + sector.props.maxLootLevel/lootMaterial + craft.lootLevel + item.lootLevel, cross-referenced against decompiled src/logic/Loot.hx via hlbc.",
+    "mechanism_notes": [
+      "A rare loot crate (ShipWreck_LootChestRare_lvl{0,1,2}) rolls one of 4 levels weighted 40/30/20/10, banded by wreck tier: lvl0=[4,5,6,7], lvl1=[5,6,7,8], lvl2=[6,7,8,9], then capped by sector.props.maxLootLevel (target = min(rolled, cap)).",
+      "Wreck tier (0/1/2) per crate spawn is picked uniformly at random from the sector's own generation.wreckResGen list (repetition in that list = weight).",
+      "P(a primary Patch-or-Blueprint item drops at all) = clamp((target-2)/5, 0, 1), confirmed via raw HashLink opcodes at src/logic/Loot.hx:158-159.",
+      "The eligible item pool for a crate targeting level L is NOT items with lootLevel==L exactly. src/logic/Loot.hx:461-478 (generatePrimaryItemCandidateBasic + generateAttemptDownUp) opens a 2-level window {L-1, L} and draws one uniform pick from the combined pool of both levels; only widens further (down then up, one level at a time) if that window is fully empty, which never happens for crate-relevant levels 4-9. So a lootLevel:3 recipe (e.g. Blueprint: Wire) IS reachable from a level-4 crate. Only lootLevel 2 and 10 items are truly unreachable from any wreck crate.",
+      "Category choice (Patch vs Blueprint) when a primary item drops is a weighted pick per src/logic/Loot.hx:295-317 depending on a per-candidate 'itl' reference value not fully traced; this dataset approximates it as 50/50 when both categories have eligible candidates.",
+      "In-game blueprint display name convention: \"Blueprint: <output item display name>\"."
+    ]
+  },
+  "patchPoolByLevel": {
+    "2": [
+      {
+        "id": "Patch_RadarRange_1",
+        "name": "Radar Patch: Range I"
+      }
+    ],
+    "3": [
+      {
+        "id": "Patch_SystemIntegration_1",
+        "name": "Module Patch: System I"
+      },
+      {
+        "id": "Patch_HeatAbsorber_1",
+        "name": "Module Patch: Heat Absorber I"
+      },
+      {
+        "id": "Patch_PowerEfficiency_1",
+        "name": "Module Patch: Power Efficiency I"
+      },
+      {
+        "id": "Patch_FuelEfficiency_1",
+        "name": "Module Patch: Fuel Efficiency I"
+      },
+      {
+        "id": "Patch_BatteryMultiplicator_1",
+        "name": "Battery Patch: Overload I"
+      },
+      {
+        "id": "Patch_PrecisionTargeting_1",
+        "name": "Weapon Patch: Precision I"
+      },
+      {
+        "id": "Patch_SureShot_1",
+        "name": "Weapon Patch: Sure Shot I"
+      },
+      {
+        "id": "Patch_Magplasma_1",
+        "name": "FTL Patch: Mag-Plasma I"
+      },
+      {
+        "id": "Patch_FTLDodge_1",
+        "name": "FTL Patch: Light Dodging I"
+      },
+      {
+        "id": "Patch_Charted_1",
+        "name": "FTL Patch: Charted Skies I"
+      },
+      {
+        "id": "Patch_MiningPower_1",
+        "name": "Laser Patch: Mining Power I"
+      },
+      {
+        "id": "Patch_IncreasedOutput_1",
+        "name": "Laser Patch: Increased Output I"
+      },
+      {
+        "id": "Patch_RareFind_1",
+        "name": "Laser Patch: Rare Find I"
+      },
+      {
+        "id": "Patch_PowerProduction_1",
+        "name": "Generator Patch: Power I"
+      },
+      {
+        "id": "Patch_BarrierToughness_1",
+        "name": "Shield Patch: Tough I"
+      },
+      {
+        "id": "Patch_FastShield_1",
+        "name": "Shield Patch: Fast I"
+      }
+    ],
+    "4": [
+      {
+        "id": "Patch_WildShot_1",
+        "name": "Weapon Patch: Wild Shot I"
+      },
+      {
+        "id": "Patch_RadarRange_2",
+        "name": "Radar Patch: Range II"
+      },
+      {
+        "id": "Patch_HeavyBarrier_1",
+        "name": "Shield Patch: Heavy I"
+      }
+    ],
+    "5": [
+      {
+        "id": "Patch_SystemIntegration_2",
+        "name": "Module Patch: System II"
+      },
+      {
+        "id": "Patch_HeatAbsorber_2",
+        "name": "Module Patch: Heat Absorber II"
+      },
+      {
+        "id": "Patch_PowerEfficiency_2",
+        "name": "Module Patch: Power Efficiency II"
+      },
+      {
+        "id": "Patch_FuelEfficiency_2",
+        "name": "Module Patch: Fuel Efficiency II"
+      },
+      {
+        "id": "Patch_BatteryMultiplicator_2",
+        "name": "Battery Patch: Overload II"
+      },
+      {
+        "id": "Patch_PrecisionTargeting_2",
+        "name": "Weapon Patch: Precision II"
+      },
+      {
+        "id": "Patch_SureShot_2",
+        "name": "Weapon Patch: Sure Shot II"
+      },
+      {
+        "id": "Patch_EdgeExplorer_1",
+        "name": "FTL Patch: Edge Explorer I"
+      },
+      {
+        "id": "Patch_Magplasma_2",
+        "name": "FTL Patch: Mag-Plasma II"
+      },
+      {
+        "id": "Patch_FTLDodge_2",
+        "name": "FTL Patch: Light Dodging II"
+      },
+      {
+        "id": "Patch_Charted_2",
+        "name": "FTL Patch: Charted Skies II"
+      },
+      {
+        "id": "Patch_MiningPower_2",
+        "name": "Laser Patch: Mining Power II"
+      },
+      {
+        "id": "Patch_IncreasedOutput_2",
+        "name": "Laser Patch: Increased Output II"
+      },
+      {
+        "id": "Patch_RareFind_2",
+        "name": "Laser Patch: Rare Find II"
+      },
+      {
+        "id": "Patch_PowerProduction_2",
+        "name": "Generator Patch: Power II"
+      },
+      {
+        "id": "Patch_BarrierToughness_2",
+        "name": "Shield Patch: Tough II"
+      },
+      {
+        "id": "Patch_FastShield_2",
+        "name": "Shield Patch: Fast II"
+      }
+    ],
+    "6": [
+      {
+        "id": "Patch_WildShot_2",
+        "name": "Weapon Patch: Wild Shot II"
+      },
+      {
+        "id": "Patch_MiningTier_1",
+        "name": "Laser Patch: Mining Tier I"
+      },
+      {
+        "id": "Patch_LastYield_1",
+        "name": "Laser Patch: Last Yield I"
+      },
+      {
+        "id": "Patch_RadarRange_3",
+        "name": "Radar Patch: Range III"
+      },
+      {
+        "id": "Patch_HeavyBarrier_2",
+        "name": "Shield Patch: Heavy II"
+      }
+    ],
+    "7": [
+      {
+        "id": "Patch_SystemIntegration_3",
+        "name": "Module Patch: System III"
+      },
+      {
+        "id": "Patch_HeatAbsorber_3",
+        "name": "Module Patch: Heat Absorber III"
+      },
+      {
+        "id": "Patch_PowerEfficiency_3",
+        "name": "Module Patch: Power Efficiency III"
+      },
+      {
+        "id": "Patch_FuelEfficiency_3",
+        "name": "Module Patch: Fuel Efficiency III"
+      },
+      {
+        "id": "Patch_BatteryMultiplicator_3",
+        "name": "Battery Patch: Overload III"
+      },
+      {
+        "id": "Patch_PrecisionTargeting_3",
+        "name": "Weapon Patch: Precision III"
+      },
+      {
+        "id": "Patch_SureShot_3",
+        "name": "Weapon Patch: Sure Shot III"
+      },
+      {
+        "id": "Patch_Magplasma_3",
+        "name": "FTL Patch: Mag-Plasma III"
+      },
+      {
+        "id": "Patch_FTLDodge_3",
+        "name": "FTL Patch: Light Dodging III"
+      },
+      {
+        "id": "Patch_Charted_3",
+        "name": "FTL Patch: Charted Skies III"
+      },
+      {
+        "id": "Patch_MiningPower_3",
+        "name": "Laser Patch: Mining Power III"
+      },
+      {
+        "id": "Patch_IncreasedOutput_3",
+        "name": "Laser Patch: Increased Output III"
+      },
+      {
+        "id": "Patch_RareFind_3",
+        "name": "Laser Patch: Rare Find III"
+      },
+      {
+        "id": "Patch_PowerProduction_3",
+        "name": "Generator Patch: Power III"
+      },
+      {
+        "id": "Patch_BarrierToughness_3",
+        "name": "Shield Patch: Tough III"
+      },
+      {
+        "id": "Patch_FastShield_3",
+        "name": "Shield Patch: Fast III"
+      }
+    ],
+    "8": [
+      {
+        "id": "Patch_WildShot_3",
+        "name": "Weapon Patch: Wild Shot III"
+      },
+      {
+        "id": "Patch_EdgeExplorer_2",
+        "name": "FTL Patch: Edge Explorer II"
+      },
+      {
+        "id": "Patch_MiningTier_2",
+        "name": "Laser Patch: Mining Tier II"
+      },
+      {
+        "id": "Patch_HeavyBarrier_3",
+        "name": "Shield Patch: Heavy III"
+      }
+    ]
+  },
+  "blueprintPoolByLevel": {
+    "2": [
+      {
+        "id": "BP_BarrierShield1",
+        "name": "Blueprint: Small Barrier Shield",
+        "output_item": "BarrierShield1"
+      },
+      {
+        "id": "BP_BarrierShield2",
+        "name": "Blueprint: Barrier Shield",
+        "output_item": "BarrierShield2"
+      },
+      {
+        "id": "BP_BarrierShield3",
+        "name": "Blueprint: Large Barrier Shield",
+        "output_item": "BarrierShield3"
+      },
+      {
+        "id": "BP_HeavyShield2",
+        "name": "Blueprint: Heavy Shield",
+        "output_item": "HeavyShield2"
+      },
+      {
+        "id": "BP_HeavyShield3",
+        "name": "Blueprint: Large Heavy Shield",
+        "output_item": "HeavyShield3"
+      }
+    ],
+    "3": [
+      {
+        "id": "BP_CopperSheet",
+        "name": "Blueprint: Metal Sheet",
+        "output_item": "MetalSheet1"
+      },
+      {
+        "id": "BP_AluminiumSiliciumSheet",
+        "name": "Blueprint: Metal Sheet",
+        "output_item": "MetalSheet1"
+      },
+      {
+        "id": "BP_IronWire",
+        "name": "Blueprint: Wire",
+        "output_item": "Wire"
+      },
+      {
+        "id": "BP_AluminiumWire",
+        "name": "Blueprint: Wire",
+        "output_item": "Wire"
+      },
+      {
+        "id": "BP_Coil_Semiconductor",
+        "name": "Blueprint: Magnetic Coil",
+        "output_item": "Coil"
+      },
+      {
+        "id": "Thermite",
+        "name": "Blueprint: Solid Explosive",
+        "output_item": "Gunpowder"
+      },
+      {
+        "id": "BP_Kaolinite_AluNSilicate",
+        "name": "Blueprint: Kaolinite",
+        "output_item": "Kaolinite"
+      }
+    ],
+    "4": [
+      {
+        "id": "BP_TitaniumSheet",
+        "name": "Blueprint: Metal Sheet",
+        "output_item": "MetalSheet1"
+      },
+      {
+        "id": "BP_TitaniumBolt",
+        "name": "Blueprint: Nut and Bolt",
+        "output_item": "MetalBolt"
+      },
+      {
+        "id": "BP_Concrete_QuartzPowder",
+        "name": "Blueprint: Concrete",
+        "output_item": "Concrete"
+      },
+      {
+        "id": "Semiconductor_Graphene",
+        "name": "Blueprint: Semiconductor Substrate",
+        "output_item": "Semiconductor"
+      },
+      {
+        "id": "BP_AluCopperTube",
+        "name": "Blueprint: Watertight Pipe",
+        "output_item": "Pipe1"
+      },
+      {
+        "id": "BP_AluminiumIronPlatings",
+        "name": "Blueprint: Stainless Plate",
+        "output_item": "Plate1"
+      },
+      {
+        "id": "BP_SteelPlatings",
+        "name": "Blueprint: Stainless Plate",
+        "output_item": "Plate1"
+      },
+      {
+        "id": "Focuser_HLattice",
+        "name": "Blueprint: Crystalline Focuser",
+        "output_item": "Focuser"
+      },
+      {
+        "id": "Focuser_MLattice",
+        "name": "Blueprint: Crystalline Focuser",
+        "output_item": "Focuser"
+      },
+      {
+        "id": "Focuser_CLattice",
+        "name": "Blueprint: Crystalline Focuser",
+        "output_item": "Focuser"
+      },
+      {
+        "id": "Patch_RadarRange1",
+        "name": "Blueprint: Radar Patch: Range I",
+        "output_item": "Patch_RadarRange_1"
+      }
+    ],
+    "5": [
+      {
+        "id": "Semiconductor_Pyrite",
+        "name": "Blueprint: Semiconductor Substrate",
+        "output_item": "Semiconductor"
+      },
+      {
+        "id": "BP_AluCopperTube1",
+        "name": "Blueprint: Watertight Pipe",
+        "output_item": "Pipe1"
+      },
+      {
+        "id": "Grating_CLattice",
+        "name": "Blueprint: Diffraction Grating",
+        "output_item": "Grating"
+      },
+      {
+        "id": "Grating_Semiconductor",
+        "name": "Blueprint: Diffraction Grating",
+        "output_item": "Grating"
+      },
+      {
+        "id": "Patch_BatteryMultiplicator1",
+        "name": "Blueprint: Battery Patch: Overload I",
+        "output_item": "Patch_BatteryMultiplicator_1"
+      },
+      {
+        "id": "Patch_HeatAbsorber1",
+        "name": "Blueprint: Module Patch: Heat Absorber I",
+        "output_item": "Patch_HeatAbsorber_1"
+      },
+      {
+        "id": "Patch_SystemIntegration1",
+        "name": "Blueprint: Module Patch: System I",
+        "output_item": "Patch_SystemIntegration_1"
+      },
+      {
+        "id": "Patch_PowerEfficiency1",
+        "name": "Blueprint: Module Patch: Power Efficiency I",
+        "output_item": "Patch_PowerEfficiency_1"
+      },
+      {
+        "id": "Patch_MiningPower1",
+        "name": "Blueprint: Laser Patch: Mining Power I",
+        "output_item": "Patch_MiningPower_1"
+      },
+      {
+        "id": "Patch_FuelEfficiency1",
+        "name": "Blueprint: Module Patch: Fuel Efficiency I",
+        "output_item": "Patch_FuelEfficiency_1"
+      },
+      {
+        "id": "Patch_PowerProduction1",
+        "name": "Blueprint: Generator Patch: Power I",
+        "output_item": "Patch_PowerProduction_1"
+      },
+      {
+        "id": "Patch_MagPlasma1",
+        "name": "Blueprint: FTL Patch: Mag-Plasma I",
+        "output_item": "Patch_Magplasma_1"
+      },
+      {
+        "id": "Patch_FTLDodge1",
+        "name": "Blueprint: FTL Patch: Light Dodging I",
+        "output_item": "Patch_FTLDodge_1"
+      },
+      {
+        "id": "Patch_Charted1",
+        "name": "Blueprint: FTL Patch: Charted Skies I",
+        "output_item": "Patch_Charted_1"
+      },
+      {
+        "id": "Patch_IncreasedOutput1",
+        "name": "Blueprint: Laser Patch: Increased Output I",
+        "output_item": "Patch_IncreasedOutput_1"
+      },
+      {
+        "id": "Patch_RareFind1",
+        "name": "Blueprint: Laser Patch: Rare Find I",
+        "output_item": "Patch_RareFind_1"
+      },
+      {
+        "id": "Patch_BarrierToughness1",
+        "name": "Blueprint: Shield Patch: Tough I",
+        "output_item": "Patch_BarrierToughness_1"
+      },
+      {
+        "id": "HeatSuit",
+        "name": "Blueprint: Heat-Protec Suit Chip",
+        "output_item": "P_HeatSuit"
+      },
+      {
+        "id": "ColdSuitPH",
+        "name": "Blueprint: Cold-Protec Suit Chip",
+        "output_item": "P_ColdSuit"
+      }
+    ],
+    "6": [
+      {
+        "id": "BP_StrongSheet",
+        "name": "Blueprint: Strong Metal Sheet",
+        "output_item": "MetalSheet2"
+      },
+      {
+        "id": "BP_BTitaniumStrongSheet",
+        "name": "Blueprint: Strong Metal Sheet",
+        "output_item": "MetalSheet2"
+      },
+      {
+        "id": "Radiator2",
+        "name": "Blueprint: Medium Radiator",
+        "output_item": "Radiator1"
+      },
+      {
+        "id": "Patch_RadarRange2",
+        "name": "Blueprint: Radar Patch: Range II",
+        "output_item": "Patch_RadarRange_2"
+      }
+    ],
+    "7": [
+      {
+        "id": "BP_ColdMiningTool",
+        "name": "Blueprint: Cooling Laser",
+        "output_item": "MiningTool_Cold"
+      },
+      {
+        "id": "Patch_BatteryMultiplicator2",
+        "name": "Blueprint: Battery Patch: Overload II",
+        "output_item": "Patch_BatteryMultiplicator_2"
+      },
+      {
+        "id": "Patch_HeatAbsorber2PH",
+        "name": "Blueprint: Module Patch: Heat Absorber II",
+        "output_item": "Patch_HeatAbsorber_2"
+      },
+      {
+        "id": "Patch_SystemIntegration2PH",
+        "name": "Blueprint: Module Patch: System II",
+        "output_item": "Patch_SystemIntegration_2"
+      },
+      {
+        "id": "Patch_PowerEfficiency2PH",
+        "name": "Blueprint: Module Patch: Power Efficiency II",
+        "output_item": "Patch_PowerEfficiency_2"
+      },
+      {
+        "id": "Patch_MiningPower2PH",
+        "name": "Blueprint: Laser Patch: Mining Power II",
+        "output_item": "Patch_MiningPower_2"
+      },
+      {
+        "id": "Patch_FuelEfficiency2PH",
+        "name": "Blueprint: Module Patch: Fuel Efficiency II",
+        "output_item": "Patch_FuelEfficiency_2"
+      },
+      {
+        "id": "Patch_PowerProduction2PH",
+        "name": "Blueprint: Generator Patch: Power II",
+        "output_item": "Patch_PowerProduction_2"
+      },
+      {
+        "id": "Patch_EdgeExplorer1",
+        "name": "Blueprint: FTL Patch: Edge Explorer I",
+        "output_item": "Patch_EdgeExplorer_1"
+      },
+      {
+        "id": "Patch_MagPlasma2",
+        "name": "Blueprint: FTL Patch: Mag-Plasma II",
+        "output_item": "Patch_Magplasma_2"
+      },
+      {
+        "id": "Patch_FTLDodge2",
+        "name": "Blueprint: FTL Patch: Light Dodging II",
+        "output_item": "Patch_FTLDodge_2"
+      },
+      {
+        "id": "Patch_Charted2",
+        "name": "Blueprint: FTL Patch: Charted Skies II",
+        "output_item": "Patch_Charted_2"
+      },
+      {
+        "id": "Patch_IncreasedOutput2",
+        "name": "Blueprint: Laser Patch: Increased Output II",
+        "output_item": "Patch_IncreasedOutput_2"
+      },
+      {
+        "id": "Patch_RareFind2",
+        "name": "Blueprint: Laser Patch: Rare Find II",
+        "output_item": "Patch_RareFind_2"
+      },
+      {
+        "id": "Patch_BarrierToughness2",
+        "name": "Blueprint: Shield Patch: Tough II",
+        "output_item": "Patch_BarrierToughness_2"
+      }
+    ],
+    "8": [
+      {
+        "id": "BatteryModule2",
+        "name": "Blueprint: BESS Module",
+        "output_item": "Battery2"
+      },
+      {
+        "id": "GravitronPH",
+        "name": "Blueprint: Gravitron",
+        "output_item": "GraviteDetector"
+      },
+      {
+        "id": "Patch_MiningTier1PH",
+        "name": "Blueprint: Laser Patch: Mining Tier I",
+        "output_item": "Patch_MiningTier_1"
+      },
+      {
+        "id": "Patch_LastYield",
+        "name": "Blueprint: Laser Patch: Last Yield I",
+        "output_item": "Patch_LastYield_1"
+      },
+      {
+        "id": "Patch_RadarRange3",
+        "name": "Blueprint: Radar Patch: Range III",
+        "output_item": "Patch_RadarRange_3"
+      }
+    ],
+    "9": [
+      {
+        "id": "LiquidStorage3",
+        "name": "Blueprint: Large Liquid Tank",
+        "output_item": "LiquidStorage3PH"
+      },
+      {
+        "id": "SolarPanel3",
+        "name": "Blueprint: Large Solar Panel",
+        "output_item": "SolarPanel3"
+      },
+      {
+        "id": "Patch_BatteryMultiplicator3",
+        "name": "Blueprint: Battery Patch: Overload III",
+        "output_item": "Patch_BatteryMultiplicator_3"
+      },
+      {
+        "id": "Patch_HeatAbsorber3",
+        "name": "Blueprint: Module Patch: Heat Absorber III",
+        "output_item": "Patch_HeatAbsorber_3"
+      },
+      {
+        "id": "Patch_SystemIntegration3",
+        "name": "Blueprint: Module Patch: System III",
+        "output_item": "Patch_SystemIntegration_3"
+      },
+      {
+        "id": "Patch_PowerEfficiency3",
+        "name": "Blueprint: Module Patch: Power Efficiency III",
+        "output_item": "Patch_PowerEfficiency_3"
+      },
+      {
+        "id": "Patch_MiningPower3",
+        "name": "Blueprint: Laser Patch: Mining Power III",
+        "output_item": "Patch_MiningPower_3"
+      },
+      {
+        "id": "Patch_FuelEfficiency2PH1",
+        "name": "Blueprint: Module Patch: Fuel Efficiency III",
+        "output_item": "Patch_FuelEfficiency_3"
+      },
+      {
+        "id": "Patch_PowerProduction3",
+        "name": "Blueprint: Generator Patch: Power III",
+        "output_item": "Patch_PowerProduction_3"
+      },
+      {
+        "id": "Patch_MagPlasma3",
+        "name": "Blueprint: FTL Patch: Mag-Plasma III",
+        "output_item": "Patch_Magplasma_3"
+      },
+      {
+        "id": "Patch_FTLDodge3",
+        "name": "Blueprint: FTL Patch: Light Dodging III",
+        "output_item": "Patch_FTLDodge_3"
+      },
+      {
+        "id": "Patch_Charted3",
+        "name": "Blueprint: FTL Patch: Charted Skies III",
+        "output_item": "Patch_Charted_3"
+      },
+      {
+        "id": "Patch_IncreasedOutput3",
+        "name": "Blueprint: Laser Patch: Increased Output III",
+        "output_item": "Patch_IncreasedOutput_3"
+      },
+      {
+        "id": "Patch_RareFind3",
+        "name": "Blueprint: Laser Patch: Rare Find III",
+        "output_item": "Patch_RareFind_3"
+      },
+      {
+        "id": "Patch_BarrierToughness3",
+        "name": "Blueprint: Shield Patch: Tough III",
+        "output_item": "Patch_BarrierToughness_3"
+      }
+    ],
+    "10": [
+      {
+        "id": "BP_KineticShield3",
+        "name": "Blueprint: Hyper Reactive Shield",
+        "output_item": "KineticShield3"
+      },
+      {
+        "id": "Patch_MiningTier2PH",
+        "name": "Blueprint: Laser Patch: Mining Tier II",
+        "output_item": "Patch_MiningTier_2"
+      },
+      {
+        "id": "Patch_EdgeExplorer2",
+        "name": "Blueprint: FTL Patch: Edge Explorer II",
+        "output_item": "Patch_EdgeExplorer_2"
+      }
+    ]
+  },
+  "sectors": {
+    "Sec_Threshold": {
+      "name": "Threshold",
+      "exploLevel": 1,
+      "maxLootLevel": 4,
+      "wreckTierCounts": {
+        "0": 1
+      },
+      "lootLevelProbability": {
+        "4": 1.0
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "CopperIngot",
+        "Carbon",
+        "Sandstone"
+      ]
+    },
+    "Sec_Terminus": {
+      "name": "Terminus",
+      "exploLevel": 1,
+      "maxLootLevel": 4,
+      "wreckTierCounts": {
+        "0": 5
+      },
+      "lootLevelProbability": {
+        "4": 1.0
+      },
+      "secondaryMaterialPool": [
+        "CopperIngot",
+        "AluminiumIngot",
+        "Sandstone",
+        "Sulfur"
+      ]
+    },
+    "Sec_Cairn": {
+      "name": "Cairn",
+      "exploLevel": 1,
+      "maxLootLevel": 4,
+      "wreckTierCounts": {
+        "0": 4
+      },
+      "lootLevelProbability": {
+        "4": 1.0
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "CopperIngot",
+        "Sulfur",
+        "Carbon",
+        "Sandstone",
+        "SiliciumIngot"
+      ]
+    },
+    "Sec_Landmark": {
+      "name": "Landmark",
+      "exploLevel": 2,
+      "maxLootLevel": 4,
+      "wreckTierCounts": {
+        "0": 5
+      },
+      "lootLevelProbability": {
+        "4": 1.0
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "AluminiumIngot",
+        "CopperIngot",
+        "Carbon",
+        "Kaolinite"
+      ]
+    },
+    "Sec_Moor": {
+      "name": "Moor",
+      "exploLevel": 2,
+      "maxLootLevel": 4,
+      "wreckTierCounts": {
+        "0": 4
+      },
+      "lootLevelProbability": {
+        "4": 1.0
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "AluminiumIngot",
+        "CopperIngot",
+        "Carbon",
+        "Kaolinite"
+      ]
+    },
+    "Sec_Rim": {
+      "name": "Fool's Rim",
+      "exploLevel": 2,
+      "maxLootLevel": 6,
+      "wreckTierCounts": {
+        "0": 4,
+        "1": 3
+      },
+      "lootLevelProbability": {
+        "4": 0.2286,
+        "5": 0.3429,
+        "6": 0.4286
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "CopperIngot",
+        "TitaniumIngot",
+        "Sulfur",
+        "Carbon",
+        "Sandstone",
+        "SiliciumIngot",
+        "Kaolinite",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Strand": {
+      "name": "Strand",
+      "exploLevel": 3,
+      "maxLootLevel": 6,
+      "wreckTierCounts": {
+        "0": 3,
+        "1": 2
+      },
+      "lootLevelProbability": {
+        "4": 0.24,
+        "5": 0.34,
+        "6": 0.42
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "CopperIngot",
+        "TitaniumIngot",
+        "Sulfur",
+        "Carbon",
+        "Sandstone",
+        "SiliciumIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Horizon": {
+      "name": "Horizon",
+      "exploLevel": 2,
+      "maxLootLevel": 7,
+      "wreckTierCounts": {
+        "1": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.4,
+        "6": 0.3,
+        "7": 0.3
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "CopperIngot",
+        "Sandstone",
+        "SiliciumIngot",
+        "Carbon",
+        "Graphene",
+        "Sulfur",
+        "TitaniumIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Ebb": {
+      "name": "Ebb",
+      "exploLevel": 2,
+      "maxLootLevel": 8,
+      "wreckTierCounts": {
+        "1": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.4,
+        "6": 0.3,
+        "7": 0.2,
+        "8": 0.1
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "Sandstone",
+        "SiliciumIngot",
+        "Carbon",
+        "Graphene",
+        "TitaniumIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Axon": {
+      "name": "Axon",
+      "exploLevel": 2,
+      "maxLootLevel": 8,
+      "wreckTierCounts": {
+        "1": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.4,
+        "6": 0.3,
+        "7": 0.2,
+        "8": 0.1
+      },
+      "secondaryMaterialPool": [
+        "AluminiumIngot",
+        "Kaolinite",
+        "CopperIngot",
+        "Sandstone",
+        "SiliciumIngot",
+        "Carbon",
+        "Graphene",
+        "TitaniumIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Idol": {
+      "name": "Idol",
+      "exploLevel": 3,
+      "maxLootLevel": 9,
+      "wreckTierCounts": {
+        "2": 2,
+        "1": 3
+      },
+      "lootLevelProbability": {
+        "5": 0.24,
+        "6": 0.34,
+        "7": 0.24,
+        "8": 0.14,
+        "9": 0.04
+      },
+      "secondaryMaterialPool": [
+        "IronIngot",
+        "Sandstone",
+        "SiliciumIngot",
+        "Carbon",
+        "Graphene",
+        "TitaniumIngot",
+        "Sulfur",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Vestige": {
+      "name": "Vestige",
+      "exploLevel": 3,
+      "maxLootLevel": 9,
+      "wreckTierCounts": {
+        "2": 2,
+        "1": 3
+      },
+      "lootLevelProbability": {
+        "5": 0.24,
+        "6": 0.34,
+        "7": 0.24,
+        "8": 0.14,
+        "9": 0.04
+      },
+      "secondaryMaterialPool": [
+        "AluminiumIngot",
+        "Kaolinite",
+        "CopperIngot",
+        "Sandstone",
+        "SiliciumIngot",
+        "Carbon",
+        "Graphene",
+        "TitaniumIngot",
+        "Sulfur",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Obst_Hubris1": {
+      "name": "Hubris Alpha",
+      "exploLevel": 4,
+      "maxLootLevel": 9,
+      "wreckTierCounts": {
+        "1": 4,
+        "2": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.2,
+        "6": 0.35,
+        "7": 0.25,
+        "8": 0.15,
+        "9": 0.05
+      },
+      "secondaryMaterialPool": [
+        "Sulfur",
+        "Carbon",
+        "Graphene",
+        "SiliciumIngot",
+        "Sandstone",
+        "IronIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Obst_HubrisBig": {
+      "name": "Hubris Major",
+      "exploLevel": 4,
+      "maxLootLevel": 9,
+      "wreckTierCounts": {
+        "1": 4,
+        "2": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.2,
+        "6": 0.35,
+        "7": 0.25,
+        "8": 0.15,
+        "9": 0.05
+      },
+      "secondaryMaterialPool": [
+        "Sulfur",
+        "Carbon",
+        "Graphene",
+        "SiliciumIngot",
+        "Sandstone",
+        "IronIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Obst_Hubris2": {
+      "name": "Hubris Omega",
+      "exploLevel": 4,
+      "maxLootLevel": 9,
+      "wreckTierCounts": {
+        "1": 4,
+        "2": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.2,
+        "6": 0.35,
+        "7": 0.25,
+        "8": 0.15,
+        "9": 0.05
+      },
+      "secondaryMaterialPool": [
+        "Sulfur",
+        "Carbon",
+        "Graphene",
+        "SiliciumIngot",
+        "Sandstone",
+        "IronIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Obst_Jester": {
+      "name": "Jester",
+      "exploLevel": 6,
+      "maxLootLevel": 9,
+      "wreckTierCounts": {
+        "1": 3,
+        "2": 6
+      },
+      "lootLevelProbability": {
+        "5": 0.1333,
+        "6": 0.3667,
+        "7": 0.2667,
+        "8": 0.1667,
+        "9": 0.0667
+      },
+      "secondaryMaterialPool": [
+        "AluminiumIngot",
+        "CopperIngot",
+        "IronIngot",
+        "Kaolinite",
+        "TitaniumIngot",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Justice": {
+      "name": "Justice",
+      "exploLevel": 2,
+      "maxLootLevel": 8,
+      "wreckTierCounts": {
+        "1": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.4,
+        "6": 0.3,
+        "7": 0.2,
+        "8": 0.1
+      },
+      "secondaryMaterialPool": [
+        "VanadiumIngot",
+        "IronIngot",
+        "CopperIngot",
+        "Carbon",
+        "Graphene",
+        "Sulfur",
+        "Sandstone",
+        "SiliciumIngot",
+        "AluminiumIngot",
+        "Kaolinite",
+        "PlumbingLoot"
+      ]
+    },
+    "Sec_Glimmer": {
+      "name": "Glimmer",
+      "exploLevel": 2,
+      "maxLootLevel": 8,
+      "wreckTierCounts": {
+        "1": 4
+      },
+      "lootLevelProbability": {
+        "5": 0.4,
+        "6": 0.3,
+        "7": 0.2,
+        "8": 0.1
+      },
+      "secondaryMaterialPool": [
+        "VanadiumIngot",
+        "IronIngot",
+        "CopperIngot",
+        "Carbon",
+        "Graphene",
+        "Sulfur",
+        "Sandstone",
+        "SiliciumIngot",
+        "PlumbingLoot"
+      ]
+    }
+  },
+  "itemDropOdds": {
+    "patches": [
+      {
+        "name": "Radar Patch: Range I",
+        "level": 2,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Battery Patch: Overload I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Charted Skies I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Light Dodging I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Mag-Plasma I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Generator Patch: Power I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Increased Output I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Mining Power I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Rare Find I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Fuel Efficiency I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Heat Absorber I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Power Efficiency I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: System I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Fast I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Tough I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Precision I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Sure Shot I",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Radar Patch: Range II",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.75,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.3,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Heavy I",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.75,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.3,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Wild Shot I",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.75,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.3,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Battery Patch: Overload II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Charted Skies II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Edge Explorer I",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Light Dodging II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Mag-Plasma II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Generator Patch: Power II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Increased Output II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Mining Power II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Rare Find II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Fuel Efficiency II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Heat Absorber II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Power Efficiency II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: System II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Fast II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Tough II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Precision II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Sure Shot II",
+        "level": 5,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.94,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.87,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Last Yield I",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Mining Tier I",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Radar Patch: Range III",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Heavy II",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Wild Shot II",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.76,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Battery Patch: Overload III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Charted Skies III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Light Dodging III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Mag-Plasma III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Generator Patch: Power III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Increased Output III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Mining Power III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Rare Find III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Fuel Efficiency III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Heat Absorber III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: Power Efficiency III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Module Patch: System III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Fast III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Tough III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Precision III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Sure Shot III",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.97,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.71,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "FTL Patch: Edge Explorer II",
+        "level": 8,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Laser Patch: Mining Tier II",
+        "level": 8,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Shield Patch: Heavy III",
+        "level": 8,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Weapon Patch: Wild Shot III",
+        "level": 8,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      }
+    ],
+    "blueprints": [
+      {
+        "name": "Blueprint: Barrier Shield",
+        "level": 2,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Blueprint: Heavy Shield",
+        "level": 2,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Blueprint: Large Barrier Shield",
+        "level": 2,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Blueprint: Large Heavy Shield",
+        "level": 2,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Blueprint: Small Barrier Shield",
+        "level": 2,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Blueprint: Kaolinite",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.27,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Magnetic Coil",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.27,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Metal Sheet",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.27,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Metal Sheet",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.27,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Solid Explosive",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.27,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Wire",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.27,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Wire",
+        "level": 3,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.27,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Concrete",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Crystalline Focuser",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Crystalline Focuser",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Crystalline Focuser",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Metal Sheet",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Nut and Bolt",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Radar Patch: Range I",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Semiconductor Substrate",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Stainless Plate",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Stainless Plate",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Watertight Pipe",
+        "level": 4,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Cairn",
+              "Landmark",
+              "Moor",
+              "Terminus",
+              "Threshold"
+            ]
+          },
+          {
+            "pct": 0.61,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.6,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.4,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.24,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.2,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.13,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Battery Patch: Overload I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Cold-Protec Suit Chip",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Diffraction Grating",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Diffraction Grating",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Charted Skies I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Light Dodging I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Mag-Plasma I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Generator Patch: Power I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Heat-Protec Suit Chip",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Increased Output I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Power I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Rare Find I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Fuel Efficiency I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Heat Absorber I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Power Efficiency I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: System I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Semiconductor Substrate",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Shield Patch: Tough I",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Watertight Pipe",
+        "level": 5,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Fool's Rim",
+              "Strand"
+            ]
+          },
+          {
+            "pct": 0.92,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.83,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.81,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.77,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Medium Radiator",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.75,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Radar Patch: Range II",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.75,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Strong Metal Sheet",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.75,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Strong Metal Sheet",
+        "level": 6,
+        "bestPct": 1.3,
+        "groups": [
+          {
+            "pct": 1.3,
+            "sectors": [
+              "Horizon",
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega",
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.2,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "pct": 0.75,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "pct": 0.73,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Battery Patch: Overload II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Cooling Laser",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Charted Skies II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Edge Explorer I",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Light Dodging II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Mag-Plasma II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Generator Patch: Power II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Increased Output II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Power II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Rare Find II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Fuel Efficiency II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Heat Absorber II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Power Efficiency II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: System II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Shield Patch: Tough II",
+        "level": 7,
+        "bestPct": 1.1,
+        "groups": [
+          {
+            "pct": 1.1,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 1.0,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.98,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.79,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "pct": 0.78,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: BESS Module",
+        "level": 8,
+        "bestPct": 0.58,
+        "groups": [
+          {
+            "pct": 0.58,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.45,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Gravitron",
+        "level": 8,
+        "bestPct": 0.58,
+        "groups": [
+          {
+            "pct": 0.58,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.45,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Last Yield I",
+        "level": 8,
+        "bestPct": 0.58,
+        "groups": [
+          {
+            "pct": 0.58,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.45,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Tier I",
+        "level": 8,
+        "bestPct": 0.58,
+        "groups": [
+          {
+            "pct": 0.58,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.45,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Radar Patch: Range III",
+        "level": 8,
+        "bestPct": 0.58,
+        "groups": [
+          {
+            "pct": 0.58,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.45,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "pct": 0.25,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Battery Patch: Overload III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Charted Skies III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Light Dodging III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Mag-Plasma III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Generator Patch: Power III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Large Liquid Tank",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Large Solar Panel",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Increased Output III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Power III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Laser Patch: Rare Find III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Fuel Efficiency III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Heat Absorber III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: Power Efficiency III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Module Patch: System III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: Shield Patch: Tough III",
+        "level": 9,
+        "bestPct": 0.17,
+        "groups": [
+          {
+            "pct": 0.17,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "pct": 0.12,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "pct": 0.1,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          }
+        ],
+        "obtainable": true
+      },
+      {
+        "name": "Blueprint: FTL Patch: Edge Explorer II",
+        "level": 10,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Blueprint: Hyper Reactive Shield",
+        "level": 10,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Tier II",
+        "level": 10,
+        "bestPct": 0,
+        "groups": [],
+        "obtainable": false
+      }
+    ]
+  }
+}
