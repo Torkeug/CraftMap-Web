@@ -10,18 +10,22 @@
   const depositsView = document.getElementById("deposits-view");
   const recipeView = document.getElementById("recipe-view");
   const sourcesView = document.getElementById("sources-view");
+  const wrecksView = document.getElementById("wrecks-view");
   const tabResource = document.getElementById("tab-resource");
   const tabLocation = document.getElementById("tab-location");
   const tabRecipe = document.getElementById("tab-recipe");
   const tabSources = document.getElementById("tab-sources");
+  const tabWrecks = document.getElementById("tab-wrecks");
   const tabQueue = document.getElementById("tab-queue");
 
   function hideAll() {
     depositsView.style.display = "none";
     recipeView.style.display = "none";
     sourcesView.style.display = "none";
+    wrecksView.style.display = "none";
     tabRecipe.classList.remove("active");
     tabSources.classList.remove("active");
+    tabWrecks.classList.remove("active");
   }
 
   function showDeposits() {
@@ -41,6 +45,12 @@
     tabSources.classList.add("active");
   }
 
+  function showWrecks() {
+    hideAll();
+    wrecksView.style.display = "flex";
+    tabWrecks.classList.add("active");
+  }
+
   tabResource.addEventListener("click", showDeposits);
   tabLocation.addEventListener("click", showDeposits);
   tabRecipe.addEventListener("click", async () => {
@@ -50,6 +60,10 @@
   tabSources.addEventListener("click", async () => {
     showSources();
     await CraftMapApi.call("set_view_mode", "sources");
+  });
+  tabWrecks.addEventListener("click", async () => {
+    showWrecks();
+    await CraftMapApi.call("set_view_mode", "wrecks");
   });
 
   // The Queue tab isn't a screen switch like the other three - it toggles
@@ -88,6 +102,8 @@
       showRecipe();
     } else if (mode === "sources") {
       showSources();
+    } else if (mode === "wrecks") {
+      showWrecks();
     } else {
       showDeposits();
     }

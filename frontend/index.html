@@ -19,6 +19,7 @@
         <button class="tab-btn" id="tab-location" data-mode="location">Location</button>
         <button class="tab-btn" id="tab-recipe" data-mode="recipe">Recipe</button>
         <button class="tab-btn" id="tab-sources" data-mode="sources">Sources</button>
+        <button class="tab-btn" id="tab-wrecks" data-mode="wrecks">Wrecks</button>
         <button class="tab-btn" id="tab-queue" title="Show/hide the Craft Queue window">Queue</button>
       </div>
       <div id="body">
@@ -151,6 +152,29 @@
           </div>
           <div id="sources-rows" class="scroll-rows"></div>
         </div>
+
+        <div id="wrecks-view">
+          <div id="wrecks-mode-tabs">
+            <button class="tab-btn mode-btn active" id="wrecks-mode-sector" data-mode="sector">
+              By Sector
+            </button>
+            <button class="tab-btn mode-btn" id="wrecks-mode-item" data-mode="item">
+              By Item
+            </button>
+          </div>
+          <div id="wrecks-search-row">
+            <input
+              id="wrecks-search"
+              type="text"
+              placeholder="Filter sectors..."
+            />
+            <div id="wrecks-cat-filter">
+              <label><input type="checkbox" id="wrecks-filter-patch" checked /> Patches</label>
+              <label><input type="checkbox" id="wrecks-filter-blueprint" checked /> Blueprints</label>
+            </div>
+          </div>
+          <div id="wrecks-tree"></div>
+        </div>
       </div>
       <div id="error-banner"></div>
       <div id="resize-grip">&#9698;</div>
@@ -182,6 +206,7 @@
     <script src="js/breakdown-tree.js"></script>
     <script src="js/recipe-panel.js"></script>
     <script src="js/sources.js"></script>
+    <script src="js/wrecks.js"></script>
     <script src="js/screens.js"></script>
     <script src="js/settings.js"></script>
     <script>

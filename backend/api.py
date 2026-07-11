@@ -40,7 +40,7 @@ consecutive calls (drifting by almost exactly the accumulated size delta).
 import datetime
 import os
 
-from . import config, db, resolver
+from . import config, db, resolver, shipwreck_loot
 
 
 class Api:
@@ -358,6 +358,14 @@ class Api:
             _station_prefs=station_prefs,
             max_depth=self._INITIAL_RESOLVE_DEPTH,
         )
+
+    # ---- shipwreck loot (frontend/js/wrecks.js) ----
+
+    def get_wreck_sectors(self):
+        return shipwreck_loot.get_all_sectors()
+
+    def get_wreck_items(self):
+        return shipwreck_loot.get_all_items()
 
     # ---- window geometry (drag/resize - see frontend/js/drag-resize.js) ----
 

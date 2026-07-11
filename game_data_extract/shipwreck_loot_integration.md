@@ -1,10 +1,32 @@
-# Adding a "Wrecks" tab to CraftMap (not yet done)
+# Adding a "Wrecks" tab to CraftMap (implemented)
 
 `shipwreck_loot.json` (this directory) has everything needed to add a
 read-only "Wrecks" tab to the app, mirroring the existing **Sources** tab
 (`frontend/js/sources.js`) exactly - both are "derived from the game's own
 files, not hand-maintained" reference data, not user-editable state like
-deposits/recipes. This doc is the plan; nothing below is implemented yet.
+deposits/recipes. This doc was the original plan; the tab is now implemented
+(`backend/shipwreck_loot.py`, `frontend/js/wrecks.js`) - kept below as the
+design record.
+
+Two deviations from the plan as originally written:
+
+- Rather than re-deriving per-sector item eligibility from
+  `patchPoolByLevel`/`blueprintPoolByLevel` (the raw pools, which would
+  require reimplementing the 2-level-window mechanism described below),
+  `backend/shipwreck_loot.py` instead scans `itemDropOdds.patches`/
+  `.blueprints` (already-computed per-item/per-sector-group odds) and
+  reorganizes it two ways - a straightforward reorganization of
+  already-derived data rather than a second implementation of the drop-odds
+  math.
+- The tab did end up offering both sector-first and item-first browsing (the
+  "Open questions" section below's suggested toggle), but not as a
+  select-one-then-view-its-detail combo in either direction. Since the full
+  dataset is small (18 sectors / ~150 items, ~50-140KB of JSON either way -
+  see `get_all_sectors`/`get_all_items`'s own docstring), both getters
+  return everything in one call, and the frontend renders it as a
+  collapsible tree (mirroring `frontend/js/deposits.js`'s own tree) that the
+  user browses directly - typing in the search box narrows/auto-expands it
+  rather than committing to one sector or item at a time.
 
 ## Data already in place
 

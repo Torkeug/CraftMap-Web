@@ -777,6 +777,124 @@
   padding: 4px;
 }
 
+/* ---------- wrecks screen (sector -> obtainable shipwreck Patches/
+   Blueprints) ---------- */
+#wrecks-view {
+  display: none; /* toggled by js/screens.js */
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+  gap: 4px;
+}
+
+#wrecks-mode-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+
+#wrecks-search-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#wrecks-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-family: var(--ui);
+  font-size: 12px;
+}
+
+#wrecks-search::placeholder {
+  color: var(--faint);
+}
+
+#wrecks-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#wrecks-cat-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+#wrecks-cat-filter label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#wrecks-cat-filter input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---------- wrecks tree (js/wrecks.js's own renderer - reuses
+   .tree-node/.tree-row/.disclosure/.tree-children/.tree-label from the
+   deposit tracker's tree above for a consistent visual language, plus its
+   own .tree-row-main/.wrecks-row-* additions for the right-aligned
+   odds %/category badge these rows need that the deposit tree doesn't) --- */
+#wrecks-tree {
+  flex: 1 1 auto;
+  min-height: 60px; /* see #deposit-tree's identical comment */
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 0;
+}
+
+.tree-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wrecks-row-pct {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.wrecks-row-cat {
+  flex: 0 0 auto;
+  width: 34px;
+  font-size: 9px;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 3px;
+  padding: 1px 0;
+}
+
+.wrecks-row-cat-patch {
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.14);
+}
+
+.wrecks-row-cat-blueprint {
+  color: var(--warn);
+  background: rgba(240, 136, 62, 0.14);
+}
+
 /* Queue tab in the main window's tab row - a toggle button for the
    separate queue.html window, not a real screen switch (see js/screens.js's
    comment on tabQueue) - extra left margin visually separates it from the
@@ -944,13 +1062,15 @@
    drag. ---------- */
 #app.measuring-min-size #deposits-view,
 #app.measuring-min-size #recipe-view,
-#app.measuring-min-size #sources-view {
+#app.measuring-min-size #sources-view,
+#app.measuring-min-size #wrecks-view {
   flex: 0 0 auto;
 }
 
 #app.measuring-min-size #deposit-tree,
 #app.measuring-min-size #recipe-breakdown-tree,
-#app.measuring-min-size #sources-rows {
+#app.measuring-min-size #sources-rows,
+#app.measuring-min-size #wrecks-tree {
   flex: 0 0 auto;
   height: 60px; /* matches their own permanent min-height floor */
 }
