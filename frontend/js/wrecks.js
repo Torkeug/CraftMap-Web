@@ -54,8 +54,8 @@
   }
 
   // ---- node builders ----
-  function makeGroupNode(key, label, tagClass) {
-    return { kind: "group", key, label, tagClass, children: [] };
+  function makeGroupNode(key, label, tagClass, rightText) {
+    return { kind: "group", key, label, tagClass, rightText, children: [] };
   }
   function makeLeafNode(label, tagClass, rightText, catBadge) {
     return { kind: "leaf", label, tagClass, rightText, catBadge };
@@ -149,14 +149,31 @@
         : items.filter((it) => matchesQuery(it.name, q));
       if (q && visibleItems.length === 0) continue;
 
-      const sectorNode = makeGroupNode(`wsec|${sector.name}`, sector.name, "sector");
-      const levels = Object.entries(sector.loot_level_probability)
+      // Item levels actually obtainable here (not sector.loot_level_probability's
+      // own crate-TARGET-level distribution, shown below in the summary line -
+      // see the loot-level divider's own comment further down for why those
+      // two aren't the same number): the 2-level eligibility window means
+      // this can span one level below the lowest crate target.
+      const itemLevels = items.map((it) => it.level);
+      const levelRangeText = itemLevels.length
+        ? Math.min(...itemLevels) === Math.max(...itemLevels)
+          ? `L${itemLevels[0]}`
+          : `L${Math.min(...itemLevels)}-L${Math.max(...itemLevels)}`
+        : "";
+
+      const sectorNode = makeGroupNode(
+        `wsec|${sector.name}`,
+        sector.name,
+        "sector",
+        levelRangeText
+      );
+      const crateTargets = Object.entries(sector.loot_level_probability)
         .sort((a, b) => Number(a[0]) - Number(b[0]))
         .map(([lvl, p]) => `L${lvl} ${fmtPct(p * 100)}`)
         .join(", ");
       sectorNode.children.push(
         makeSummaryNode(
-          `Explo ${sector.explo_level} · max loot ${sector.max_loot_level} · crate targets: ${levels}`,
+          `Explo ${sector.explo_level} · max loot ${sector.max_loot_level} · crate targets: ${crateTargets}`,
           "loc_sum"
         )
       );
