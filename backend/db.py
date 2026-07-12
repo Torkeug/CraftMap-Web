@@ -167,6 +167,18 @@ def init_db():
     c.execute("PRAGMA table_info(resource_sources)")
     if "concentration" not in [row[1] for row in c.fetchall()]:
         c.execute("ALTER TABLE resource_sources ADD COLUMN concentration REAL")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS galaxy_resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_name TEXT NOT NULL,
+            planet TEXT NOT NULL,
+            sector TEXT,
+            resource TEXT NOT NULL,
+            node_count INTEGER,
+            density REAL,
+            UNIQUE (system_name, planet, resource)
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -917,6 +929,41 @@ def get_resources_with_sources():
     rows = c.fetchall()
     conn.close()
     return [r[0] for r in rows]
+
+
+# ---------- Galaxy resources (tools/backfill_galaxy_resources.py) ----------
+
+
+def get_galaxy_resource_keys():
+    """Existing (system_name, planet, resource) triples already imported -
+    lets the backfill tool report what a re-run would add without writing
+    anything (--dry-run)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT system_name, planet, resource FROM galaxy_resources")
+    keys = set(c.fetchall())
+    conn.close()
+    return keys
+
+
+def import_galaxy_resources(rows):
+    """Bulk INSERT OR IGNORE galaxy_resources rows. `rows` is a list of
+    (system_name, planet, sector, resource, node_count, density) tuples.
+    Existing rows are left alone (UNIQUE(system_name, planet, resource)), so
+    re-running an import after further in-game exploration only adds new
+    ones. Returns the number of rows actually inserted."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.executemany(
+        "INSERT OR IGNORE INTO galaxy_resources"
+        " (system_name, planet, sector, resource, node_count, density)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    inserted = conn.total_changes
+    conn.close()
+    return inserted
 
 
 def set_queue_checked_many(queue_id, path_keys, checked):
