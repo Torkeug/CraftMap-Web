@@ -20,6 +20,32 @@ resourceNodeCountEstimates. Planets with no resourceCounts (not yet
 generated client-side) are silently skipped, not imported as empty/
 placeholder rows.
 
+Also carries over resourcesByPoi (per planet, which POI index or "general"
+each resource is tied to - the dump doesn't split node_count/density per
+POI, only which POI(s) a resource shows up at) as a comma-joined poi_tags
+string per row, e.g. "poi0", "poi0,poi1", or "general" - a resource with NO
+"general" entry is purely POI-anchored on that planet (all its nodes are at
+one walkable spot rather than scattered across the whole surface), a
+meaningfully better gather spot than the same total density spread planet-
+wide. Left as raw data rather than a precomputed "better spot" flag, so that
+comparison (a POI-anchored planet's density vs. that resource's typical
+"general" density elsewhere) can be made at query time.
+
+For resources that are purely POI-anchored AND have a known size for every
+POI they're tied to (planetScale/poiSizes - see dump_galaxy_resources.py's
+own CLAUDE.md for the derivation), also computes poi_area_density: density
+divided by the summed surface-area fraction of those POI(s) (poi_surface
+below, the same angleFromDistance-based conversion compute_density already
+uses internally for its own generation-quota estimate - reused here, not
+reinvented). Built from `density`, not raw node_count, specifically so it
+stays on the SAME scale as a "general" resource's own `density` - see
+poi_surface's own docstring for why that's a fair comparison, not two
+different units.
+
+Also carries over isAsteroid (ent.Asteroid debris field vs. a regular
+ent.Planet - see dump_galaxy_resources.py's own CLAUDE.md) as-is, so a
+query can filter fields out of "planet" results.
+
 Usage:
     python tools/backfill_galaxy_resources.py
     python tools/backfill_galaxy_resources.py --dump-path path/to/galaxy_resources.json
@@ -28,6 +54,7 @@ Usage:
 """
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -42,6 +69,41 @@ DEFAULT_DUMP_PATH = (
     REPO_ROOT.parent / "spacecraft-memory-research" / "galaxy_resources.json"
 )
 
+# st.PlanetResourceManager.getDensityCount's own POI-surface constant - see
+# dump_galaxy_resources.py's compute_density (PLANET_DENSITY_POI_SCALE).
+# Reused verbatim rather than re-derived, so this matches the game's own
+# formula exactly.
+PLANET_DENSITY_POI_SCALE = 5
+
+
+def angle_from_distance(size, radius=1.0):
+    """lib.Helper.angleFromDistance, decompiled - see
+    dump_galaxy_resources.py's own copy of this function for the full
+    derivation. Reused unmodified so poi_surface below matches the game's
+    own math exactly."""
+    k = math.floor(size / radius)
+    if k < 0:
+        return 0.0
+    return math.asin(size / radius - k) + (math.pi / 2) * k
+
+
+def poi_surface(poi_size):
+    """A POI's raw `size` converted to its surface-area fraction of the
+    planet, via the same angleFromDistance-based conversion
+    compute_density (dump_galaxy_resources.py) already applies internally
+    to scale its own generation-quota estimate down for POI-anchored
+    resources. Reused here for a different purpose: dividing `density`
+    (not raw node_count - see poi_area_density's own note in load_rows) by
+    this gives an area-adjusted density directly comparable to a "general"
+    resource's own `density`, since compute_density's own formula never
+    applies this scaling for non-POI-anchored resources at all - i.e. it
+    implicitly treats "general" as covering area-fraction 1. Dividing by a
+    fraction less than 1 is exactly the same operation the game's own
+    generation code performs when shrinking a quota for a small POI, just
+    applied to an exact live count instead of a generation-quota estimate."""
+    angle = angle_from_distance(poi_size)
+    return (angle * 2) ** 2 * PLANET_DENSITY_POI_SCALE / (4 * math.pi)
+
 
 def load_rows(dump_path):
     planets = json.loads(dump_path.read_text(encoding="utf-8"))
@@ -54,10 +116,41 @@ def load_rows(dump_path):
             continue
         sector = p.get("sector_name")
         densities = p.get("resourceDensities") or {}
+        poi_sizes = p.get("poiSizes") or {}
+        is_asteroid = p.get("isAsteroid")
+
+        poi_tags_by_resource = {}
+        for poi_label, resource_names in (p.get("resourcesByPoi") or {}).items():
+            for name in resource_names:
+                poi_tags_by_resource.setdefault(name, set()).add(poi_label)
+
         for resource, count in counts.items():
-            rows.append(
-                (system_name, planet, sector, resource, count, densities.get(resource))
-            )
+            poi_tags = poi_tags_by_resource.get(resource)
+            poi_area_density = None
+            resource_density = densities.get(resource)
+            if poi_tags and "general" not in poi_tags and resource_density is not None:
+                sizes = [poi_sizes.get(tag) for tag in poi_tags]
+                if all(s is not None for s in sizes):
+                    total_surface = sum(poi_surface(s) for s in sizes)
+                    if total_surface:
+                        # density, not raw count - density already carries the
+                        # same PLANET_DENSITY_CONSTANT/scale^2 normalization a
+                        # "general" resource's own density has, so dividing
+                        # THAT by the POI's area fraction is what stays
+                        # directly comparable to a general resource's density
+                        # (see poi_surface's own docstring for why).
+                        poi_area_density = resource_density / total_surface
+            rows.append((
+                system_name,
+                planet,
+                sector,
+                resource,
+                count,
+                densities.get(resource),
+                ",".join(sorted(poi_tags)) if poi_tags else None,
+                poi_area_density,
+                is_asteroid,
+            ))
     return rows
 
 

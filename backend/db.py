@@ -176,9 +176,20 @@ def init_db():
             resource TEXT NOT NULL,
             node_count INTEGER,
             density REAL,
+            poi_tags TEXT,
+            poi_area_density REAL,
+            is_asteroid INTEGER,
             UNIQUE (system_name, planet, resource)
         )
     """)
+    c.execute("PRAGMA table_info(galaxy_resources)")
+    galaxy_cols = [row[1] for row in c.fetchall()]
+    if "poi_tags" not in galaxy_cols:
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN poi_tags TEXT")
+    if "poi_area_density" not in galaxy_cols:
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN poi_area_density REAL")
+    if "is_asteroid" not in galaxy_cols:
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN is_asteroid INTEGER")
     conn.commit()
     conn.close()
 
@@ -948,22 +959,86 @@ def get_galaxy_resource_keys():
 
 def import_galaxy_resources(rows):
     """Bulk INSERT OR IGNORE galaxy_resources rows. `rows` is a list of
-    (system_name, planet, sector, resource, node_count, density) tuples.
-    Existing rows are left alone (UNIQUE(system_name, planet, resource)), so
-    re-running an import after further in-game exploration only adds new
-    ones. Returns the number of rows actually inserted."""
+    (system_name, planet, sector, resource, node_count, density, poi_tags,
+    poi_area_density, is_asteroid) tuples - poi_tags is a comma-joined
+    string of which POI(s) that resource is tied to on that planet (e.g.
+    "poi0", "poi0,poi1"), "general" if it's scattered planet-wide with no
+    POI anchor, or "poi0,general" if it's split between both. poi_area_density
+    is `density` divided by the POI(s)' own combined surface-area fraction
+    (see tools/backfill_galaxy_resources.py's poi_surface) - only
+    computable, and only ever set, when the resource is PURELY POI-anchored
+    (no "general" entry) and every POI it's tied to has a known size; None
+    otherwise. Deliberately built from `density`, not raw node_count, so it
+    stays on the SAME scale as a "general" resource's own `density` - the
+    game's own generation formula never applies this area scaling to
+    non-POI resources at all, i.e. implicitly treats "general" as area-
+    fraction 1, so this is a fair, directly comparable number, not a
+    different unit. is_asteroid (0/1/None) distinguishes an ent.Asteroid
+    debris field from a regular ent.Planet - both show up in the same
+    per-planet dump entries, and asteroid field names (e.g. "PHY-AF1") are
+    otherwise the only clue. Existing rows are left alone
+    (UNIQUE(system_name, planet, resource)), so re-running an import after
+    further in-game exploration only adds new ones. Returns the number of
+    rows actually inserted."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.executemany(
         "INSERT OR IGNORE INTO galaxy_resources"
-        " (system_name, planet, sector, resource, node_count, density)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
+        " (system_name, planet, sector, resource, node_count, density, poi_tags,"
+        " poi_area_density, is_asteroid)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
     inserted = conn.total_changes
     conn.close()
     return inserted
+
+
+def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
+    """Every known planet with this resource, sorted by "effective density"
+    descending: `poi_area_density` for rows that have one (purely
+    POI-anchored, every POI's size known), otherwise plain `density`. Both
+    are on the same scale (see poi_area_density's own note in
+    import_galaxy_resources), so this is a genuinely fair single ranking,
+    not density-vs-a-different-unit or an arbitrary pure-POI-first
+    override: a small, tightly-packed POI deposit can legitimately outrank
+    a much-higher-node-count scattered one, and does so here exactly when
+    its area-adjusted concentration is actually higher, not merely because
+    it's POI-anchored at all. Mixed rows (POI-anchored AND "general" on the
+    same planet) fall back to plain `density`, since the live data doesn't
+    split how much of their count is in which portion - `density` is the
+    honest total for those, not an area-adjusted figure. Each row is also
+    annotated with pure_poi (True if poi_tags is set with no "general"
+    entry). include_asteroids=False filters out ent.Asteroid debris fields,
+    keeping only regular numbered planets. Returns (system_name, planet,
+    sector, node_count, density, poi_tags, pure_poi, poi_area_density,
+    is_asteroid) tuples."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    query = (
+        "SELECT system_name, planet, sector, node_count, density, poi_tags,"
+        " poi_area_density, is_asteroid FROM galaxy_resources WHERE resource = ?"
+    )
+    params = [resource_name]
+    if not include_asteroids:
+        query += " AND is_asteroid IS NOT 1"
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+
+    def is_pure_poi(poi_tags):
+        return bool(poi_tags) and "general" not in poi_tags.split(",")
+
+    annotated = [
+        (
+            system_name, planet, sector, node_count, density, poi_tags,
+            is_pure_poi(poi_tags), poi_area_density, bool(is_asteroid),
+        )
+        for system_name, planet, sector, node_count, density, poi_tags, poi_area_density, is_asteroid in rows
+    ]
+    annotated.sort(key=lambda r: -((r[7] if r[7] is not None else r[4]) or 0))
+    return annotated
 
 
 def set_queue_checked_many(queue_id, path_keys, checked):
