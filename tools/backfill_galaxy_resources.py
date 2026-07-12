@@ -46,6 +46,14 @@ Also carries over isAsteroid (ent.Asteroid debris field vs. a regular
 ent.Planet - see dump_galaxy_resources.py's own CLAUDE.md) as-is, so a
 query can filter fields out of "planet" results.
 
+Also carries over temperature/temperatureName (the planet's resolved
+temperature attribute, e.g. "PlanetHot2"/"Very Hot" - always set, defaults
+to "PlanetTemperate"/"Temperate" when the planet has no explicit
+temperature attribute) and attributes/attributeNames (ALL of the planet's
+raw generation-time attributes - water presence, radioactive, foggy, etc,
+not just temperature - see dump_galaxy_resources.py's own CLAUDE.md,
+"planet.inf.attributes"), comma-joined the same way poi_tags already is.
+
 Usage:
     python tools/backfill_galaxy_resources.py
     python tools/backfill_galaxy_resources.py --dump-path path/to/galaxy_resources.json
@@ -118,6 +126,10 @@ def load_rows(dump_path):
         densities = p.get("resourceDensities") or {}
         poi_sizes = p.get("poiSizes") or {}
         is_asteroid = p.get("isAsteroid")
+        temperature = p.get("temperature")
+        temperature_name = p.get("temperatureName")
+        attributes = p.get("attributes") or []
+        attribute_names = p.get("attributeNames") or []
 
         poi_tags_by_resource = {}
         for poi_label, resource_names in (p.get("resourcesByPoi") or {}).items():
@@ -150,6 +162,10 @@ def load_rows(dump_path):
                 ",".join(sorted(poi_tags)) if poi_tags else None,
                 poi_area_density,
                 is_asteroid,
+                temperature,
+                temperature_name,
+                ",".join(attributes) if attributes else None,
+                ",".join(attribute_names) if attribute_names else None,
             ))
     return rows
 

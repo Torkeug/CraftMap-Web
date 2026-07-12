@@ -179,6 +179,10 @@ def init_db():
             poi_tags TEXT,
             poi_area_density REAL,
             is_asteroid INTEGER,
+            temperature TEXT,
+            temperature_name TEXT,
+            attributes TEXT,
+            attribute_names TEXT,
             UNIQUE (system_name, planet, resource)
         )
     """)
@@ -190,6 +194,14 @@ def init_db():
         c.execute("ALTER TABLE galaxy_resources ADD COLUMN poi_area_density REAL")
     if "is_asteroid" not in galaxy_cols:
         c.execute("ALTER TABLE galaxy_resources ADD COLUMN is_asteroid INTEGER")
+    if "temperature" not in galaxy_cols:
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN temperature TEXT")
+    if "temperature_name" not in galaxy_cols:
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN temperature_name TEXT")
+    if "attributes" not in galaxy_cols:
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN attributes TEXT")
+    if "attribute_names" not in galaxy_cols:
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN attribute_names TEXT")
     conn.commit()
     conn.close()
 
@@ -960,10 +972,11 @@ def get_galaxy_resource_keys():
 def import_galaxy_resources(rows):
     """Bulk INSERT OR IGNORE galaxy_resources rows. `rows` is a list of
     (system_name, planet, sector, resource, node_count, density, poi_tags,
-    poi_area_density, is_asteroid) tuples - poi_tags is a comma-joined
-    string of which POI(s) that resource is tied to on that planet (e.g.
-    "poi0", "poi0,poi1"), "general" if it's scattered planet-wide with no
-    POI anchor, or "poi0,general" if it's split between both. poi_area_density
+    poi_area_density, is_asteroid, temperature, temperature_name, attributes,
+    attribute_names) tuples - poi_tags is a comma-joined string of which
+    POI(s) that resource is tied to on that planet (e.g. "poi0",
+    "poi0,poi1"), "general" if it's scattered planet-wide with no POI
+    anchor, or "poi0,general" if it's split between both. poi_area_density
     is `density` divided by the POI(s)' own combined surface-area fraction
     (see tools/backfill_galaxy_resources.py's poi_surface) - only
     computable, and only ever set, when the resource is PURELY POI-anchored
@@ -976,7 +989,16 @@ def import_galaxy_resources(rows):
     different unit. is_asteroid (0/1/None) distinguishes an ent.Asteroid
     debris field from a regular ent.Planet - both show up in the same
     per-planet dump entries, and asteroid field names (e.g. "PHY-AF1") are
-    otherwise the only clue. Existing rows are left alone
+    otherwise the only clue. temperature/temperature_name are the planet's
+    resolved temperature attribute (e.g. "PlanetHot2"/"Very Hot" - always
+    set, defaults to "PlanetTemperate"/"Temperate"); attributes/
+    attribute_names are comma-joined lists of ALL of the planet's raw
+    generation-time attributes (e.g. water presence, radioactive, foggy -
+    temperature is one possible member of this same list, duplicated into
+    its own columns since it's the one every planet always resolves to).
+    These four are planet-level, not resource-level, so they repeat across
+    every resource row for the same planet - same treatment as system_name/
+    sector already get. Existing rows are left alone
     (UNIQUE(system_name, planet, resource)), so re-running an import after
     further in-game exploration only adds new ones. Returns the number of
     rows actually inserted."""
@@ -985,8 +1007,9 @@ def import_galaxy_resources(rows):
     c.executemany(
         "INSERT OR IGNORE INTO galaxy_resources"
         " (system_name, planet, sector, resource, node_count, density, poi_tags,"
-        " poi_area_density, is_asteroid)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " poi_area_density, is_asteroid, temperature, temperature_name,"
+        " attributes, attribute_names)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
@@ -1013,12 +1036,14 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     entry). include_asteroids=False filters out ent.Asteroid debris fields,
     keeping only regular numbered planets. Returns (system_name, planet,
     sector, node_count, density, poi_tags, pure_poi, poi_area_density,
-    is_asteroid) tuples."""
+    is_asteroid, temperature, temperature_name, attributes,
+    attribute_names) tuples."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     query = (
         "SELECT system_name, planet, sector, node_count, density, poi_tags,"
-        " poi_area_density, is_asteroid FROM galaxy_resources WHERE resource = ?"
+        " poi_area_density, is_asteroid, temperature, temperature_name,"
+        " attributes, attribute_names FROM galaxy_resources WHERE resource = ?"
     )
     params = [resource_name]
     if not include_asteroids:
@@ -1034,8 +1059,13 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
         (
             system_name, planet, sector, node_count, density, poi_tags,
             is_pure_poi(poi_tags), poi_area_density, bool(is_asteroid),
+            temperature, temperature_name, attributes, attribute_names,
         )
-        for system_name, planet, sector, node_count, density, poi_tags, poi_area_density, is_asteroid in rows
+        for (
+            system_name, planet, sector, node_count, density, poi_tags,
+            poi_area_density, is_asteroid, temperature, temperature_name,
+            attributes, attribute_names,
+        ) in rows
     ]
     annotated.sort(key=lambda r: -((r[7] if r[7] is not None else r[4]) or 0))
     return annotated
