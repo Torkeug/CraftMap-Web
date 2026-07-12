@@ -178,7 +178,7 @@ def fetch_all(filter_text="", allowed_types=None, order_by="resource"):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     base = """
-        SELECT id, res_type, resource, sector, system_name, planet, status, notes, logged_at
+        SELECT id, res_type, resource, sector, system_name, planet, notes, logged_at
         FROM deposits
     """
     where = []
@@ -231,37 +231,34 @@ def distinct_values(column):
     return vals
 
 
-def insert_row(
-    res_type, resource, sector, system_name, planet, status, notes, logged_at
-):
+def insert_row(res_type, resource, sector, system_name, planet, notes, logged_at):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO deposits"
-        " (res_type, resource, sector, system_name, planet, status, notes, logged_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (res_type, resource, sector, system_name, planet, status, notes, logged_at),
+        " (res_type, resource, sector, system_name, planet, notes, logged_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (res_type, resource, sector, system_name, planet, notes, logged_at),
     )
     conn.commit()
     conn.close()
 
 
 def update_row(
-    row_id, res_type, resource, sector, system_name, planet, status, notes, logged_at
+    row_id, res_type, resource, sector, system_name, planet, notes, logged_at
 ):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
         "UPDATE deposits"
         " SET res_type=?, resource=?, sector=?, system_name=?, planet=?,"
-        " status=?, notes=?, logged_at=? WHERE id=?",
+        " notes=?, logged_at=? WHERE id=?",
         (
             res_type,
             resource,
             sector,
             system_name,
             planet,
-            status,
             notes,
             logged_at,
             row_id,
@@ -283,7 +280,7 @@ def get_deposit(row_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT res_type, resource, sector, system_name, planet, status, notes"
+        "SELECT res_type, resource, sector, system_name, planet, notes"
         " FROM deposits WHERE id=?",
         (row_id,),
     )
@@ -722,13 +719,13 @@ def clear_station_pref(ingredient_name):
 
 
 def get_deposits_for_ingredient(resource_name):
-    """Deposit locations for a resource, excluding Claimed."""
+    """Deposit locations for a resource."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT COALESCE(sector,''), system_name, planet, COALESCE(status,'')"
+        "SELECT COALESCE(sector,''), system_name, planet"
         " FROM deposits"
-        " WHERE resource = ? AND COALESCE(status,'') != 'Claimed'"
+        " WHERE resource = ?"
         " ORDER BY sector COLLATE NOCASE, system_name COLLATE NOCASE, planet COLLATE NOCASE",
         (resource_name,),
     )

@@ -351,10 +351,7 @@ const BreakdownTree = (function () {
       const locs = await CraftMapApi.call("get_deposits_for_ingredient", resourceName);
       for (const loc of locs) {
         const parts = [loc.sector, loc.system_name, loc.planet].filter(Boolean);
-        let text = `${indent}\u{1F4CD} ${parts.join(" / ")}`;
-        if (loc.status && loc.status !== "Unknown" && loc.status !== "") {
-          text += `  [${loc.status}]`;
-        }
+        const text = `${indent}\u{1F4CD} ${parts.join(" / ")}`;
         childrenEl.appendChild(makeLocationRow(text));
       }
     }

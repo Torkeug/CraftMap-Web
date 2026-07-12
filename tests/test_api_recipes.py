@@ -241,9 +241,7 @@ def test_all_ingredient_options_includes_produced_and_raw(api):
 
 
 def test_get_deposits_for_ingredient(api):
-    api.add_deposit("Ore", "Iron Ore", "Sec1", "Sys1", "PlanetA", "Free", "")
+    api.add_deposit("Ore", "Iron Ore", "Sec1", "Sys1", "PlanetA", "")
     locs = api.get_deposits_for_ingredient("Iron Ore")
     json.dumps(locs)
-    assert locs == [
-        {"sector": "Sec1", "system_name": "Sys1", "planet": "PlanetA", "status": "Free"}
-    ]
+    assert locs == [{"sector": "Sec1", "system_name": "Sys1", "planet": "PlanetA"}]

@@ -29,7 +29,7 @@ def api(tmp_path, monkeypatch):
 
 
 def test_add_and_list_deposit(api):
-    assert api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "Free", "note") is True
+    assert api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "note") is True
     rows = api.get_deposits()
     json.dumps(rows)
     assert len(rows) == 1
@@ -38,35 +38,34 @@ def test_add_and_list_deposit(api):
 
 def test_add_requires_planet(api):
     with pytest.raises(ValueError):
-        api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "", "Free", "")
+        api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "", "")
 
 
 def test_add_rejects_duplicate(api):
-    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "Free", "")
+    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "")
     with pytest.raises(ValueError):
-        api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "Claimed", "different")
+        api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "different")
 
 
 def test_update_deposit(api):
-    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "Free", "")
+    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "")
     row_id = api.get_deposits()[0]["id"]
-    assert api.update_deposit(row_id, "Ore", "Iron", "Sec1", "Sys1", "PlanetB", "Claimed", "x")
+    assert api.update_deposit(row_id, "Ore", "Iron", "Sec1", "Sys1", "PlanetB", "x")
     dep = api.get_deposit(row_id)
     json.dumps(dep)
     assert dep["planet"] == "PlanetB"
-    assert dep["status"] == "Claimed"
 
 
 def test_update_rejects_duplicate_with_another_row(api):
-    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "Free", "")
-    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetB", "Free", "")
+    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "")
+    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetB", "")
     row_id = api.get_deposits()[0]["id"]
     with pytest.raises(ValueError):
-        api.update_deposit(row_id, "Ore", "Iron", "Sec1", "Sys1", "PlanetB", "Free", "")
+        api.update_deposit(row_id, "Ore", "Iron", "Sec1", "Sys1", "PlanetB", "")
 
 
 def test_delete_deposit(api):
-    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "Free", "")
+    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "")
     row_id = api.get_deposits()[0]["id"]
     assert api.delete_deposit(row_id) is True
     assert api.get_deposits() == []
@@ -77,8 +76,8 @@ def test_get_deposit_missing_returns_none(api):
 
 
 def test_distinct_and_dropdown_values(api):
-    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "Free", "")
-    api.add_deposit("Gas", "Helium", "Sec1", "Sys1", "PlanetB", "Free", "")
+    api.add_deposit("Ore", "Iron", "Sec1", "Sys1", "PlanetA", "")
+    api.add_deposit("Gas", "Helium", "Sec1", "Sys1", "PlanetB", "")
     assert api.get_distinct_values("res_type") == ["Gas", "Ore"]
     assert api.get_dropdown_values("resource", {"res_type": "Ore"}) == ["Iron"]
     assert api.get_dropdown_values("resource", {}) == ["Helium", "Iron"]

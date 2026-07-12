@@ -106,8 +106,7 @@ class Api:
                 "sector": r[3],
                 "system_name": r[4],
                 "planet": r[5],
-                "status": r[6],
-                "notes": r[7],
+                "notes": r[6],
             }
             for r in rows
         ]
@@ -116,14 +115,13 @@ class Api:
         row = db.get_deposit(row_id)
         if row is None:
             return None
-        res_type, resource, sector, system_name, planet, status, notes = row
+        res_type, resource, sector, system_name, planet, notes = row
         return {
             "res_type": res_type,
             "resource": resource,
             "sector": sector,
             "system_name": system_name,
             "planet": planet,
-            "status": status,
             "notes": notes,
         }
 
@@ -133,9 +131,7 @@ class Api:
     def get_dropdown_values(self, column, constraints):
         return db.distinct_values_where(column, constraints)
 
-    def add_deposit(
-        self, res_type, resource, sector, system_name, planet, status, notes
-    ):
+    def add_deposit(self, res_type, resource, sector, system_name, planet, notes):
         if not planet:
             raise ValueError("Planet is required.")
         if db.find_duplicate_deposit(res_type, resource, sector, system_name, planet):
@@ -144,13 +140,11 @@ class Api:
                 " planet already exists."
             )
         logged_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-        db.insert_row(
-            res_type, resource, sector, system_name, planet, status, notes, logged_at
-        )
+        db.insert_row(res_type, resource, sector, system_name, planet, notes, logged_at)
         return True
 
     def update_deposit(
-        self, row_id, res_type, resource, sector, system_name, planet, status, notes
+        self, row_id, res_type, resource, sector, system_name, planet, notes
     ):
         if not planet:
             raise ValueError("Planet is required.")
@@ -166,7 +160,6 @@ class Api:
             sector,
             system_name,
             planet,
-            status,
             notes,
             logged_at,
         )
@@ -293,8 +286,8 @@ class Api:
 
     def get_deposits_for_ingredient(self, resource_name):
         return [
-            {"sector": sec, "system_name": sysn, "planet": pla, "status": status}
-            for sec, sysn, pla, status in db.get_deposits_for_ingredient(resource_name)
+            {"sector": sec, "system_name": sysn, "planet": pla}
+            for sec, sysn, pla in db.get_deposits_for_ingredient(resource_name)
         ]
 
     def get_recipe_breakdown(self, name, qty_needed=1.0, root_recipe_id=None):
