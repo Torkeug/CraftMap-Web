@@ -905,9 +905,21 @@
 }
 
 /* ---------- Craft Queue window (frontend/queue.html) ---------- */
+/* The pushpin glyph is a color emoji - Chromium renders those with their
+   own fixed colors regardless of CSS `color`, so pinned/unpinned can't be
+   told apart by recoloring the glyph itself. Dim it when unpinned and give
+   it a visible accent ring + background when pinned instead. */
+#dragbar .icon-btn#pin-btn {
+  opacity: 0.45;
+}
+
 #dragbar .icon-btn.active {
-  color: var(--accent);
   background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+#dragbar .icon-btn#pin-btn.active {
+  opacity: 1;
 }
 
 #queue-body {
