@@ -18,6 +18,11 @@
   --good: #3fb950;
   --warn: #f0883e;
   --danger: #da3633;
+  /* Water-presence planet attribute (js/galaxy.js) - deliberately its own
+     hue, not reusing the Frozen chip's blue: water and cold are unrelated
+     concepts and shouldn't share a color, same reasoning "system" already
+     gets its own purple beyond the four semantic tokens above. */
+  --water: #39c5cf;
   --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
   --ui: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
 }

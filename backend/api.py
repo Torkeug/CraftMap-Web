@@ -290,6 +290,41 @@ class Api:
             for sec, sysn, pla in db.get_deposits_for_ingredient(resource_name)
         ]
 
+    # ---- galaxy data (frontend/js/galaxy.js) ----
+
+    def get_galaxy_resource_names(self):
+        return db.get_galaxy_resource_names()
+
+    def get_galaxy_sources(self, node_name, exclude_asteroids=True):
+        """node_name is a node-type name (e.g. "Clay Shell"), same
+        namespace as resource_sources' own source_name column - NOT a raw
+        material name, since galaxy_resources only ever holds live per-node
+        placement data (see tools/backfill_galaxy_resources.py)."""
+        return [
+            {
+                "system_name": system_name,
+                "planet": planet,
+                "sector": sector,
+                "node_count": node_count,
+                "density": density,
+                "poi_tags": poi_tags,
+                "pure_poi": pure_poi,
+                "poi_area_density": poi_area_density,
+                "is_asteroid": is_asteroid,
+                "temperature": temperature,
+                "temperature_name": temperature_name,
+                "attributes": attributes,
+                "attribute_names": attribute_names,
+            }
+            for (
+                system_name, planet, sector, node_count, density, poi_tags,
+                pure_poi, poi_area_density, is_asteroid, temperature,
+                temperature_name, attributes, attribute_names,
+            ) in db.get_galaxy_sources_for_resource(
+                node_name, include_asteroids=not exclude_asteroids
+            )
+        ]
+
     def get_recipe_breakdown(self, name, qty_needed=1.0, root_recipe_id=None):
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()

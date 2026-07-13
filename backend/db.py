@@ -969,6 +969,19 @@ def get_galaxy_resource_keys():
     return keys
 
 
+def get_galaxy_resource_names():
+    """Distinct node-type names known to galaxy_resources, for the Galaxy
+    sub-tab's own autocomplete - a node-type namespace (matches
+    resource_sources' own source_name column), not raw materials, since
+    every row here comes from a live per-node placement count."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT resource FROM galaxy_resources ORDER BY resource COLLATE NOCASE")
+    rows = c.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
 def import_galaxy_resources(rows):
     """Bulk INSERT OR IGNORE galaxy_resources rows. `rows` is a list of
     (system_name, planet, sector, resource, node_count, density, poi_tags,

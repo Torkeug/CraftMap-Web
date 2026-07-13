@@ -35,6 +35,20 @@
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+/* Marks the seam between the "where do I find things" cluster (Resource/
+   Location/Sources/Wrecks) and the "using what I found" cluster (Recipe/
+   Queue) - domain-grouped rather than add-order. A standalone element, not
+   a border on the Recipe button itself - putting it on the button made the
+   divider line merge into .tab-btn.active's own background/box-shadow
+   whenever Recipe was the active tab, reading as part of its highlight
+   instead of a neutral separator. */
+.tab-group-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  margin: 4px 4px 0;
+  background: var(--line);
+}
+
 /* ---------- deposits screen ---------- */
 #deposits-view {
   display: flex;
@@ -43,6 +57,30 @@
   min-height: 0;
   padding: 8px;
   gap: 4px;
+}
+
+/* Resource tab's own sub-tabs (My Deposits / Galaxy) - same .mode-btn
+   shape as #recipe-mode-tabs/#wrecks-mode-tabs. Hidden entirely on the
+   Location tab (js/deposits.js) - Galaxy is inherently "best specific
+   planet for a resource", not a location-grouped view, so it has no
+   Location-tab equivalent. */
+#resource-mode-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+
+#deposits-mydeposits-view,
+#deposits-galaxy-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 4px;
+}
+
+#deposits-galaxy-view {
+  display: none; /* toggled by js/deposits.js */
 }
 
 #search-row input {
@@ -743,6 +781,15 @@
   color: var(--text);
 }
 
+.source-row.linkable {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.source-row.linkable:hover {
+  background: var(--accent-soft);
+}
+
 .source-row.source-row-header {
   color: var(--faint);
   font-size: 9px;
@@ -775,6 +822,302 @@
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 4px;
+}
+
+/* ---------- Galaxy sub-tab (js/galaxy.js) - node-type ranked planet list,
+   deliberately reusing #sources-selector-row/.source-row/.scroll-rows's
+   own shape/scale rather than inventing a new one, so switching between
+   the Resource tab's two sub-tabs (and over from Sources) doesn't feel
+   like a different app. Sector/system label colors match .tree-label's
+   own (green sector, purple system) for the same reason. ---------- */
+#galaxy-breadcrumb {
+  display: none; /* .show, set by js/galaxy.js when arriving from Sources */
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--faint);
+}
+
+#galaxy-breadcrumb.show {
+  display: block;
+}
+
+#galaxy-breadcrumb a {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+#galaxy-selector-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#galaxy-selector-row label {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+#galaxy-combo {
+  width: 220px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#galaxy-combo:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#galaxy-filters {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+  min-height: 16px;
+}
+
+#galaxy-filters label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#galaxy-filters input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+#galaxy-climate-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#galaxy-rows-header .col-hint {
+  width: 44px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.chip-hot {
+  background: rgba(240, 136, 62, 0.14);
+  color: var(--warn);
+}
+
+.chip-veryhot {
+  background: rgba(218, 54, 51, 0.14);
+  color: var(--danger);
+}
+
+.chip-frozen {
+  background: rgba(31, 111, 235, 0.14);
+  color: #58a6ff;
+}
+
+.chip-water {
+  background: rgba(57, 197, 207, 0.14);
+  color: var(--water);
+}
+
+#galaxy-rows.scroll-rows {
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.galaxy-empty {
+  color: var(--muted);
+  padding: 4px;
+}
+
+.galaxy-row {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.galaxy-row:last-child {
+  border-bottom: none;
+}
+
+.galaxy-row.expanded .galaxy-row-expand {
+  display: block;
+}
+
+/* The row a Sources or My Deposits double-click jumped here from (see
+   js/deposits.js/js/sources.js) - a distinct treatment from .top, which
+   marks the #1 ranked row regardless of how you got here; this marks
+   "the specific entry you came from", which may or may not be the same
+   row. */
+.galaxy-row.highlighted {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.galaxy-row-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.galaxy-rank {
+  width: 20px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+  flex: 0 0 auto;
+}
+
+.galaxy-mark {
+  width: 10px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--good);
+  flex: 0 0 auto;
+}
+
+.galaxy-mark.scattered {
+  color: var(--faint);
+}
+
+.galaxy-planet {
+  /* A loose safety cap, not a tight one - the bar no longer shares this
+     line (it's its own full-width row below), so this only needs to stop
+     a truly extreme name from breaking the row height, not protect
+     anything's alignment. Full name still available via the title
+     attribute (js/galaxy.js) on the rare row that actually truncates. */
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 0 1 auto;
+}
+
+.galaxy-pin {
+  flex: 0 0 auto;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--good);
+  border-radius: 7px;
+  padding: 0 4px;
+}
+
+.galaxy-rel {
+  /* Pushes flush right regardless of planet/pin width now that the bar
+     isn't sharing this line and no longer needs everything before it to
+     occupy a fixed width. */
+  margin-left: auto;
+  width: 36px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.galaxy-row.top .galaxy-rel {
+  color: var(--good);
+}
+
+/* Its own full-width row (js/galaxy.js appends it as a sibling of
+   .galaxy-row-top, not nested inside it) - real <div>s, not <span>s, so
+   width/height apply without needing an explicit display override the
+   way the old inline-span version needed. Full row width, not indented
+   under .galaxy-planet like .galaxy-row-detail below - the compact
+   disclosure/rank/mark glyphs it'd otherwise align under aren't content
+   the bar needs to visually relate to, and the extra width reads better
+   as a clean meter. */
+.galaxy-bar-track {
+  height: 5px;
+  margin: 3px 0 1px;
+  background: var(--panel-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.galaxy-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #58a6ff);
+  border-radius: 2px;
+}
+
+.galaxy-row.top .galaxy-bar-fill {
+  background: linear-gradient(90deg, var(--good), #56d364);
+}
+
+.galaxy-row-detail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+  /* aligns under .galaxy-planet: disclosure(14) + gap(5) + rank(20) +
+     gap(5) + mark(10) + gap(5) = 59px of .galaxy-row-top before it */
+  padding-left: 59px;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+.galaxy-row-expand {
+  display: none; /* .galaxy-row.expanded, toggled by js/galaxy.js */
+  padding: 3px 0 2px 59px;
+  font-size: 9.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.galaxy-row-stats {
+  font-family: var(--mono);
+  color: var(--faint);
+  margin-top: 2px;
+}
+
+.galaxy-sector {
+  color: var(--good);
+}
+
+.galaxy-system {
+  color: #d2a8ff;
+}
+
+.galaxy-sep {
+  color: var(--faint);
+}
+
+.galaxy-nodes {
+  font-family: var(--mono);
+  color: var(--faint);
 }
 
 /* ---------- wrecks screen (sector -> obtainable shipwreck Patches/
@@ -1073,6 +1416,8 @@
    within a single synchronous reflow at the start of a resize-grip
    drag. ---------- */
 #app.measuring-min-size #deposits-view,
+#app.measuring-min-size #deposits-mydeposits-view,
+#app.measuring-min-size #deposits-galaxy-view,
 #app.measuring-min-size #recipe-view,
 #app.measuring-min-size #sources-view,
 #app.measuring-min-size #wrecks-view {
@@ -1082,7 +1427,8 @@
 #app.measuring-min-size #deposit-tree,
 #app.measuring-min-size #recipe-breakdown-tree,
 #app.measuring-min-size #sources-rows,
-#app.measuring-min-size #wrecks-tree {
+#app.measuring-min-size #wrecks-tree,
+#app.measuring-min-size #galaxy-rows {
   flex: 0 0 auto;
   height: 60px; /* matches their own permanent min-height floor */
 }

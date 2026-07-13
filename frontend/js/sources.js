@@ -21,9 +21,18 @@
     return `${rounded}%`;
   }
 
+  // Source nodes here are node TYPES (e.g. "Clay Shell"), a completely
+  // different namespace from the raw material being searched for (e.g.
+  // "Aquamarine") - galaxy_resources only ever holds live per-node
+  // placement data, never a raw-material aggregate (see
+  // backend.db.get_galaxy_sources_for_resource's own docstring), so a
+  // single link off the search box can't work: two different node rows
+  // for the same raw material can have completely unrelated galaxy
+  // rankings. Double-clicking a specific row is the only correct link.
   function makeRow(name, concentration) {
     const rowEl = document.createElement("div");
-    rowEl.className = "source-row";
+    rowEl.className = "source-row linkable";
+    rowEl.title = "Double-click to see where this node has been found";
     const nameEl = document.createElement("span");
     nameEl.className = "source-row-name";
     nameEl.textContent = name;
@@ -32,6 +41,10 @@
     concEl.className = "source-row-conc";
     concEl.textContent = fmtConcentration(concentration);
     rowEl.appendChild(concEl);
+    rowEl.addEventListener("dblclick", () => {
+      document.getElementById("tab-resource").click();
+      window.DepositsTabs.showGalaxyForNode(name, sourcesCombo.value.trim());
+    });
     return rowEl;
   }
 

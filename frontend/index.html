@@ -17,55 +17,86 @@
       <div id="tab-row">
         <button class="tab-btn" id="tab-resource" data-mode="resource">Resource</button>
         <button class="tab-btn" id="tab-location" data-mode="location">Location</button>
-        <button class="tab-btn" id="tab-recipe" data-mode="recipe">Recipe</button>
         <button class="tab-btn" id="tab-sources" data-mode="sources">Sources</button>
         <button class="tab-btn" id="tab-wrecks" data-mode="wrecks">Wrecks</button>
+        <span class="tab-group-divider"></span>
+        <button class="tab-btn" id="tab-recipe" data-mode="recipe">Recipe</button>
         <button class="tab-btn" id="tab-queue" title="Show/hide the Craft Queue window">Queue</button>
       </div>
       <div id="body">
         <div id="deposits-view">
-          <div id="search-row">
-            <input
-              id="search-input"
-              type="text"
-              placeholder="Search resource / sector / system / planet / notes..."
-            />
+          <div id="resource-mode-tabs">
+            <button class="tab-btn mode-btn active" id="mode-mydeposits" data-mode="mydeposits">
+              My Deposits
+            </button>
+            <button class="tab-btn mode-btn" id="mode-galaxy" data-mode="galaxy">
+              Galaxy
+            </button>
           </div>
-          <div id="type-filter"></div>
-          <div id="deposit-tree"></div>
-          <div id="deposit-form">
-            <div class="form-grid">
-              <div class="form-field">
-                <label>Type</label>
-                <input id="f-type" type="text" />
+
+          <div id="deposits-mydeposits-view">
+            <div id="search-row">
+              <input
+                id="search-input"
+                type="text"
+                placeholder="Search resource / sector / system / planet / notes..."
+              />
+            </div>
+            <div id="type-filter"></div>
+            <div id="deposit-tree"></div>
+            <div id="deposit-form">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label>Type</label>
+                  <input id="f-type" type="text" />
+                </div>
+                <div class="form-field">
+                  <label>Resource</label>
+                  <input id="f-resource" type="text" />
+                </div>
+                <div class="form-field">
+                  <label>Sector</label>
+                  <input id="f-sector" type="text" />
+                </div>
+                <div class="form-field">
+                  <label>System</label>
+                  <input id="f-system" type="text" />
+                </div>
+                <div class="form-field">
+                  <label>Planet</label>
+                  <input id="f-planet" type="text" />
+                </div>
               </div>
-              <div class="form-field">
-                <label>Resource</label>
-                <input id="f-resource" type="text" />
+              <div class="form-field form-field-full">
+                <label>Notes</label>
+                <input id="f-notes" type="text" />
               </div>
-              <div class="form-field">
-                <label>Sector</label>
-                <input id="f-sector" type="text" />
-              </div>
-              <div class="form-field">
-                <label>System</label>
-                <input id="f-system" type="text" />
-              </div>
-              <div class="form-field">
-                <label>Planet</label>
-                <input id="f-planet" type="text" />
+              <div class="form-buttons">
+                <button class="btn btn-success" id="btn-add">Add</button>
+                <button class="btn btn-accent" id="btn-update">Update</button>
+                <button class="btn btn-neutral" id="btn-clear">Clear</button>
+                <button class="btn btn-danger" id="btn-delete">Delete</button>
               </div>
             </div>
-            <div class="form-field form-field-full">
-              <label>Notes</label>
-              <input id="f-notes" type="text" />
+          </div>
+
+          <div id="deposits-galaxy-view">
+            <div id="galaxy-breadcrumb"></div>
+            <div id="galaxy-selector-row">
+              <label>Node:</label>
+              <div id="galaxy-combo-wrap" class="dropdown-anchor">
+                <input id="galaxy-combo" type="text" placeholder="Select a node type..." />
+              </div>
             </div>
-            <div class="form-buttons">
-              <button class="btn btn-success" id="btn-add">Add</button>
-              <button class="btn btn-accent" id="btn-update">Update</button>
-              <button class="btn btn-neutral" id="btn-clear">Clear</button>
-              <button class="btn btn-danger" id="btn-delete">Delete</button>
+            <div id="galaxy-filters">
+              <label><input type="checkbox" id="galaxy-filter-asteroids" /> Include asteroid fields</label>
+              <div id="galaxy-climate-filter"></div>
             </div>
+            <div class="source-row source-row-header" id="galaxy-rows-header">
+              <span id="galaxy-count-label"></span>
+              <span class="col-hint">Yield</span>
+            </div>
+            <div id="galaxy-rows" class="scroll-rows"></div>
           </div>
         </div>
 
@@ -197,6 +228,7 @@
     <script src="js/breakdown-tree.js"></script>
     <script src="js/recipe-panel.js"></script>
     <script src="js/sources.js"></script>
+    <script src="js/galaxy.js"></script>
     <script src="js/wrecks.js"></script>
     <script src="js/screens.js"></script>
     <script src="js/settings.js"></script>
