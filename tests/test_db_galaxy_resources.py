@@ -88,3 +88,65 @@ def test_get_galaxy_sources_can_exclude_asteroids(db):
 
 def test_get_galaxy_sources_for_missing_resource_returns_empty(db):
     assert db.get_galaxy_sources_for_resource("Nonexistent") == []
+
+
+def test_resource_family_resolves_symmetrically():
+    assert db_module._resource_family("Coal Clump") == db_module._resource_family("Big Coal Clump")
+    assert set(db_module._resource_family("Coal Clump")) == {"Coal Clump", "Big Coal Clump"}
+    # a resource with no known size variant is its own singleton family
+    assert db_module._resource_family("Iron") == ["Iron"]
+
+
+def test_get_galaxy_sources_combines_size_variants_on_the_same_planet(db):
+    db.import_galaxy_resources([
+        # same planet, both variants purely tied to the SAME poi0 - the
+        # combinable case: node_count/density sum, poi_area_density sums too
+        (
+            "Sys1", "PlanetA", "Sec1", "Coal Clump", 100, 1.0, "poi0", 2.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+        (
+            "Sys1", "PlanetA", "Sec1", "Big Coal Clump", 50, 0.5, "poi0", 1.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+        # a different planet with only the base resource - unaffected
+        (
+            "Sys2", "PlanetB", "Sec1", "Coal Clump", 200, 2.5, "general", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    # queryable by either the base name or the variant's own name
+    for query_name in ("Coal Clump", "Big Coal Clump"):
+        results = db.get_galaxy_sources_for_resource(query_name)
+        by_planet = {r[1]: r for r in results}
+        assert len(results) == 2
+        combined = by_planet["PlanetA"]
+        assert combined[3] == 150  # node_count summed
+        assert combined[4] == pytest.approx(1.5)  # density summed
+        assert combined[5] == "poi0"  # poi_tags union (identical on both rows)
+        assert combined[6] is True  # pure_poi
+        assert combined[7] == pytest.approx(3.0)  # poi_area_density summed (same footprint)
+        assert by_planet["PlanetB"][3] == 200  # untouched single-variant planet
+
+
+def test_get_galaxy_sources_leaves_poi_area_density_none_when_variants_have_different_poi_tags(db):
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Coal Clump", 100, 1.0, "poi0", 2.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+        # same planet, but this variant is scattered ("general") rather than
+        # tied to poi0 - the two rows' poi_area_density figures are on
+        # different area denominators and can't be honestly summed
+        (
+            "Sys1", "PlanetA", "Sec1", "Big Coal Clump", 50, 0.5, "general", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    results = db.get_galaxy_sources_for_resource("Coal Clump")
+    assert len(results) == 1
+    combined = results[0]
+    assert combined[3] == 150
+    assert combined[5] == "general,poi0"  # union of both rows' tags
+    assert combined[6] is False  # pure_poi - "general" is present
+    assert combined[7] is None  # can't combine poi_area_density across differing footprints

@@ -1018,34 +1018,79 @@ def import_galaxy_resources(rows):
     return inserted
 
 
+# Some resources are the same underlying deposit as another, just a bigger
+# node that yields more per gather - confirmed via data.cdb's `resource`
+# sheet: each variant's own row has an explicit `props.linkedResource`
+# pointing at the base id, and an empty `items` list (it inherits the
+# base's yield table rather than defining its own, e.g. "Big Coal Clump"
+# has no items of its own - it IS Coal Clump, just a bigger node). 13 real
+# pairs found (a handful of other linkedResource entries point at
+# themselves - a no-op, not a family). Static game data, unlikely to
+# change - hardcoded rather than adding a runtime dependency on
+# game_data_extract/, which backend/db.py otherwise never reads directly
+# (see CLAUDE.md - those files are backfill-time-only inputs).
+RESOURCE_SIZE_VARIANTS = {
+    "Big Ferrous Outcrop": "Ferrous Outcrop",
+    "Big Magnetite": "Magnetite",
+    "Big Brassy Outcrop": "Brassy Outcrop",
+    "Big Coal Clump": "Coal Clump",
+    "Huge Titanite": "Titanite",
+    "Huge Plagnetite": "Plagnetite",
+    "Big Cooperite": "Cooperite",
+    "Big Uraninite Outcrop": "Uraninite Outcrop",
+    "Big Titanomagnetite": "Titanomagnetite",
+    "Big Augurite": "Augurite",
+    "Big Bauxite Rock": "Bauxite Rock",
+    "Big Wolframite": "Wolframite",
+    "Huge Basalt Shell": "Basalt Shell",
+}
+
+
+def _resource_family(resource_name):
+    """All resource names representing the same underlying deposit as
+    resource_name (itself included) - see RESOURCE_SIZE_VARIANTS. Works
+    whether called with the base name or a size-variant's own name."""
+    base = RESOURCE_SIZE_VARIANTS.get(resource_name, resource_name)
+    family = {base}
+    family.update(name for name, b in RESOURCE_SIZE_VARIANTS.items() if b == base)
+    return sorted(family)
+
+
 def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
-    """Every known planet with this resource, sorted by "effective density"
-    descending: `poi_area_density` for rows that have one (purely
-    POI-anchored, every POI's size known), otherwise plain `density`. Both
-    are on the same scale (see poi_area_density's own note in
-    import_galaxy_resources), so this is a genuinely fair single ranking,
-    not density-vs-a-different-unit or an arbitrary pure-POI-first
-    override: a small, tightly-packed POI deposit can legitimately outrank
-    a much-higher-node-count scattered one, and does so here exactly when
-    its area-adjusted concentration is actually higher, not merely because
-    it's POI-anchored at all. Mixed rows (POI-anchored AND "general" on the
-    same planet) fall back to plain `density`, since the live data doesn't
-    split how much of their count is in which portion - `density` is the
-    honest total for those, not an area-adjusted figure. Each row is also
-    annotated with pure_poi (True if poi_tags is set with no "general"
-    entry). include_asteroids=False filters out ent.Asteroid debris fields,
-    keeping only regular numbered planets. Returns (system_name, planet,
-    sector, node_count, density, poi_tags, pure_poi, poi_area_density,
-    is_asteroid, temperature, temperature_name, attributes,
-    attribute_names) tuples."""
+    """Every known planet with this resource OR any of its known size-
+    variant siblings (see RESOURCE_SIZE_VARIANTS - e.g. querying "Coal
+    Clump" also pulls in a planet's "Big Coal Clump" rows, since it's the
+    same deposit; a player doesn't make two separate trips just because
+    part of a deposit happens to be the bigger node-size variant), combined
+    per planet into one row: node_count and density are summed (valid -
+    density is linearly proportional to count for a fixed planet, see
+    tools/backfill_galaxy_resources.py, so summing densities equals summing
+    counts then rescaling once), poi_tags is the union of every
+    contributing row's tags. poi_area_density is only re-combined (summed)
+    when every contributing row shares the EXACT same poi_tags string (same
+    POI footprint, so the same area denominator) - otherwise it's left None
+    and the combined row falls back to combined density, same as any other
+    genuinely mixed-portion row.
+
+    Sorted by "effective density" descending: `poi_area_density` when set,
+    otherwise plain `density` - both on the same scale (see
+    import_galaxy_resources), so this is a fair single ranking, not an
+    arbitrary pure-POI-first override. Each row is also annotated with
+    pure_poi (True if poi_tags is set with no "general" entry).
+    include_asteroids=False filters out ent.Asteroid debris fields, keeping
+    only regular numbered planets. Returns (system_name, planet, sector,
+    node_count, density, poi_tags, pure_poi, poi_area_density, is_asteroid,
+    temperature, temperature_name, attributes, attribute_names) tuples."""
+    family = _resource_family(resource_name)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    placeholders = ",".join("?" for _ in family)
     query = (
         "SELECT system_name, planet, sector, node_count, density, poi_tags,"
         " poi_area_density, is_asteroid, temperature, temperature_name,"
-        " attributes, attribute_names FROM galaxy_resources WHERE resource = ?"
+        f" attributes, attribute_names FROM galaxy_resources WHERE resource IN ({placeholders})"
     )
-    params = [resource_name]
+    params = list(family)
     if not include_asteroids:
         query += " AND is_asteroid IS NOT 1"
     c.execute(query, params)
@@ -1055,18 +1100,42 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     def is_pure_poi(poi_tags):
         return bool(poi_tags) and "general" not in poi_tags.split(",")
 
-    annotated = [
-        (
-            system_name, planet, sector, node_count, density, poi_tags,
-            is_pure_poi(poi_tags), poi_area_density, bool(is_asteroid),
-            temperature, temperature_name, attributes, attribute_names,
+    combined = {}
+    for (
+        system_name, planet, sector, node_count, density, poi_tags,
+        poi_area_density, is_asteroid, temperature, temperature_name,
+        attributes, attribute_names,
+    ) in rows:
+        entry = combined.setdefault((system_name, planet), {
+            "sector": sector, "node_count": 0, "density": 0.0,
+            "poi_tag_labels": set(), "poi_tags_seen": set(),
+            "poi_area_densities": [], "is_asteroid": is_asteroid,
+            "temperature": temperature, "temperature_name": temperature_name,
+            "attributes": attributes, "attribute_names": attribute_names,
+        })
+        entry["node_count"] += node_count or 0
+        entry["density"] += density or 0.0
+        entry["poi_tags_seen"].add(poi_tags)
+        if poi_tags:
+            entry["poi_tag_labels"].update(poi_tags.split(","))
+        if poi_area_density is not None:
+            entry["poi_area_densities"].append(poi_area_density)
+
+    annotated = []
+    for (system_name, planet), entry in combined.items():
+        poi_tags = ",".join(sorted(entry["poi_tag_labels"])) if entry["poi_tag_labels"] else None
+        poi_area_density = (
+            sum(entry["poi_area_densities"])
+            if len(entry["poi_tags_seen"]) == 1 and entry["poi_area_densities"]
+            else None
         )
-        for (
-            system_name, planet, sector, node_count, density, poi_tags,
-            poi_area_density, is_asteroid, temperature, temperature_name,
-            attributes, attribute_names,
-        ) in rows
-    ]
+        annotated.append((
+            system_name, planet, entry["sector"], entry["node_count"],
+            entry["density"], poi_tags, is_pure_poi(poi_tags), poi_area_density,
+            bool(entry["is_asteroid"]), entry["temperature"], entry["temperature_name"],
+            entry["attributes"], entry["attribute_names"],
+        ))
+
     annotated.sort(key=lambda r: -((r[7] if r[7] is not None else r[4]) or 0))
     return annotated
 
