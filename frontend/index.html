@@ -88,6 +88,16 @@
                 <input id="galaxy-combo" type="text" placeholder="Select a node type..." />
               </div>
             </div>
+            <div id="galaxy-current-system-row">
+              <label>Current system:</label>
+              <div id="galaxy-current-system-wrap" class="dropdown-anchor">
+                <input id="galaxy-current-system" type="text" placeholder="Where you are now..." />
+              </div>
+              <div id="galaxy-sort-mode">
+                <button type="button" class="tab-btn mode-btn active" id="galaxy-sort-rank" data-sort="rank">Best match</button>
+                <button type="button" class="tab-btn mode-btn" id="galaxy-sort-distance" data-sort="distance">Closest</button>
+              </div>
+            </div>
             <div id="galaxy-filters">
               <label><input type="checkbox" id="galaxy-filter-asteroids" /> Include asteroid fields</label>
               <div id="galaxy-climate-filter"></div>

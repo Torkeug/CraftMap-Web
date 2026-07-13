@@ -20,6 +20,15 @@
  * breakdown-tree.js's ingredient-location popup already uses) to mark
  * rows you've already found in-game with a LOGGED pin - the one place
  * manual and automatic data actually meet.
+ *
+ * "Current system" (galaxy-current-system) is a manually re-typed stand-in
+ * for where the player currently is - CraftMap never reads the live game
+ * process (see this project's own CLAUDE.md), so there's no other way to
+ * know. Once set, every row gets a jump-hop-count badge (BFS over
+ * galaxy_systems' nearSystemNames graph - see backend.db.
+ * get_galaxy_hop_distances' own docstring for why hop count, not
+ * straight-line distance, is the meaningful "closest" metric here) shown
+ * regardless of sort mode; the rank/distance toggle only changes ORDER.
  */
 (function () {
   const comboInput = document.getElementById("galaxy-combo");
@@ -28,6 +37,9 @@
   const climateFilterEl = document.getElementById("galaxy-climate-filter");
   const countLabelEl = document.getElementById("galaxy-count-label");
   const rowsEl = document.getElementById("galaxy-rows");
+  const currentSystemInput = document.getElementById("galaxy-current-system");
+  const sortRankBtn = document.getElementById("galaxy-sort-rank");
+  const sortDistanceBtn = document.getElementById("galaxy-sort-distance");
 
   let currentNode = null;
   let currentRows = []; // raw rows from the last fetch (post asteroid-filter, pre climate-filter)
@@ -38,6 +50,17 @@
   // marked even after toggling asteroids/climate), cleared on loadNode's
   // own logic once a genuinely different node is loaded.
   let highlightTarget = null;
+
+  // "Current system" (js/deposits.js has no notion of this - CraftMap
+  // never reads the live game process, see this project's own CLAUDE.md,
+  // so this is a manually-typed stand-in for "where you are right now",
+  // re-entered as you travel during a session, not persisted across app
+  // restarts). sortMode "distance" only actually reorders rows once
+  // hopDistances has resolved for the current pick - see setCurrentSystem.
+  let currentSystemName = null;
+  let hopDistances = null; // {system_name: hop_count} for currentSystemName, or null
+  const hopDistancesCache = new Map(); // system_name -> already-fetched hop dict
+  let sortMode = "rank"; // "rank" (density-based, server order) | "distance" (hop count)
 
   function isHighlightedRow(row) {
     return (
@@ -144,7 +167,7 @@
   }
 
   // ---- row rendering ----
-  function makeRow(row, rank, isTop, effective, best, logged, highlighted) {
+  function makeRow(row, rank, isTop, effective, best, logged, highlighted, hops) {
     const wrapper = document.createElement("div");
     wrapper.className =
       "galaxy-row" + (isTop ? " top" : "") + (highlighted ? " highlighted expanded" : "");
@@ -178,6 +201,25 @@
       pinEl.className = "galaxy-pin";
       pinEl.textContent = "LOGGED";
       top.appendChild(pinEl);
+    }
+
+    // Only rendered once a current system is set AND its hop-distance graph
+    // has resolved (see setCurrentSystem) - shown regardless of sortMode,
+    // since it's useful context even while sorted by rank. hops === null
+    // means the row's own system hasn't been confirmed reachable through
+    // any explored jump lane yet (not necessarily unreachable - just not
+    // seen in the dump's own nearSystemNames data).
+    if (hops !== undefined) {
+      const hopsEl = document.createElement("span");
+      if (hops === null) {
+        hopsEl.className = "galaxy-hops unreachable";
+        hopsEl.textContent = "? hops";
+        hopsEl.title = "No known jump-lane path from your current system yet";
+      } else {
+        hopsEl.className = "galaxy-hops";
+        hopsEl.textContent = hops === 0 ? "here" : `${hops} hop${hops === 1 ? "" : "s"}`;
+      }
+      top.appendChild(hopsEl);
     }
 
     const relEl = document.createElement("span");
@@ -268,13 +310,33 @@
     }
     const loggedRows = await CraftMapApi.call("get_deposits_for_ingredient", currentNode);
     const loggedKeys = new Set(loggedRows.map((r) => `${r.system_name}|${r.planet}`));
-    const best = visible[0].poi_area_density ?? visible[0].density;
+    // Max, not visible[0] - visible[0] is only the best-density row when
+    // still in the backend's own density-sorted order, which distance
+    // sorting below deliberately overrides.
+    const best = Math.max(...visible.map((row) => row.poi_area_density ?? row.density));
+
+    const hopFor = (row) =>
+      hopDistances ? (Object.prototype.hasOwnProperty.call(hopDistances, row.system_name)
+        ? hopDistances[row.system_name]
+        : null) : undefined;
+
+    if (sortMode === "distance" && hopDistances) {
+      visible.sort((a, b) => {
+        const ha = hopFor(a);
+        const hb = hopFor(b);
+        const da = ha === null ? Infinity : ha;
+        const db = hb === null ? Infinity : hb;
+        return da - db;
+      });
+    }
+
     let highlightEl = null;
     visible.forEach((row, i) => {
       const effective = row.poi_area_density ?? row.density;
       const logged = loggedKeys.has(`${row.system_name}|${row.planet}`);
       const highlighted = isHighlightedRow(row);
-      const rowEl = makeRow(row, i + 1, i === 0, effective, best, logged, highlighted);
+      const hops = hopFor(row);
+      const rowEl = makeRow(row, i + 1, i === 0, effective, best, logged, highlighted, hops);
       if (highlighted) highlightEl = rowEl;
       rowsEl.appendChild(rowEl);
     });
@@ -343,11 +405,57 @@
     });
   }
 
+  // Fetches (and caches, per system name - the graph doesn't depend on
+  // which node type is currently shown) the hop-distance map for a newly
+  // picked "current system", then re-renders so hop badges/sort react
+  // immediately. A name with no known system_name match resolves to an
+  // empty dict server-side (see backend.db.get_galaxy_hop_distances) -
+  // every row's hop badge then reads as "? hops" rather than silently
+  // doing nothing, so a typo is visible instead of invisible.
+  async function setCurrentSystem(name) {
+    currentSystemName = name || null;
+    hopDistances = null;
+    if (!currentSystemName) {
+      await renderRows();
+      return;
+    }
+    if (hopDistancesCache.has(currentSystemName)) {
+      hopDistances = hopDistancesCache.get(currentSystemName);
+    } else {
+      hopDistances = await CraftMapApi.call("get_galaxy_hop_distances", currentSystemName);
+      hopDistancesCache.set(currentSystemName, hopDistances);
+    }
+    await renderRows();
+  }
+
+  function setupCurrentSystemDropdown() {
+    new LiveDropdown(currentSystemInput, {
+      getValues: () => CraftMapApi.call("get_galaxy_system_names"),
+      onSelect: (name) => setCurrentSystem(name),
+    });
+    currentSystemInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        setCurrentSystem(currentSystemInput.value.trim());
+      }
+    });
+  }
+
+  function setSortMode(mode) {
+    sortMode = mode;
+    sortRankBtn.classList.toggle("active", mode === "rank");
+    sortDistanceBtn.classList.toggle("active", mode === "distance");
+    renderRows();
+  }
+
+  sortRankBtn.addEventListener("click", () => setSortMode("rank"));
+  sortDistanceBtn.addEventListener("click", () => setSortMode("distance"));
+
   asteroidCheckbox.addEventListener("change", () => {
     if (currentNode) loadNode(currentNode);
   });
 
   setupDropdown();
+  setupCurrentSystemDropdown();
   renderRows();
 
   // ---- external entry point: js/sources.js's double-click, or

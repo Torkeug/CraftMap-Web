@@ -65,6 +65,16 @@ composite_rows_for_planet's own docstring for the full reasoning and why
 its count/density are a conservative MIN across members, not an exact
 per-spot figure.
 
+Also imports galaxy_systems (a separate table, see load_system_rows and
+backend.db's own docstring for it) from systemPosition/nearSystemNames -
+system-level facts carried on every planet entry, including planets with
+no resourceCounts at all (a system with no mineral data can still be a
+real jump-hop on the way to one that does, so it's collected independently
+of the resourceCounts-gated logic above). Powers the Galaxy sub-tab's
+"current system" jump-hop distance sort - see get_galaxy_hop_distances'
+own docstring for why hop count (not straight-line systemPosition
+distance) is the meaningful "closest" metric for travel planning.
+
 Usage:
     python tools/backfill_galaxy_resources.py
     python tools/backfill_galaxy_resources.py --dump-path path/to/galaxy_resources.json
@@ -256,6 +266,33 @@ def load_rows(dump_path):
     return rows
 
 
+def load_system_rows(dump_path):
+    """One (system_name, x, y, z, near_system_names) tuple per distinct
+    system_name across ALL planet entries in the dump - independent of
+    whether that planet has resourceCounts (unlike load_rows above), since
+    systemPosition/nearSystemNames are system-level facts and a system with
+    no mineral data can still be a real jump-hop on the way to one that
+    does. First-seen entry per system wins (identical across every planet
+    in the same system anyway - both fields describe the SYSTEM, not the
+    planet, even though the dump repeats them on every planet entry)."""
+    planets = json.loads(dump_path.read_text(encoding="utf-8"))
+    seen = {}
+    for p in planets:
+        system_name = p.get("system_name")
+        if not system_name or system_name in seen:
+            continue
+        pos = p.get("systemPosition") or {}
+        near = p.get("nearSystemNames") or []
+        seen[system_name] = (
+            system_name,
+            pos.get("x"),
+            pos.get("y"),
+            pos.get("z"),
+            ",".join(near) if near else None,
+        )
+    return list(seen.values())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -278,6 +315,7 @@ def main():
 
     init_db()
     rows = load_rows(dump_path)
+    system_rows = load_system_rows(dump_path)
 
     if args.dry_run:
         existing = db.get_galaxy_resource_keys()
@@ -286,6 +324,12 @@ def main():
             f"Would add {len(new_rows)} of {len(rows)} parsed resource rows"
             f" ({len(rows) - len(new_rows)} already present) from {dump_path}."
         )
+        existing_systems = set(db.get_galaxy_system_names())
+        new_systems = [s for s in system_rows if s[0] not in existing_systems]
+        print(
+            f"Would add/refresh {len(system_rows)} systems' position/neighbor data"
+            f" ({len(new_systems)} not previously known) for jump-hop distance."
+        )
         return
 
     inserted = db.import_galaxy_resources(rows)
@@ -293,6 +337,8 @@ def main():
         f"Imported {inserted} new resource rows"
         f" ({len(rows) - inserted} already present) from {dump_path}."
     )
+    db.import_galaxy_systems(system_rows)
+    print(f"Refreshed position/neighbor data for {len(system_rows)} systems.")
 
 
 if __name__ == "__main__":

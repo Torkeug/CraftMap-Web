@@ -4,6 +4,7 @@ the existing tkinter app; see paths.py.
 """
 
 import sqlite3
+from collections import deque
 
 from .paths import DB_PATH
 
@@ -202,6 +203,15 @@ def init_db():
         c.execute("ALTER TABLE galaxy_resources ADD COLUMN attributes TEXT")
     if "attribute_names" not in galaxy_cols:
         c.execute("ALTER TABLE galaxy_resources ADD COLUMN attribute_names TEXT")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS galaxy_systems (
+            system_name TEXT PRIMARY KEY,
+            x REAL,
+            y REAL,
+            z REAL,
+            near_system_names TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -1167,6 +1177,84 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
 
     annotated.sort(key=lambda r: -((r[7] if r[7] is not None else r[4]) or 0))
     return annotated
+
+
+# ---- Galaxy systems (jump-hop distance - tools/backfill_galaxy_resources.py) ----
+# Separate from galaxy_resources: systemPosition/nearSystemNames are
+# system-level facts carried on EVERY planet entry in the dump, including
+# planets with no resourceCounts at all (galaxy_resources only ever gets
+# rows for planets that DO have live counts - see import_galaxy_resources) -
+# a system with no mineral data can still be a real hop on the way to one
+# that does, so it needs to exist here even when it has no galaxy_resources
+# rows of its own.
+
+
+def import_galaxy_systems(rows):
+    """Bulk INSERT OR REPLACE galaxy_systems rows - `rows` is a list of
+    (system_name, x, y, z, near_system_names) tuples, near_system_names a
+    comma-joined list of directly jump-connected neighbor system names.
+    REPLACE (not IGNORE, unlike import_galaxy_resources) since a system's
+    own neighbor list can grow as more jump lanes are discovered around it
+    over further play - re-running the backfill should pick up the latest
+    known connectivity, not freeze on whatever was known the first time
+    that system was ever seen."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.executemany(
+        "INSERT OR REPLACE INTO galaxy_systems (system_name, x, y, z, near_system_names)"
+        " VALUES (?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_galaxy_system_names():
+    """Every system with known position/neighbor data - for the Galaxy
+    sub-tab's "current system" autocomplete. Broader than
+    get_galaxy_resource_names' own system_name column (that's scoped to
+    whatever resource is currently selected) - this covers every system
+    the player has ever passed through, resource data or not."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT system_name FROM galaxy_systems ORDER BY system_name COLLATE NOCASE")
+    rows = [r[0] for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_galaxy_hop_distances(from_system):
+    """Plain BFS over the galaxy_systems jump-connection graph, starting at
+    from_system. Returns {system_name: hop_count} for every system
+    reachable from it (from_system itself maps to 0); a system not present
+    in the returned dict simply hasn't been confirmed reachable through
+    explored jump lanes yet. Edges are treated as bidirectional - a jump
+    lane works both ways in-game even if the dump only captured the
+    connection from one side's own nearSystemNames. Returns {} if
+    from_system isn't a known system at all."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT system_name, near_system_names FROM galaxy_systems")
+    graph = {}
+    for name, neighbors in c.fetchall():
+        graph.setdefault(name, set())
+        if neighbors:
+            for neighbor in neighbors.split(","):
+                graph[name].add(neighbor)
+                graph.setdefault(neighbor, set()).add(name)
+    conn.close()
+
+    if from_system not in graph:
+        return {}
+    dist = {from_system: 0}
+    queue = deque([from_system])
+    while queue:
+        current = queue.popleft()
+        for neighbor in graph[current]:
+            if neighbor not in dist:
+                dist[neighbor] = dist[current] + 1
+                queue.append(neighbor)
+    return dist
 
 
 def set_queue_checked_many(queue_id, path_keys, checked):

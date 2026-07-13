@@ -907,6 +907,43 @@
   flex-wrap: wrap;
 }
 
+#galaxy-current-system-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#galaxy-current-system-row label {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+#galaxy-current-system {
+  width: 160px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#galaxy-current-system:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#galaxy-sort-mode {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
 #galaxy-rows-header .col-hint {
   width: 44px;
 }
@@ -1032,6 +1069,23 @@
   background: var(--good);
   border-radius: 7px;
   padding: 0 4px;
+}
+
+.galaxy-hops {
+  flex: 0 0 auto;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 7px;
+  padding: 0 4px;
+}
+
+.galaxy-hops.unreachable {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  font-weight: 400;
 }
 
 .galaxy-rel {

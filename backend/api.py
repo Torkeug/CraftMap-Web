@@ -325,6 +325,22 @@ class Api:
             )
         ]
 
+    def get_galaxy_system_names(self):
+        """Every system with known position/jump-neighbor data - broader
+        than get_galaxy_resource_names' own systems (scoped to whatever
+        resource is selected), for the Galaxy sub-tab's "current system"
+        autocomplete."""
+        return db.get_galaxy_system_names()
+
+    def get_galaxy_hop_distances(self, from_system):
+        """{system_name: hop_count} for every system reachable from
+        from_system via known jump lanes (see db.get_galaxy_hop_distances'
+        own docstring for why hop count, not straight-line distance, is
+        the meaningful "closest" metric) - fetched once per "current
+        system" pick, not per node-type browsed, since it doesn't depend
+        on which resource is currently shown."""
+        return db.get_galaxy_hop_distances(from_system)
+
     def get_recipe_breakdown(self, name, qty_needed=1.0, root_recipe_id=None):
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()

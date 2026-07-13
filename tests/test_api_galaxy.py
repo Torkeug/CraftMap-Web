@@ -91,3 +91,27 @@ def test_get_galaxy_sources_excludes_asteroids_by_default(api):
 
 def test_get_galaxy_sources_for_unknown_node_returns_empty(api):
     assert api.get_galaxy_sources("Nonexistent") == []
+
+
+def test_get_galaxy_system_names(api):
+    db_module.import_galaxy_systems([
+        ("Talion", 0, 0, 0, "Cisax"),
+        ("Cisax", 1, 1, 1, "Talion"),
+    ])
+    names = api.get_galaxy_system_names()
+    json.dumps(names)
+    assert names == ["Cisax", "Talion"]
+
+
+def test_get_galaxy_hop_distances(api):
+    db_module.import_galaxy_systems([
+        ("Talion", 0, 0, 0, "Cisax"),
+        ("Cisax", 1, 1, 1, "Retyx"),
+    ])
+    dist = api.get_galaxy_hop_distances("Talion")
+    json.dumps(dist)
+    assert dist == {"Talion": 0, "Cisax": 1, "Retyx": 2}
+
+
+def test_get_galaxy_hop_distances_for_unknown_system_returns_empty(api):
+    assert api.get_galaxy_hop_distances("Nonexistent") == {}

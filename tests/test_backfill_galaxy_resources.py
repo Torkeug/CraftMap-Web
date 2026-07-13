@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tools.backfill_galaxy_resources import (  # noqa: E402
     composite_rows_for_planet,
     load_rows,
+    load_system_rows,
     poi_surface,
 )
 
@@ -175,3 +176,45 @@ def test_load_rows_appends_composite_row_with_no_poi_tags(tmp_path):
     assert combo[5] == 0.5  # density - min across members
     assert combo[6] is None  # poi_tags
     assert combo[7] is None  # poi_area_density
+
+
+def test_load_system_rows_includes_planets_with_no_resource_counts(tmp_path):
+    # A system-only entry (no resourceCounts at all) must still contribute
+    # its position/neighbor data - it's a real jump-hop even with no
+    # mineral data of its own, unlike load_rows' own resourceCounts-gated
+    # skip logic.
+    dump = [
+        {
+            "system_name": "Sys1",
+            "planet_name": "PlanetA",
+            "systemPosition": {"x": 1.5, "y": -2.0, "z": 3.0},
+            "nearSystemNames": ["Sys2", "Sys3"],
+        },
+    ]
+    dump_path = tmp_path / "galaxy_resources.json"
+    dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+    rows = load_system_rows(dump_path)
+    assert rows == [("Sys1", 1.5, -2.0, 3.0, "Sys2,Sys3")]
+
+
+def test_load_system_rows_dedupes_by_system_first_seen_wins(tmp_path):
+    dump = [
+        {
+            "system_name": "Sys1",
+            "planet_name": "PlanetA",
+            "systemPosition": {"x": 1.0, "y": 1.0, "z": 1.0},
+            "nearSystemNames": ["Sys2"],
+        },
+        {
+            "system_name": "Sys1",
+            "planet_name": "PlanetB",
+            "systemPosition": {"x": 999, "y": 999, "z": 999},
+            "nearSystemNames": ["SomethingElse"],
+        },
+    ]
+    dump_path = tmp_path / "galaxy_resources.json"
+    dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+    rows = load_system_rows(dump_path)
+    assert rows == [("Sys1", 1.0, 1.0, 1.0, "Sys2")]
