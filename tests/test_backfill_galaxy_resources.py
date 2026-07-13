@@ -93,6 +93,14 @@ def test_load_rows_leaves_poi_area_density_none_when_a_poi_size_is_missing(tmp_p
     assert rows[0][7] is None
 
 
+ALL_DEPOSIT_TYPES = {
+    "Coal Deposit": "PlanetResource_Deposit",
+    "Iron Deposit": "PlanetResource_Deposit",
+    "Titanium Deposit": "PlanetResource_Deposit",
+    "Vitriol Deposit": "PlanetResource_Deposit",
+}
+
+
 def test_composite_rows_for_planet_joins_names_and_takes_min_across_members():
     deposit_group_sizes = [
         {
@@ -107,7 +115,7 @@ def test_composite_rows_for_planet_joins_names_and_takes_min_across_members():
     counts = {"Coal Deposit": 40, "Iron Deposit": 12, "Titanium Deposit": 25}
     densities = {"Coal Deposit": 2.1, "Iron Deposit": 0.5, "Titanium Deposit": 1.3}
 
-    combos = composite_rows_for_planet(deposit_group_sizes, counts, densities)
+    combos = composite_rows_for_planet(deposit_group_sizes, counts, densities, ALL_DEPOSIT_TYPES)
 
     assert combos == [
         ("Coal Deposit / Iron Deposit / Titanium Deposit", 12, 0.5),
@@ -128,7 +136,7 @@ def test_composite_rows_for_planet_skips_single_member_and_missing_counts():
     counts = {"Coal Deposit": 40}
     densities = {"Coal Deposit": 2.1}
 
-    assert composite_rows_for_planet(deposit_group_sizes, counts, densities) == []
+    assert composite_rows_for_planet(deposit_group_sizes, counts, densities, ALL_DEPOSIT_TYPES) == []
 
 
 def test_composite_rows_for_planet_dedupes_same_member_set():
@@ -145,8 +153,36 @@ def test_composite_rows_for_planet_dedupes_same_member_set():
     counts = {"Coal Deposit": 10, "Iron Deposit": 5}
     densities = {"Coal Deposit": 1.0, "Iron Deposit": 0.4}
 
-    combos = composite_rows_for_planet(deposit_group_sizes, counts, densities)
+    combos = composite_rows_for_planet(deposit_group_sizes, counts, densities, ALL_DEPOSIT_TYPES)
     assert len(combos) == 1
+
+
+def test_composite_rows_for_planet_skips_non_deposit_members():
+    # resGroup co-spawn data also covers regular hand-gathered nodes and
+    # geysers, not just Deposit-type auto-extractor clusters - grouping
+    # those the same way was a real bug (they're a different kind of fact,
+    # not "one extractor covers both"), so anything with a non-Deposit
+    # member must be skipped entirely.
+    deposit_group_sizes = [
+        {
+            "resGroup": "GD_RegularOnly",
+            "sizes": [{"resource": "Cinnabar"}, {"resource": "Malachite"}],
+        },
+        {
+            "resGroup": "GD_Mixed",
+            "sizes": [{"resource": "Coal Deposit"}, {"resource": "Mercury Geyser"}],
+        },
+    ]
+    counts = {"Cinnabar": 10, "Malachite": 8, "Coal Deposit": 40, "Mercury Geyser": 3}
+    densities = {"Cinnabar": 0.1, "Malachite": 0.2, "Coal Deposit": 2.1, "Mercury Geyser": 0.05}
+    node_item_types = {
+        "Cinnabar": "PlanetResource_RegularNode",
+        "Malachite": "PlanetResource_RegularNode",
+        "Coal Deposit": "PlanetResource_Deposit",
+        "Mercury Geyser": "PlanetResource_Geyser",
+    }
+
+    assert composite_rows_for_planet(deposit_group_sizes, counts, densities, node_item_types) == []
 
 
 def test_load_rows_appends_composite_row_with_no_poi_tags(tmp_path):

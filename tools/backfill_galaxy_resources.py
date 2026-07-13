@@ -58,12 +58,16 @@ Also synthesizes composite entity rows from depositGroupSizes (per-planet
 list of {resGroup, sizes: [{resource, min, max}]} - which Deposit-type
 resources share one physical auto-extractor spot on THIS planet, since a
 resGroup's possible members are static per-resGroup-id but which resGroup
-id spawned is per-planet). Each distinct resGroup with 2+ member resources
-becomes its own extra galaxy_resources row named e.g. "Coal Deposit / Iron
-Deposit", independently searchable/rankable from either member alone - see
-composite_rows_for_planet's own docstring for the full reasoning and why
-its count/density are a conservative MIN across members, not an exact
-per-spot figure.
+id spawned is per-planet). Each distinct resGroup with 2+ member resources,
+where EVERY member is itself a PlanetResource_Deposit node type (checked
+against game_data_extract/resource_nodes.json - depositGroupSizes also
+covers RegularNode/Geyser co-spawn clusters, which are a different kind of
+fact and deliberately excluded here, see composite_rows_for_planet's own
+docstring), becomes its own extra galaxy_resources row named e.g. "Coal
+Deposit / Iron Deposit", independently searchable/rankable from either
+member alone. Its count/density are a conservative MIN across members, not
+an exact per-spot figure - see composite_rows_for_planet's own docstring
+for the full reasoning.
 
 Also imports galaxy_systems (a separate table, see load_system_rows and
 backend.db's own docstring for it) from systemPosition/nearSystemNames -
@@ -91,6 +95,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 from backend import db  # noqa: E402
 from backend.db import init_db  # noqa: E402
+from tools.report_resource_name_mismatches import (  # noqa: E402
+    DEPOSIT_ITEM_TYPE,
+    load_node_item_types,
+)
 
 # Local-machine-only default - the sibling repo's own dump output, never
 # copied into this repo (see this module's own docstring).
@@ -145,12 +153,14 @@ def composite_resource_name(names):
     return COMPOSITE_NAME_SEP.join(sorted(names))
 
 
-def composite_rows_for_planet(deposit_group_sizes, counts, densities):
+def composite_rows_for_planet(deposit_group_sizes, counts, densities, node_item_types):
     """One (name, count, density) tuple per distinct resGroup in
-    depositGroupSizes that has 2+ distinct resource names and live count
-    data for ALL of them on this planet - e.g. GD_3_IronTitaniumCarbon's
-    ['Coal Deposit', 'Iron Deposit', 'Titanium Deposit'] becomes a single
-    "Coal Deposit / Iron Deposit / Titanium Deposit" entity.
+    depositGroupSizes that has 2+ distinct resource names, live count data
+    for ALL of them on this planet, AND is made up ENTIRELY of
+    PlanetResource_Deposit (auto-drilled) node types - e.g.
+    GD_3_IronTitaniumCarbon's ['Coal Deposit', 'Iron Deposit', 'Titanium
+    Deposit'] becomes a single "Coal Deposit / Iron Deposit / Titanium
+    Deposit" entity.
 
     Why this needs to be a real row of its own rather than a note on each
     member's individual row: a resGroup is a single physical drilling spot
@@ -160,6 +170,17 @@ def composite_rows_for_planet(deposit_group_sizes, counts, densities):
     separately (a planet can easily have both without them being
     co-located), so it needs to be independently searchable/rankable, not
     merely surfaced while browsing a single resource.
+
+    Why the itemType filter: resGroup co-spawn data isn't exclusive to
+    Deposit-type auto-extractor clusters - the SAME depositGroupSizes field
+    also carries resGroups for regular hand-gathered surface nodes
+    (PlanetResource_RegularNode) and geysers, confirmed against live dump
+    data (see tests/test_backfill_galaxy_resources.py). "One auto-extractor
+    covers both ores" is a real, useful distinction for Deposit-type
+    resources; for a RegularNode or Geyser, "found near each other" isn't
+    the same kind of fact and isn't what this feature was built for, so
+    those combinations are skipped entirely rather than synthesizing a
+    misleading composite entity for them.
 
     depositGroupSizes only tells us WHICH resources share a resGroup on
     this planet, not how resourceCounts/resourceDensities (unsplit by
@@ -181,6 +202,8 @@ def composite_rows_for_planet(deposit_group_sizes, counts, densities):
         names = sorted({s.get("resource") for s in (group.get("sizes") or []) if s.get("resource")})
         if len(names) < 2:
             continue
+        if not all(node_item_types.get(n) == DEPOSIT_ITEM_TYPE for n in names):
+            continue
         key = tuple(names)
         if key in seen or not all(n in counts for n in names):
             continue
@@ -192,6 +215,7 @@ def composite_rows_for_planet(deposit_group_sizes, counts, densities):
 
 def load_rows(dump_path):
     planets = json.loads(dump_path.read_text(encoding="utf-8"))
+    node_item_types = load_node_item_types()
     rows = []
     for p in planets:
         system_name = p.get("system_name")
@@ -246,7 +270,7 @@ def load_rows(dump_path):
             ))
 
         for combo_name, combo_count, combo_density in composite_rows_for_planet(
-            p.get("depositGroupSizes"), counts, densities
+            p.get("depositGroupSizes"), counts, densities, node_item_types
         ):
             rows.append((
                 system_name,
