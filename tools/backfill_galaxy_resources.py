@@ -54,6 +54,17 @@ raw generation-time attributes - water presence, radioactive, foggy, etc,
 not just temperature - see dump_galaxy_resources.py's own CLAUDE.md,
 "planet.inf.attributes"), comma-joined the same way poi_tags already is.
 
+Also synthesizes composite entity rows from depositGroupSizes (per-planet
+list of {resGroup, sizes: [{resource, min, max}]} - which Deposit-type
+resources share one physical auto-extractor spot on THIS planet, since a
+resGroup's possible members are static per-resGroup-id but which resGroup
+id spawned is per-planet). Each distinct resGroup with 2+ member resources
+becomes its own extra galaxy_resources row named e.g. "Coal Deposit / Iron
+Deposit", independently searchable/rankable from either member alone - see
+composite_rows_for_planet's own docstring for the full reasoning and why
+its count/density are a conservative MIN across members, not an exact
+per-spot figure.
+
 Usage:
     python tools/backfill_galaxy_resources.py
     python tools/backfill_galaxy_resources.py --dump-path path/to/galaxy_resources.json
@@ -113,6 +124,62 @@ def poi_surface(poi_size):
     return (angle * 2) ** 2 * PLANET_DENSITY_POI_SCALE / (4 * math.pi)
 
 
+# Joins a resGroup's member resource names into one composite entity name -
+# see composite_rows_for_planet's own docstring for why these need to exist
+# as their own searchable galaxy_resources rows, not just an annotation on
+# each member's individual row.
+COMPOSITE_NAME_SEP = " / "
+
+
+def composite_resource_name(names):
+    return COMPOSITE_NAME_SEP.join(sorted(names))
+
+
+def composite_rows_for_planet(deposit_group_sizes, counts, densities):
+    """One (name, count, density) tuple per distinct resGroup in
+    depositGroupSizes that has 2+ distinct resource names and live count
+    data for ALL of them on this planet - e.g. GD_3_IronTitaniumCarbon's
+    ['Coal Deposit', 'Iron Deposit', 'Titanium Deposit'] becomes a single
+    "Coal Deposit / Iron Deposit / Titanium Deposit" entity.
+
+    Why this needs to be a real row of its own rather than a note on each
+    member's individual row: a resGroup is a single physical drilling spot
+    an auto-extractor sits on - "does this planet have a spot that produces
+    BOTH Coal and Iron together" is a genuinely different question than
+    "does this planet have Coal" and "does this planet have Iron"
+    separately (a planet can easily have both without them being
+    co-located), so it needs to be independently searchable/rankable, not
+    merely surfaced while browsing a single resource.
+
+    depositGroupSizes only tells us WHICH resources share a resGroup on
+    this planet, not how resourceCounts/resourceDensities (unsplit by
+    resGroup variant) divide between that shared spot and any OTHER
+    resGroup a member resource might also independently spawn in - so
+    node_count/density for the composite row is the MIN across its
+    members: a conservative lower bound on what that specific shared spot
+    actually provides (never overstates it), not a claim at an exact
+    per-spot figure the dump data can't provide.
+
+    Deposit-type resources are confirmed (checked against live dump data)
+    to never carry a POI tag - they're auto-drilled planet-wide, not tied
+    to a walkable POI - so composite rows always rank on plain density,
+    same as any other "general" resource; callers should not attempt
+    poi_area_density for them."""
+    seen = set()
+    combos = []
+    for group in deposit_group_sizes or []:
+        names = sorted({s.get("resource") for s in (group.get("sizes") or []) if s.get("resource")})
+        if len(names) < 2:
+            continue
+        key = tuple(names)
+        if key in seen or not all(n in counts for n in names):
+            continue
+        seen.add(key)
+        density = min(densities[n] for n in names) if all(n in densities for n in names) else None
+        combos.append((composite_resource_name(names), min(counts[n] for n in names), density))
+    return combos
+
+
 def load_rows(dump_path):
     planets = json.loads(dump_path.read_text(encoding="utf-8"))
     rows = []
@@ -161,6 +228,25 @@ def load_rows(dump_path):
                 densities.get(resource),
                 ",".join(sorted(poi_tags)) if poi_tags else None,
                 poi_area_density,
+                is_asteroid,
+                temperature,
+                temperature_name,
+                ",".join(attributes) if attributes else None,
+                ",".join(attribute_names) if attribute_names else None,
+            ))
+
+        for combo_name, combo_count, combo_density in composite_rows_for_planet(
+            p.get("depositGroupSizes"), counts, densities
+        ):
+            rows.append((
+                system_name,
+                planet,
+                sector,
+                combo_name,
+                combo_count,
+                combo_density,
+                None,  # poi_tags - Deposit-type resources are never POI-anchored
+                None,  # poi_area_density
                 is_asteroid,
                 temperature,
                 temperature_name,

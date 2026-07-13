@@ -279,6 +279,22 @@ def insert_row(res_type, resource, sector, system_name, planet, notes, logged_at
     conn.close()
 
 
+def rename_deposit_resource(old_name, new_name):
+    """Bulk-renames every deposits row using old_name to new_name - used by
+    tools/fix_resource_name_mismatches.py to reconcile a manually-typed
+    resource name with galaxy_resources' own node-type spelling (e.g.
+    "Pyrite" -> "Pyrite Formation"), so get_deposits_for_ingredient's
+    exact-match LOGGED-pin lookup (see frontend/js/galaxy.js) can find it.
+    Returns the number of rows updated."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE deposits SET resource=? WHERE resource=?", (new_name, old_name))
+    conn.commit()
+    updated = c.rowcount
+    conn.close()
+    return updated
+
+
 def update_row(
     row_id, res_type, resource, sector, system_name, planet, notes, logged_at
 ):
