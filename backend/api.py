@@ -63,6 +63,11 @@ class Api:
         # mirroring craftmap/overlay.py's CraftQueuePanel._toggle_pin) and
         # already owns the hotkey thread/handle.
         self._app_ctrl = None
+        # Per-job cache of build_occurrence_specs's flattened, checked-
+        # state-independent structural walk, for the Totals view - see
+        # _get_totals_job_specs.
+        # {queue_id: ((recipe_id, qty, station, mode), specs)}.
+        self._totals_specs_cache = {}
 
     # ---- config ----
 
@@ -88,6 +93,25 @@ class Api:
     def set_view_mode(self, mode):
         cfg = config.load_config()
         cfg["view_mode"] = mode
+        config.save_config(cfg)
+        return True
+
+    # A breakdown tree's expand/collapse state (frontend/js/breakdown-
+    # tree.js's rootOpen/openNodeKeys) is otherwise pure in-memory JS state
+    # that resets on every app restart, unlike the deposit tree's
+    # collapsed_nodes above - `tree_key` namespaces this the same way
+    # across the recipe panel's tree and the Craft Queue's tree (each its
+    # own BreakdownTree.createRenderer instance, see their own `persistKey`
+    # constants) so their keys - which can otherwise collide, e.g. both
+    # trees using a bare ingredient name as a path_key - never mix.
+    def get_tree_expand_state(self, tree_key):
+        return config.load_config().get("tree_expand_state", {}).get(
+            tree_key, {"root_open": True, "open_keys": []}
+        )
+
+    def set_tree_expand_state(self, tree_key, state):
+        cfg = config.load_config()
+        cfg.setdefault("tree_expand_state", {})[tree_key] = state
         config.save_config(cfg)
         return True
 
@@ -577,18 +601,10 @@ class Api:
         db.set_queue_checked_many(queue_id, path_keys, checked)
         return True
 
-    # Sentinel queue_id for the Totals view's own "All Jobs" aggregate
-    # checked state - SQLite has no FK enforcement on queue_checked, so
-    # reusing an id no real job can have (real ids start at 1) is safe.
-    # Matches craftmap/overlay.py's CraftQueuePanel._TOTALS_QID.
-    _TOTALS_QID = 0
-
     def clear_all_queue_checked(self):
-        """'Clear done' button - clears every job's checked state plus the
-        Totals view's own aggregate state."""
+        """'Clear done' button - clears every job's checked state."""
         for row in db.get_craft_queue():
             db.clear_queue_checked(row[0])
-        db.clear_queue_checked(self._TOTALS_QID)
         return True
 
     def _notify_queue_window_changed(self):
@@ -656,90 +672,162 @@ class Api:
         else:
             node["craft_mode"] = "auto" if auto_s else "manual"
 
-    def get_queue_totals_view(self):
-        """Aggregate raw materials + basic-crafted items across every
-        combine-flagged queued job's FULL (non-depth-limited) tree, plus a
-        per-job breakdown when there's more than one job. Deliberately does
-        this aggregation server-side rather than sending N full trees
-        across the pywebview bridge for the frontend to flatten (as
-        recipe-panel.js's single-recipe Totals mode does with its one
-        already-fetched tree) - a queue can easily have several sizeable
-        trees, and payload *size* is what's expensive over this bridge, not
-        call count (see backend/api.py's module docstring / the recipe-
-        panel debugging notes). Improves on craftmap/overlay.py's
-        CraftQueuePanel._render_totals in one way: that method's combined-
-        entry dict dropped manual_craft_seconds/craft_mode/stations/alts
-        when tallying across jobs (only collect_basic_crafted's per-job
-        entries had them), which silently disabled the station/alt step
-        popover on combined Totals entries. Kept here."""
-        jobs = db.get_craft_queue()
+    def _get_totals_job_specs(self, job, force_full=False):
+        """Resolve one queued job's FULL (non-depth-limited) tree and
+        flatten it into resolver.build_occurrence_specs's structural,
+        checked-state-INDEPENDENT list, for Totals-view purposes -
+        reusing frontend/js/recipe-panel.js's own cached-tree principle
+        (see its refreshBreakdown comment): the expensive part is
+        resolve_recipe_tree's DB queries + recursive tree construction
+        PLUS building every node's path_key/display metadata, none of
+        which depend on checked-state - and unlike a plain checkbox
+        toggle (which only changes checked-state), none of that needs to
+        happen again unless something that actually changes the tree's
+        SHAPE occurred. Caching just the resolved tree (an earlier version
+        of this method) wasn't enough on its own - the per-render
+        aggregation walk over that tree was still the dominant cost even
+        with the resolve itself cached; caching the already-flattened
+        specs instead means a plain re-render only pays for
+        filter_unchecked_occurrences's single cheap linear pass.
+
+        Cache-key is (recipe_id, qty, station, mode) - exactly the
+        columns of `job` that feed resolve_recipe_tree/_apply_job_station_
+        override - checked against the CURRENT queue row on every call,
+        so a job whose qty/station/recipe changed is detected and re-
+        resolved automatically, with no invalidation call sites needed
+        anywhere else. The one thing this key can't see is a GLOBAL alt-
+        recipe/station preference change (recipe_alt_prefs/recipe_
+        station_prefs are keyed by ingredient name, not by job) - such a
+        change could alter a job's tree without changing its own row at
+        all, which is why callers of the Totals view thread through an
+        explicit `force_full` the same way recipe-panel.js's own
+        refreshBreakdown({forceFull: true}) does after an alt/station
+        pick, bypassing the cache for that one call."""
+        qid, recipe_id, _rname, output_name, qty, station, _combine, mode = job
+        cache_key = (recipe_id, qty, station, mode)
+        cached = None if force_full else self._totals_specs_cache.get(qid)
+        if cached is not None and cached[0] == cache_key:
+            return cached[1]
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()
-        all_raw: dict = {}
-        all_crafted: dict = {}
+        node = resolver.resolve_recipe_tree(
+            output_name,
+            qty_needed=qty,
+            _root_recipe_id=recipe_id,
+            _alt_prefs=alt_prefs,
+            _station_prefs=station_prefs,
+        )
+        self._apply_job_station_override(node, recipe_id, station, mode)
+        specs = resolver.build_occurrence_specs(node)
+        self._totals_specs_cache[qid] = (cache_key, specs)
+        return specs
+
+    def get_queue_totals_view(self, force_full=False):
+        """Aggregate every unique item - raw material OR crafted, at ANY
+        tier ("Option D": the same ingredient needed by two different
+        recipes/branches collapses into one merged row) - across every
+        combine-flagged queued job's FULL (non-depth-limited) tree. Each
+        item's quantity counts only its still-unchecked occurrences across
+        every job/path that needs it - see resolver.build_occurrence_specs/
+        filter_unchecked_occurrences/aggregate_item_occurrences for the
+        checked-aware aggregation this relies on. Deliberately does this
+        aggregation server-side rather than sending N full trees across
+        the pywebview bridge for the frontend to flatten (as recipe-
+        panel.js's single-recipe Totals mode does with its one already-
+        fetched tree) - a queue can easily have several sizeable trees,
+        and payload *size* is what's expensive over this bridge, not call
+        count (see this module's docstring). The expensive structural walk
+        is cached per job - see _get_totals_job_specs - so a plain
+        checkbox toggle only pays for the cheap checked-state filter pass,
+        not another resolve or tree walk.
+
+        `per_job` here only carries identity (queue_id/recipe_name/qty),
+        NOT each job's own aggregated items - unlike the always-visible
+        "All Jobs" total above, a job's own "Per Recipe" breakdown is
+        genuinely optional detail nobody may ever look at, so computing
+        and shipping it eagerly for every job on every call (including
+        non-combined jobs, which never even feed the merge above) was pure
+        waste. Fetched on demand, only for a job whose own section is
+        actually expanded, via get_queue_totals_job_view - same on-demand
+        principle as Api.get_recipe_subtree for a truncated node."""
+        jobs = db.get_craft_queue()
+        live_qids = {row[0] for row in jobs}
+        for stale_qid in set(self._totals_specs_cache) - live_qids:
+            del self._totals_specs_cache[stale_qid]
+
+        all_occurrences = []
         per_job = []
         combined_count = 0
-        for qid, recipe_id, rname, output_name, qty, station, combine, mode in jobs:
-            node = resolver.resolve_recipe_tree(
-                output_name,
-                qty_needed=qty,
-                _root_recipe_id=recipe_id,
-                _alt_prefs=alt_prefs,
-                _station_prefs=station_prefs,
-            )
-            self._apply_job_station_override(node, recipe_id, station, mode)
-            job_raw = resolver.collect_totals(node)
-            job_crafted = resolver.collect_basic_crafted(node)
-            per_job.append(
-                {
-                    "queue_id": qid,
-                    "recipe_name": rname,
-                    "qty": qty,
-                    "crafted": job_crafted,
-                    "raw": job_raw,
-                }
-            )
+        for job in jobs:
+            qid, _recipe_id, rname, _output_name, qty, _station, combine, _mode = job
+            per_job.append({"queue_id": qid, "recipe_name": rname, "qty": qty})
             if not combine:
                 continue
             combined_count += 1
-            for iname, raw_qty in job_raw.items():
-                all_raw[iname] = all_raw.get(iname, 0) + raw_qty
-            for iname, info in job_crafted.items():
-                entry = all_crafted.setdefault(
-                    iname,
-                    {
-                        "qty": 0.0,
-                        "output_qty": info["output_qty"],
-                        "alts": info.get("alts", []),
-                        "raw_names": set(),
-                        "station": info.get("station"),
-                        "stations": info.get("stations", []),
-                        "auto_craft_seconds": info.get("auto_craft_seconds"),
-                        "manual_craft_seconds": info.get("manual_craft_seconds"),
-                        "craft_mode": info.get("craft_mode", "auto"),
-                        "byproducts": {},
-                    },
-                )
-                entry["qty"] += info["qty"]
-                entry["raw_names"].update(info["raw_names"])
-                for bp in info.get("byproducts", []):
-                    entry["byproducts"][bp["name"]] = (
-                        entry["byproducts"].get(bp["name"], 0.0) + bp["qty"]
-                    )
-
-        for entry in all_crafted.values():
-            entry["raw_names"] = sorted(entry["raw_names"])
-            entry["byproducts"] = [
-                {"name": n, "qty": q} for n, q in sorted(entry["byproducts"].items())
-            ]
+            specs = self._get_totals_job_specs(job, force_full=force_full)
+            job_checked = db.get_queue_checked(qid)
+            job_occurrences = resolver.filter_unchecked_occurrences(specs, job_checked)
+            for occ in job_occurrences:
+                occ["queue_id"] = qid
+            all_occurrences.extend(job_occurrences)
 
         return {
             "jobs_count": len(jobs),
             "combined_count": combined_count,
-            "all_crafted": all_crafted,
-            "all_raw": all_raw,
+            "all_items": resolver.aggregate_item_occurrences(all_occurrences),
             "per_job": per_job,
         }
+
+    def get_queue_totals_job_view(self, queue_id):
+        """On-demand per-job Totals breakdown for one queued job - the
+        counterpart get_queue_totals_view's own `per_job` entries no longer
+        carry eagerly (see its docstring). Reuses _get_totals_job_specs's
+        cache, so this is free if get_queue_totals_view already resolved
+        this job as part of the combined merge, and only pays for a fresh
+        resolve if it didn't (e.g. a non-combined job, never touched by
+        the main view)."""
+        jobs_by_id = {row[0]: row for row in db.get_craft_queue()}
+        job = jobs_by_id.get(queue_id)
+        if job is None:
+            return {"items": {}}
+        specs = self._get_totals_job_specs(job)
+        job_checked = db.get_queue_checked(queue_id)
+        job_occurrences = resolver.filter_unchecked_occurrences(specs, job_checked)
+        for occ in job_occurrences:
+            occ["queue_id"] = queue_id
+        return {"items": resolver.aggregate_item_occurrences(job_occurrences)}
+
+    def set_totals_item_checked(self, occurrences, checked):
+        """Cascade a Totals-mode merged-item row's checkbox click onto
+        every real per-job occurrence it represents (`occurrences`: the
+        small [{'queue_id', 'path_key'}, ...] list already carried by that
+        row's aggregate entry from get_queue_totals_view, round-tripped
+        back unmodified) - writes into each affected job's own REAL
+        queue_checked rows, the same self+descendants cascade Queue mode's
+        own checkbox already does per occurrence, just fanned out across
+        every occurrence at once instead of one. Reuses
+        _get_totals_job_specs's cache (rather than an unconditional fresh
+        resolve+walk) to get each touched job's full path_key list - since
+        the frontend always calls get_queue_totals_view again right after
+        this to redraw, sharing the cache means each touched job's tree
+        gets resolved/walked at most once across the whole click+redraw
+        round trip, not twice."""
+        by_queue = {}
+        for occ in occurrences:
+            by_queue.setdefault(occ["queue_id"], []).append(occ["path_key"])
+        jobs_by_id = {row[0]: row for row in db.get_craft_queue()}
+        for qid, path_keys in by_queue.items():
+            job = jobs_by_id.get(qid)
+            if job is None:
+                continue
+            specs = self._get_totals_job_specs(job)
+            cascade_keys = [
+                s["path_key"]
+                for s in specs
+                if any(s["path_key"] == p or s["path_key"].startswith(p + "|") for p in path_keys)
+            ]
+            db.set_queue_checked_many(qid, cascade_keys, checked)
+        return True
 
     # ---- lifecycle ----
 

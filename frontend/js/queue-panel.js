@@ -19,6 +19,7 @@
     fmtNum,
     formatCraftMetaSuffix,
     formatByproductsSuffix,
+    formatSourcesSuffix,
     nodeActiveSeconds,
     nodePathKey,
     collectPathKeysJs,
@@ -40,7 +41,11 @@
   const splitEl = document.getElementById("queue-split");
   const stepPopupEl = document.getElementById("step-popup");
 
-  const renderer = BreakdownTree.createRenderer({ treeEl: tree, stepPopupEl });
+  const renderer = BreakdownTree.createRenderer({
+    treeEl: tree,
+    stepPopupEl,
+    persistKey: "queue_breakdown",
+  });
   const { makeBdNode, appendDepositLocations, openStepPopup } = renderer;
 
   // ---- state ----
@@ -348,42 +353,140 @@
   }
 
   // ---- mode: totals ----
-  function insertTotalsSections(parentEl, queueId, crafted, raw, checked) {
-    const craftedEntries = Object.entries(crafted).sort((a, b) =>
-      a[0].toLowerCase().localeCompare(b[0].toLowerCase())
-    );
+  // Checked state now lives inside each aggregated `items` entry itself
+  // (fully_checked/any_checked/occurrences - see resolver.aggregate_item_
+  // occurrences), not in a separately-fetched Set keyed by synthetic path
+  // keys - a merged row's checkbox cascades onto every real per-job
+  // occurrence it represents via Api.set_totals_item_checked, so there's
+  // no client-side path-key bookkeeping left to do here at all.
+  function checkboxState(info) {
+    return info.fully_checked ? true : info.any_checked ? "indeterminate" : false;
+  }
+
+  function craftedNameSort(a, b) {
+    return a[0].toLowerCase().localeCompare(b[0].toLowerCase());
+  }
+
+  // Builds the actual merged BOM TREE (the approved "Option D" mockup),
+  // not a flat list: each unique crafted item gets a full row exactly
+  // once, with its own crafted_names nested directly beneath it (same as
+  // raw_names becomes a deposit-location expando) - if the SAME item is
+  // reached again via a different parent, that second occurrence renders
+  // as a muted, non-expandable cross-reference row instead of a duplicate
+  // subtree, clicking it jumps to and flashes the one real row.
+  function insertTotalsSections(parentEl, scopeKey, items) {
+    const craftedEntries = Object.entries(items).filter(([, info]) => info.is_recipe);
+    const rawEntries = Object.entries(items)
+      .filter(([, info]) => !info.is_recipe)
+      .sort(craftedNameSort);
+
     if (craftedEntries.length) {
       const { wrapper: craftHdr, childrenEl: craftChildren } = makeBdNode({
         tagClass: "section",
         label: "── Crafted ──",
         hasChildren: true,
-        key: `__crafted__${queueId}`,
+        key: `${scopeKey}|crafted_hdr`,
       });
       parentEl.appendChild(craftHdr);
 
-      for (const [resName, info] of craftedEntries) {
-        const qty = info.qty;
+      const rendered = new Set();
+
+      function renderXref(container, resName, info, parentName) {
+        const rowKey = `${scopeKey}|crafted|${resName}`;
+        // `sources` only tracks UNCHECKED contributions (see resolver.
+        // aggregate_item_occurrences) - crafted_names still lists this
+        // parent-child edge even once fully checked off (it's a
+        // structural, checked-state-independent field), so a missing
+        // lookup here means "0 remaining from this parent," not "show
+        // the item's whole total instead."
+        const src = (info.sources || []).find((s) => s.parent_name === parentName);
+        const fromHere = src ? src.qty : 0;
+
+        // Scoped to just THIS parent's own occurrences - checking a
+        // cross-reference row must only affect the slice attributable to
+        // its own parent (e.g. "Metal Sheet via Cargo Hold"), not cascade
+        // every occurrence of the item everywhere the way the item's own
+        // main row does.
+        const parentOccs = (info.occurrences || []).filter(
+          (o) => o.parent_name === parentName
+        );
+        const parentCheckedCount = parentOccs.filter((o) => o.checked).length;
+        const parentChecked =
+          parentOccs.length > 0 && parentCheckedCount === parentOccs.length
+            ? true
+            : parentCheckedCount > 0
+            ? "indeterminate"
+            : false;
+
+        const jumpToReal = () => {
+          const target = tree.querySelector(`[data-key="${CSS.escape(rowKey)}"] > .bd-row`);
+          if (!target) return;
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          target.classList.remove("flash");
+          void target.offsetWidth;
+          target.classList.add("flash");
+        };
+        // A cross-reference only ever exists for an item that's "promoted"
+        // (root-demand or shared across 2+ parents - see the Phase 1/2
+        // comments below), which always has a real, findable home (its own
+        // row under Crafted or under Shared Components) - so the jump link
+        // is always meaningful here, never a dead-end. No directional
+        // "see above" claim in the label either - which one renders first
+        // depends on alphabetical position interacting with nesting depth,
+        // so the real row can legitimately end up either above or below
+        // this one; jumpToReal finds it either way.
+        const { wrapper: xrefWrapper } = makeBdNode({
+          tagClass: "xref",
+          label: `${fmtNum(fromHere)}×  ${resName}  (view full entry)`,
+          checked: parentChecked,
+          hasChildren: false,
+          onToggleCheck: async () => {
+            await CraftMapApi.call(
+              "set_totals_item_checked",
+              parentOccs,
+              parentChecked !== true
+            );
+            await refreshBreakdown();
+          },
+          onOpenStep: jumpToReal,
+        });
+        container.appendChild(xrefWrapper);
+      }
+
+      // Builds resName's own full row (assumes it isn't rendered yet -
+      // callers check `rendered` themselves, see below) and returns its
+      // childrenEl for the caller to expand into (kept separate from
+      // expandCraftedChildren so Phase 1 below can give every promoted
+      // item its row before ANY of them recurse into children - see the
+      // phase comment for why that ordering matters).
+      function makeCraftedRow(container, resName, info) {
+        rendered.add(resName);
         const oq = info.output_qty || 1.0;
-        const crafts = Math.ceil(qty / oq);
-        const pathKey = `__craft__|${resName}`;
-        const isDone = checked.has(pathKey);
+        const crafts = Math.ceil(info.qty / oq);
         const hasOptions = nodeHasStepOptions(info);
         let suffix = oq > 1 ? `  (${fmtNum(crafts)} crafts)` : "";
         if (hasOptions) suffix += "  ▾";
         const [activeSeconds, activeMode] = nodeActiveSeconds(info);
-        const ownTime = activeSeconds ? activeSeconds * crafts : 0.0;
-        const remaining = isDone ? 0.0 : ownTime;
+        const remaining = activeSeconds ? activeSeconds * crafts : 0.0;
         suffix += formatCraftMetaSuffix(info.station, activeSeconds, activeMode, remaining);
         suffix += formatByproductsSuffix(info.byproducts);
+        suffix += formatSourcesSuffix(info.sources);
+
+        const hasNestedChildren =
+          (info.raw_names || []).length > 0 || (info.crafted_names || []).length > 0;
 
         const { wrapper: entryWrapper, childrenEl: entryChildren } = makeBdNode({
-          tagClass: isDone ? "done" : "ingredient",
-          label: `${fmtNum(qty)}×  ${resName}${suffix}`,
-          checked: isDone,
-          hasChildren: (info.raw_names || []).length > 0,
-          key: `${queueId}|${pathKey}`,
+          tagClass: info.fully_checked ? "done" : "ingredient",
+          label: `${fmtNum(info.qty)}×  ${resName}${suffix}`,
+          checked: checkboxState(info),
+          hasChildren: hasNestedChildren,
+          key: `${scopeKey}|crafted|${resName}`,
           onToggleCheck: async () => {
-            await CraftMapApi.call("set_queue_checked_many", queueId, [pathKey], !isDone);
+            await CraftMapApi.call(
+              "set_totals_item_checked",
+              info.occurrences,
+              !info.fully_checked
+            );
             await refreshBreakdown();
           },
           onOpenStep: hasOptions
@@ -394,27 +497,116 @@
                   false,
                   async (alt) => {
                     await CraftMapApi.call("set_alt_pref", resName, alt.recipe_id);
-                    await refreshBreakdown();
+                    // Global, ingredient-name-keyed preference - can change
+                    // ANY job's tree shape without changing that job's own
+                    // row, so the per-job resolved-tree cache can't detect
+                    // it on its own (see Api._get_totals_job_specs).
+                    await refreshBreakdown({ forceFull: true });
                   },
                   async (stName, m) => {
                     await CraftMapApi.call("set_station_pref", resName, stName, m);
-                    await refreshBreakdown();
+                    await refreshBreakdown({ forceFull: true });
                   }
                 )
             : null,
         });
-        craftChildren.appendChild(entryWrapper);
+        container.appendChild(entryWrapper);
+        return entryChildren;
+      }
 
+      function expandCraftedChildren(entryChildren, resName, info) {
+        for (const childName of [...(info.crafted_names || [])].sort()) {
+          renderNested(entryChildren, childName, resName);
+        }
         for (const rawName of info.raw_names || []) {
           const { wrapper: rawWrapper } = makeBdNode({
             tagClass: "location",
             label: `    ${rawName}`,
             hasChildren: true,
-            key: `${queueId}|${pathKey}__raw__${rawName}`,
+            key: `${scopeKey}|crafted|${resName}__raw__${rawName}`,
             onFirstExpand: (el) => appendDepositLocations(el, rawName, "      "),
           });
           entryChildren.appendChild(rawWrapper);
         }
+      }
+
+      // Used only for items reached by recursing into SOME parent's own
+      // crafted_names (never for a promoted item's own guaranteed slot -
+      // see Phase 1 below) - renders a full row + recurses if this is the
+      // first time resName has been seen at all, or an attributed cross-
+      // reference (real parentName, so the "X of Y needed here" math
+      // means something) if it was already rendered elsewhere.
+      function renderNested(container, resName, parentName) {
+        const info = items[resName];
+        if (!info) return; // shouldn't happen - defensive only
+        if (rendered.has(resName)) {
+          renderXref(container, resName, info, parentName);
+          return;
+        }
+        const entryChildren = makeCraftedRow(container, resName, info);
+        expandCraftedChildren(entryChildren, resName, info);
+      }
+
+      // "Promoted" items get a guaranteed, stable row of their own -
+      // either because they're root-demand (a direct ingredient of some
+      // queued job) or because they're genuinely shared (2+ distinct
+      // parents, even if none of those parents is a job root - e.g. an
+      // intermediate part reused by several different assemblies). Both
+      // cases give a cross-reference a real, findable destination to
+      // point at; an item with neither property has exactly one real
+      // parent, so it just nests there directly with nothing to promote.
+      const rootDemanded = craftedEntries
+        .filter(([, info]) => info.is_root_demand)
+        .sort(craftedNameSort);
+      const sharedOnly = craftedEntries
+        .filter(([, info]) => !info.is_root_demand && info.is_shared)
+        .sort(craftedNameSort);
+
+      // Phase 1: give EVERY promoted item its own row first, before ANY
+      // of them recurse into their own children. This has to happen
+      // before Phase 2 - otherwise, whichever promoted item happens to
+      // sort/traverse first "wins" and can render a PEER promoted item as
+      // its own nested child purely by reaching it first during
+      // recursion, burying something that deserved its own stable slot
+      // under an unrelated assembly and leaving its own slot to produce a
+      // meaningless cross-reference with no real parent to attribute
+      // (this was a real bug, not hypothetical).
+      const promotedChildrenEls = new Map();
+      for (const [resName, info] of rootDemanded) {
+        promotedChildrenEls.set(resName, makeCraftedRow(craftChildren, resName, info));
+      }
+      // Shared-but-not-root items get their own row too, but nested one
+      // level inside Crafted under a "Shared Components" sub-header -
+      // still crafted items, just grouped separately for *why* they
+      // earned a stable slot, rather than a third top-level peer next to
+      // Crafted/Raw Materials (which would make the reader learn a third,
+      // invisible category just to know where to look for something).
+      if (sharedOnly.length) {
+        const { wrapper: sharedHdr, childrenEl: sharedChildren } = makeBdNode({
+          tagClass: "section",
+          label: "── Shared Components ──",
+          hasChildren: true,
+          key: `${scopeKey}|shared_hdr`,
+        });
+        craftChildren.appendChild(sharedHdr);
+        for (const [resName, info] of sharedOnly) {
+          promotedChildrenEls.set(resName, makeCraftedRow(sharedChildren, resName, info));
+        }
+      }
+      // Phase 2: now expand every promoted item's own children - any
+      // OTHER promoted item encountered here is already in `rendered`
+      // (from Phase 1), so it correctly becomes an attributed cross-
+      // reference instead of getting rendered a second time.
+      for (const [resName, info] of [...rootDemanded, ...sharedOnly]) {
+        expandCraftedChildren(promotedChildrenEls.get(resName), resName, info);
+      }
+      // Safety net: anything never reached from a promoted item
+      // (shouldn't happen - every occurrence has a parent chain back to
+      // some job's root, and that chain always passes through at least
+      // one promoted item) still gets its own top-level row rather than
+      // silently vanishing.
+      for (const [resName] of craftedEntries.sort(craftedNameSort)) {
+        if (!rendered.has(resName)) renderNested(craftChildren, resName, null);
       }
     }
 
@@ -422,23 +614,22 @@
       tagClass: "section",
       label: "── Raw Materials ──",
       hasChildren: true,
-      key: `__raw__${queueId}`,
+      key: `${scopeKey}|raw_hdr`,
     });
     parentEl.appendChild(rawHdr);
-    const rawEntries = Object.entries(raw).sort((a, b) =>
-      a[0].toLowerCase().localeCompare(b[0].toLowerCase())
-    );
-    for (const [resName, qty] of rawEntries) {
-      const pathKey = `__total__|${resName}`;
-      const isDone = checked.has(pathKey);
+    for (const [resName, info] of rawEntries) {
       const { wrapper: rawWrapper } = makeBdNode({
-        tagClass: isDone ? "done" : "ingredient",
-        label: `${fmtNum(qty)}×  ${resName}`,
-        checked: isDone,
+        tagClass: info.fully_checked ? "done" : "ingredient",
+        label: `${fmtNum(info.qty)}×  ${resName}${formatSourcesSuffix(info.sources)}`,
+        checked: checkboxState(info),
         hasChildren: true,
-        key: `${queueId}|${pathKey}`,
+        key: `${scopeKey}|raw|${resName}`,
         onToggleCheck: async () => {
-          await CraftMapApi.call("set_queue_checked_many", queueId, [pathKey], !isDone);
+          await CraftMapApi.call(
+            "set_totals_item_checked",
+            info.occurrences,
+            !info.fully_checked
+          );
           await refreshBreakdown();
         },
         onFirstExpand: (el) => appendDepositLocations(el, resName, "    "),
@@ -447,8 +638,8 @@
     }
   }
 
-  async function renderTotalsMode() {
-    const view = await CraftMapApi.call("get_queue_totals_view");
+  async function renderTotalsMode(forceFull) {
+    const view = await CraftMapApi.call("get_queue_totals_view", forceFull);
     if (!view.jobs_count) {
       const { wrapper } = makeBdNode({
         tagClass: "section",
@@ -458,7 +649,6 @@
       tree.appendChild(wrapper);
       return;
     }
-    const allChecked = new Set(await CraftMapApi.call("get_queue_checked_paths", 0));
     const { wrapper, childrenEl } = makeBdNode({
       tagClass: "root",
       label: `◆  All Jobs  (${view.combined_count})`,
@@ -467,7 +657,13 @@
       key: "__all_jobs__",
     });
     tree.appendChild(wrapper);
-    insertTotalsSections(childrenEl, 0, view.all_crafted, view.all_raw, allChecked);
+    // "All Jobs" is the section actually being looked at almost always, so
+    // it's built eagerly - but each individual job's own breakdown below
+    // (usually not even open) is deferred behind onFirstExpand, same as
+    // recipe-panel.js's insertBreakdownNode: a render's cost should be
+    // proportional to what's actually expanded, not to how many jobs are
+    // queued.
+    insertTotalsSections(childrenEl, "all", view.all_items);
 
     if (view.jobs_count > 1) {
       const { wrapper: perHdr, childrenEl: perChildren } = makeBdNode({
@@ -478,27 +674,32 @@
       });
       tree.appendChild(perHdr);
       for (const job of view.per_job) {
-        const jobChecked = new Set(
-          await CraftMapApi.call("get_queue_checked_paths", job.queue_id)
-        );
-        const { wrapper: jobRoot, childrenEl: jobChildren } = makeBdNode({
+        const { wrapper: jobRoot } = makeBdNode({
           tagClass: "root",
           label: `◆  ${job.recipe_name}  ×${fmtNum(job.qty)}`,
           hasChildren: true,
           key: `__job__${job.queue_id}`,
+          // A job's own breakdown is fetched only once its section is
+          // actually opened - get_queue_totals_view deliberately doesn't
+          // carry every job's items eagerly (see its docstring), since
+          // most never get looked at.
+          onFirstExpand: async (el) => {
+            const jobView = await CraftMapApi.call("get_queue_totals_job_view", job.queue_id);
+            insertTotalsSections(el, `job:${job.queue_id}`, jobView.items);
+          },
         });
         perChildren.appendChild(jobRoot);
-        insertTotalsSections(jobChildren, job.queue_id, job.crafted, job.raw, jobChecked);
       }
     }
   }
 
   // ---- refresh dispatcher ----
   async function refreshBreakdown({ forceFull = false } = {}) {
+    await renderer.ready;
     tree.innerHTML = "";
     try {
       if (mode === "totals") {
-        await renderTotalsMode();
+        await renderTotalsMode(forceFull);
       } else {
         await renderQueueMode(forceFull);
       }
@@ -524,7 +725,13 @@
     mode = m;
     modeQueueBtn.classList.toggle("active", mode === "queue");
     modeTotalsBtn.classList.toggle("active", mode === "totals");
-    await refreshBreakdown();
+    // Entering Totals mode always forces a full recompute: an alt-recipe/
+    // station pick made while in Queue mode is a global, ingredient-name-
+    // keyed preference that the Totals tree cache's per-job key can't see
+    // (see Api._get_totals_job_specs) - mode switches are rare enough that
+    // paying for a fresh resolve here isn't worth tracking that edge case
+    // instead.
+    await refreshBreakdown({ forceFull: mode === "totals" });
   }
 
   // ---- job-list / breakdown split (mirrors the tkinter PanedWindow sash) ----

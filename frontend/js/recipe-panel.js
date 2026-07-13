@@ -42,7 +42,11 @@
   const ingredientRowsEl = document.getElementById("recipe-ingredient-rows");
   const stepPopupEl = document.getElementById("step-popup");
 
-  const renderer = BreakdownTree.createRenderer({ treeEl: tree, stepPopupEl });
+  const renderer = BreakdownTree.createRenderer({
+    treeEl: tree,
+    stepPopupEl,
+    persistKey: "recipe_breakdown",
+  });
   const { makeBdNode, appendDepositLocations, openStepPopup } = renderer;
 
   // ---- state ----
@@ -488,6 +492,7 @@
   let cachedForQty = null;
 
   async function refreshBreakdown({ forceFull = false } = {}) {
+    await renderer.ready;
     tree.innerHTML = "";
     try {
       if (recipeMode === "usedin") {

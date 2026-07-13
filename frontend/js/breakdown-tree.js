@@ -58,6 +58,15 @@ const BreakdownTree = (function () {
     return "  (" + parts.join(", ") + ")";
   }
 
+  function formatSourcesSuffix(sources) {
+    // Only worth a note once an item is demanded from more than one
+    // parent - with a single source it's redundant with the row's own
+    // qty (see resolver.aggregate_item_occurrences's `sources` field).
+    if (!sources || sources.length < 2) return "";
+    const parts = sources.map((s) => `${fmtNum(s.qty)} via ${s.parent_name}`);
+    return "  (" + parts.join(", ") + ")";
+  }
+
   function nodeCrafts(node) {
     if (!node.is_recipe) return 0;
     return Math.ceil(node.qty / (node.output_qty || 1.0));
@@ -189,7 +198,7 @@ const BreakdownTree = (function () {
   }
 
   // ---- per-instance renderer (DOM construction + expand/busy state) ----
-  function createRenderer({ treeEl, stepPopupEl }) {
+  function createRenderer({ treeEl, stepPopupEl, persistKey }) {
     // Every node's expand/collapse state survives a tree rebuild
     // (checkbox clicks, quantity changes, alt/station picks all rebuild
     // the whole tree) - tracked by path_key since node identity itself
@@ -209,14 +218,43 @@ const BreakdownTree = (function () {
     // checkbox a no-op while one toggle for this tree is still in flight.
     let busy = false;
 
+    // In-memory-only (see above) means this resets on every app restart -
+    // `persistKey`, when given, mirrors js/deposits.js's own collapsed_
+    // nodes persistence (Api.get_tree_expand_state/set_tree_expand_state,
+    // config.json-backed) so a tree that was left mostly expanded reopens
+    // the same way next launch instead of starting fully collapsed again.
+    // `ready` resolves once that initial load lands - callers with a
+    // persistKey should await it before their first render, same as
+    // screens.js's window.__viewModeReady exists so drag-resize's launch-
+    // time min-size measurement waits for the real saved view first.
+    const ready = persistKey
+      ? CraftMapApi.call("get_tree_expand_state", persistKey).then((state) => {
+          rootOpen = state.root_open !== false;
+          openNodeKeys = new Set(state.open_keys || []);
+        })
+      : Promise.resolve();
+
+    function persistExpandState() {
+      if (!persistKey) return;
+      CraftMapApi.call("set_tree_expand_state", persistKey, {
+        root_open: rootOpen,
+        open_keys: [...openNodeKeys],
+      });
+    }
+
     function resetExpandState() {
       rootOpen = true;
       openNodeKeys = new Set();
     }
 
     function makeCheckboxIcon(checked) {
+      // Tri-state: true/false as before, plus "indeterminate" for a
+      // merged Totals-mode item where some but not all of its underlying
+      // occurrences are checked (see resolver.aggregate_item_occurrences's
+      // any_checked/fully_checked).
       const span = document.createElement("span");
-      span.className = "cb-icon " + (checked ? "checked" : "unchecked");
+      const state = checked === "indeterminate" ? "indeterminate" : checked ? "checked" : "unchecked";
+      span.className = "cb-icon " + state;
       return span;
     }
 
@@ -269,6 +307,7 @@ const BreakdownTree = (function () {
             if (nowOpen) openNodeKeys.add(key);
             else openNodeKeys.delete(key);
           }
+          persistExpandState();
         });
       }
       row.appendChild(disc);
@@ -280,11 +319,14 @@ const BreakdownTree = (function () {
           if (busy) return;
           busy = true;
           // Instant feedback before the round-trip lands, so the click
-          // doesn't feel like it did nothing (see `busy` above). Flips
-          // whichever way it's currently facing - not hardcoded to
-          // "checked", since this same handler also unchecks.
-          cb.classList.toggle("checked");
-          cb.classList.toggle("unchecked");
+          // doesn't feel like it did nothing (see `busy` above). Tri-state
+          // convention: unchecked OR indeterminate -> fully checks;
+          // fully-checked -> fully unchecks - indeterminate is a passive,
+          // data-driven display state only, never itself a click target
+          // to preserve.
+          const wasChecked = cb.classList.contains("checked");
+          cb.classList.remove("checked", "unchecked", "indeterminate");
+          cb.classList.add(wasChecked ? "unchecked" : "checked");
           cb.classList.add("pending");
           try {
             await onToggleCheck();
@@ -466,6 +508,7 @@ const BreakdownTree = (function () {
       openStepPopup,
       closeStepPopup,
       resetExpandState,
+      ready,
     };
   }
 
@@ -474,6 +517,7 @@ const BreakdownTree = (function () {
     formatDuration,
     formatCraftMetaSuffix,
     formatByproductsSuffix,
+    formatSourcesSuffix,
     nodeCrafts,
     nodeActiveSeconds,
     nodeOwnTime,

@@ -59,39 +59,49 @@ body {
    width:100%/height:100% lets the whole flex column shrink-wrap to its
    content's true natural size instead of stretching to fill the window's
    CURRENT (possibly generous) dimensions, which is what actually lets
-   scrollWidth/scrollHeight report a real minimum instead of just echoing
-   back whatever size the window already happens to be. Paired with
-   components.css's .measuring-min-size overrides, which stop the
-   normally space-filling flex:1 panes (trees, screens) from doing the
-   same stretching at a level down. This is the Craft Queue window's rule -
-   it has only one screen's worth of content to measure, so content-derived
-   width is fine there; see .resources-app.measuring-min-size below for why
-   the main window (shared #app id, hence the extra class scope) needs a
-   fixed width instead. */
+   scrollHeight report a real minimum instead of just echoing back whatever
+   size the window already happens to be. Paired with components.css's
+   .measuring-min-size overrides, which stop the normally space-filling
+   flex:1 panes (trees, screens) from doing the same stretching at a level
+   down. Width itself is always fixed by one of the two rules below - see
+   each for why - so this base rule's own `width: max-content` never
+   actually applies to either window, just kept as a defensive fallback. */
 #app.measuring-min-size {
   width: max-content;
   height: auto;
 }
 
 /* Main "CraftMap Resources" window only (index.html's #app carries this
-   extra class - queue.html's does not, so the rule above still applies to
-   the Craft Queue window unchanged). Width is a fixed 624px rather than
-   derived from content: #type-filter (js/deposits.js's dynamically-rebuilt
-   resource-type checkboxes) is a flex-wrap: wrap container, and CSS's
-   intrinsic sizing keywords get its contribution wrong in opposite ways for
-   the two screens (deposits/recipe) this window switches between - max-
-   content sums every chip as if laid out on one unwrapped line (arbitrarily
-   wide depending on how many distinct res_type values exist in the DB, even
-   though it wraps into several rows fine at any reasonable width), while
-   min-content fixed that but then undersized the recipe view's own single-
-   line controls. 624px is simply the recipe view's own real natural
-   minimum (its widest content is a single non-wrapping row), and every
-   deposits-view element - including #type-filter, which actually gets to
-   wrap at this width instead of being measured as one giant unwrapped line
-   - comfortably fits within it too, so one shared constant works for both
-   screens without re-deriving it per resize. */
+   extra class). Width is a fixed 624px rather than derived from content:
+   #type-filter (js/deposits.js's dynamically-rebuilt resource-type
+   checkboxes) is a flex-wrap: wrap container, and CSS's intrinsic sizing
+   keywords get its contribution wrong in opposite ways for the two screens
+   (deposits/recipe) this window switches between - max-content sums every
+   chip as if laid out on one unwrapped line (arbitrarily wide depending on
+   how many distinct res_type values exist in the DB, even though it wraps
+   into several rows fine at any reasonable width), while min-content fixed
+   that but then undersized the recipe view's own single-line controls.
+   624px is simply the recipe view's own real natural minimum (its widest
+   content is a single non-wrapping row), and every deposits-view element -
+   including #type-filter, which actually gets to wrap at this width instead
+   of being measured as one giant unwrapped line - comfortably fits within
+   it too, so one shared constant works for both screens without re-deriving
+   it per resize. */
 #app.resources-app.measuring-min-size {
   width: 624px;
+}
+
+/* Craft Queue window only (queue.html's #app carries this extra class).
+   Also a fixed width rather than content-derived: Queue mode and Totals
+   mode can have quite different natural content widths (a long recipe
+   name/craft-time suffix vs. a merged item's "via X, Y, Z" sources list),
+   so measuring whichever mode happens to be showing at resize-grip time
+   made the window's minimum width - and thus its felt size - inconsistent
+   between the two modes. 320px matches main.py's own
+   create_window(min_size=(320, 200)) floor, so this is simply the smallest
+   the window can ever be regardless of mode. */
+#app.queue-app.measuring-min-size {
+  width: 320px;
 }
 
 /* ---------- drag bar ---------- */

@@ -553,6 +553,25 @@
   transform: rotate(45deg);
 }
 
+/* Merged Totals-mode item where some but not all underlying occurrences
+   are checked (resolver.aggregate_item_occurrences's any_checked without
+   fully_checked) - a dash rather than a checkmark, distinguishing "partly
+   done" from "fully done". */
+.cb-icon.indeterminate {
+  background: var(--panel-2);
+  border-color: var(--accent);
+}
+
+.cb-icon.indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 4px;
+  width: 8px;
+  height: 2px;
+  background: var(--accent);
+}
+
 .bd-row.root .bd-label,
 .bd-row.total_header .bd-label {
   color: var(--warn);
@@ -575,6 +594,30 @@
 .bd-row.location .bd-label {
   color: var(--good);
   font-size: 11px;
+}
+
+/* Queue Totals mode's merged BOM tree: a cross-reference row where the
+   same crafted item recurs under a second parent - points back at the one
+   real row (see queue-panel.js's insertTotalsSections) instead of
+   duplicating its whole subtree. Clickable via the standard .has-options
+   label mechanism (onOpenStep), so cursor/hover-underline already come
+   from that shared rule - this only needs the muted/italic tint. */
+.bd-row.xref .bd-label {
+  color: var(--faint);
+  font-style: italic;
+}
+
+@keyframes bd-row-flash {
+  0% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.bd-row.flash {
+  animation: bd-row-flash 1.1s ease-out;
 }
 
 .bd-row.usedin-result {

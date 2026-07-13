@@ -93,3 +93,19 @@ def test_view_mode_round_trip(api):
     assert api.get_view_mode() == "resource"
     assert api.set_view_mode("location") is True
     assert api.get_view_mode() == "location"
+
+
+def test_tree_expand_state_round_trip(api):
+    assert api.get_tree_expand_state("recipe_breakdown") == {
+        "root_open": True,
+        "open_keys": [],
+    }
+    state = {"root_open": False, "open_keys": ["Iron Bar", "Iron Bar|Iron Ore"]}
+    assert api.set_tree_expand_state("recipe_breakdown", state) is True
+    assert api.get_tree_expand_state("recipe_breakdown") == state
+    # A different tree_key is independent - namespacing so the recipe
+    # panel's tree and the Craft Queue's tree never clobber each other.
+    assert api.get_tree_expand_state("queue_breakdown") == {
+        "root_open": True,
+        "open_keys": [],
+    }
