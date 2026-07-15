@@ -34,6 +34,8 @@
   const comboInput = document.getElementById("galaxy-combo");
   const breadcrumbEl = document.getElementById("galaxy-breadcrumb");
   const asteroidCheckbox = document.getElementById("galaxy-filter-asteroids");
+  const poiCheckbox = document.getElementById("galaxy-filter-poi");
+  const nonPoiCheckbox = document.getElementById("galaxy-filter-non-poi");
   const climateFilterEl = document.getElementById("galaxy-climate-filter");
   const countLabelEl = document.getElementById("galaxy-count-label");
   const rowsEl = document.getElementById("galaxy-rows");
@@ -122,6 +124,16 @@
     for (const stale of [...climateFilterState.keys()].filter((l) => !present.has(l))) {
       climateFilterState.delete(stale);
     }
+  }
+
+  // Reuses row.pure_poi (same field driving the ◆/· mark - see makeRow)
+  // rather than a looser "has any poi tag at all" test: a "general,poi2"
+  // row is already shown with a plain "·" since most of the resource is
+  // still scattered planet-wide, so it belongs with the non-POI rows here
+  // too - otherwise the checkboxes would disagree with the marks already
+  // on screen.
+  function passesPoiFilter(row) {
+    return row.pure_poi ? poiCheckbox.checked : nonPoiCheckbox.checked;
   }
 
   function passesClimateFilter(row) {
@@ -290,7 +302,7 @@
 
   async function renderRows({ scrollToHighlight = false } = {}) {
     rowsEl.innerHTML = "";
-    const visible = currentRows.filter(passesClimateFilter);
+    const visible = currentRows.filter((row) => passesPoiFilter(row) && passesClimateFilter(row));
     countLabelEl.textContent = currentNode
       ? `${visible.length} of ${currentRows.length} explored planets`
       : "";
@@ -453,6 +465,9 @@
   asteroidCheckbox.addEventListener("change", () => {
     if (currentNode) loadNode(currentNode);
   });
+
+  poiCheckbox.addEventListener("change", () => renderRows());
+  nonPoiCheckbox.addEventListener("change", () => renderRows());
 
   setupDropdown();
   setupCurrentSystemDropdown();
