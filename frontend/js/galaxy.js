@@ -15,6 +15,21 @@
  * mixed ones. Climate/water chips only render for non-default attributes -
  * a plain Temperate row gets no chip at all.
  *
+ * "Best value" (sortMode "combined") re-ranks by density AND node_count
+ * together - density alone answers "most concentrated per trip" but says
+ * nothing about total quantity available, so a planet with 200 nodes
+ * scattered planet-wide can rank far below a 3-node POI cluster under the
+ * default sort despite having vastly more total resource; raw node_count
+ * alone has the opposite problem (no sense of how much travel it costs to
+ * actually collect them, and it's on a totally different, resource-
+ * dependent scale than density so it can't just be added in). The combined
+ * score is a geometric mean of each row's density and node_count, each
+ * first normalized to its own max among the rows CURRENTLY shown (0-1
+ * ratio) so the two differently-scaled metrics contribute fairly instead of
+ * whichever has the bigger raw range dominating - see effectiveFor. A row
+ * that's #1 in only one dimension still loses to one that's strong in
+ * both, which is the point.
+ *
  * Cross-references js/deposits.js's own manually-logged deposits for the
  * same node name (get_deposits_for_ingredient, the same lookup
  * breakdown-tree.js's ingredient-location popup already uses) to mark
@@ -42,6 +57,7 @@
   const currentSystemInput = document.getElementById("galaxy-current-system");
   const sortRankBtn = document.getElementById("galaxy-sort-rank");
   const sortDistanceBtn = document.getElementById("galaxy-sort-distance");
+  const sortCombinedBtn = document.getElementById("galaxy-sort-combined");
 
   let currentNode = null;
   let currentRows = []; // raw rows from the last fetch (post asteroid-filter, pre climate-filter)
@@ -62,7 +78,15 @@
   let currentSystemName = null;
   let hopDistances = null; // {system_name: hop_count} for currentSystemName, or null
   const hopDistancesCache = new Map(); // system_name -> already-fetched hop dict
-  let sortMode = "rank"; // "rank" (density-based, server order) | "distance" (hop count)
+  let sortMode = "rank"; // "rank" (density) | "distance" (hop count) | "combined" (density+qty)
+
+  function densityFor(row) {
+    return row.poi_area_density ?? row.density;
+  }
+
+  function quantityFor(row) {
+    return row.node_count || 0;
+  }
 
   function isHighlightedRow(row) {
     return (
@@ -322,10 +346,23 @@
     }
     const loggedRows = await CraftMapApi.call("get_deposits_for_ingredient", currentNode);
     const loggedKeys = new Set(loggedRows.map((r) => `${r.system_name}|${r.planet}`));
-    // Max, not visible[0] - visible[0] is only the best-density row when
-    // still in the backend's own density-sorted order, which distance
-    // sorting below deliberately overrides.
-    const best = Math.max(...visible.map((row) => row.poi_area_density ?? row.density));
+    // Normalize each dimension to its own max among the CURRENTLY shown
+    // rows first (0-1 ratio) - density and node_count are on unrelated
+    // scales (a resource-dependent raw count vs. an already-area-rescaled
+    // density), so only their ratios-to-best are comparable, not the raw
+    // numbers themselves.
+    const maxDensity = Math.max(...visible.map(densityFor));
+    const maxQuantity = Math.max(...visible.map(quantityFor));
+    const effectiveFor = (row) => {
+      if (sortMode !== "combined") return densityFor(row);
+      const dRatio = maxDensity > 0 ? densityFor(row) / maxDensity : 0;
+      const qRatio = maxQuantity > 0 ? quantityFor(row) / maxQuantity : 0;
+      return Math.sqrt(dRatio * qRatio);
+    };
+    // Max, not visible[0] - visible[0] is only the best row for whichever
+    // metric the backend/prior sort already left it in, which the distance
+    // and combined sorts below deliberately override.
+    const best = Math.max(...visible.map(effectiveFor));
 
     const hopFor = (row) =>
       hopDistances ? (Object.prototype.hasOwnProperty.call(hopDistances, row.system_name)
@@ -340,11 +377,13 @@
         const db = hb === null ? Infinity : hb;
         return da - db;
       });
+    } else if (sortMode === "combined") {
+      visible.sort((a, b) => effectiveFor(b) - effectiveFor(a));
     }
 
     let highlightEl = null;
     visible.forEach((row, i) => {
-      const effective = row.poi_area_density ?? row.density;
+      const effective = effectiveFor(row);
       const logged = loggedKeys.has(`${row.system_name}|${row.planet}`);
       const highlighted = isHighlightedRow(row);
       const hops = hopFor(row);
@@ -456,11 +495,13 @@
     sortMode = mode;
     sortRankBtn.classList.toggle("active", mode === "rank");
     sortDistanceBtn.classList.toggle("active", mode === "distance");
+    sortCombinedBtn.classList.toggle("active", mode === "combined");
     renderRows();
   }
 
   sortRankBtn.addEventListener("click", () => setSortMode("rank"));
   sortDistanceBtn.addEventListener("click", () => setSortMode("distance"));
+  sortCombinedBtn.addEventListener("click", () => setSortMode("combined"));
 
   asteroidCheckbox.addEventListener("change", () => {
     if (currentNode) loadNode(currentNode);
