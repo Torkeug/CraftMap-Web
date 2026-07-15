@@ -8,7 +8,8 @@
       "P(a primary Patch-or-Blueprint item drops at all) = clamp((target-2)/5, 0, 1), confirmed via raw HashLink opcodes at src/logic/Loot.hx:158-159.",
       "The eligible item pool for a crate targeting level L is NOT items with lootLevel==L exactly. src/logic/Loot.hx:461-478 (generatePrimaryItemCandidateBasic + generateAttemptDownUp) opens a 2-level window {L-1, L} and draws one uniform pick from the combined pool of both levels; only widens further (down then up, one level at a time) if that window is fully empty, which never happens for crate-relevant levels 4-9. So a lootLevel:3 recipe (e.g. Blueprint: Wire) IS reachable from a level-4 crate. Only lootLevel 2 and 10 items are truly unreachable from any wreck crate.",
       "Category choice (Patch vs Blueprint) when a primary item drops is a weighted pick per src/logic/Loot.hx:295-317 depending on a per-candidate 'itl' reference value not fully traced; this dataset approximates it as 50/50 when both categories have eligible candidates.",
-      "In-game blueprint display name convention: \"Blueprint: <output item display name>\"."
+      "In-game blueprint display name convention: \"Blueprint: <output item display name>\".",
+      "sectors[*].crateSpawn = stats for a randomly-rolled wreck in this sector containing rare loot crates at all, as opposed to only ordinary scrap - a DIFFERENT question from lootLevelProbability (which level a crate is, GIVEN one exists). A single wreck can contain MORE THAN ONE crate - each JunkGroup invocation independently re-rolls its own RareLoot slot(s), and Big wrecks invoke JunkGroup 5-10 times vs Small's 1-2 - so this is a full count distribution, not just a spawn-or-not %: atLeastOne (P(>=1 crate)), expectedCount (mean crates per wreck), and countDistribution (P(exactly k crates) for k=0,1,2,...). Monte Carlo simulated from the actual resGroup generation tree (ShipWreck_{Small,Big}_lvl{0,1,2} -> JunkGroup[_BlackBox] -> RareLoot_lvl{0,1,2}'s 40:25 BasicLoot-vs-LootChestRare override weight, identical at every tier), per the decompiled logic.gen.PlanetRes.generateGroup/getResGroupCount algorithm - see game_logic_notes.md Finding 8. Tier-independent; driven almost entirely by each sector's Small:Big wreck-type mix (Small wrecks average <1 crate, Big wrecks average ~3-4 and can have several)."
     ]
   },
   "patchPoolByLevel": {
@@ -731,7 +732,21 @@
         "CopperIngot",
         "Carbon",
         "Sandstone"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.5855,
+        "expectedCount": 0.89,
+        "countDistribution": {
+          "0": 0.4145,
+          "1": 0.3665,
+          "2": 0.155,
+          "3": 0.0478,
+          "4": 0.0115,
+          "5": 0.0034,
+          "6": 0.001,
+          "7": 0.0002
+        }
+      }
     },
     "Sec_Terminus": {
       "name": "Terminus",
@@ -748,7 +763,28 @@
         "AluminiumIngot",
         "Sandstone",
         "Sulfur"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6608,
+        "expectedCount": 1.435,
+        "countDistribution": {
+          "0": 0.3392,
+          "1": 0.315,
+          "2": 0.16,
+          "3": 0.0773,
+          "4": 0.0447,
+          "5": 0.0283,
+          "6": 0.0171,
+          "7": 0.0092,
+          "8": 0.0049,
+          "9": 0.0025,
+          "10": 0.0011,
+          "11": 0.0005,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0
+        }
+      }
     },
     "Sec_Cairn": {
       "name": "Cairn",
@@ -767,7 +803,28 @@
         "Carbon",
         "Sandstone",
         "SiliciumIngot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6797,
+        "expectedCount": 1.572,
+        "countDistribution": {
+          "0": 0.3203,
+          "1": 0.3021,
+          "2": 0.1613,
+          "3": 0.0847,
+          "4": 0.053,
+          "5": 0.0345,
+          "6": 0.0211,
+          "7": 0.0115,
+          "8": 0.0061,
+          "9": 0.0031,
+          "10": 0.0014,
+          "11": 0.0006,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0001
+        }
+      }
     },
     "Sec_Landmark": {
       "name": "Landmark",
@@ -785,7 +842,28 @@
         "CopperIngot",
         "Carbon",
         "Kaolinite"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6608,
+        "expectedCount": 1.435,
+        "countDistribution": {
+          "0": 0.3392,
+          "1": 0.315,
+          "2": 0.16,
+          "3": 0.0773,
+          "4": 0.0447,
+          "5": 0.0283,
+          "6": 0.0171,
+          "7": 0.0092,
+          "8": 0.0049,
+          "9": 0.0025,
+          "10": 0.0011,
+          "11": 0.0005,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0
+        }
+      }
     },
     "Sec_Moor": {
       "name": "Moor",
@@ -803,7 +881,28 @@
         "CopperIngot",
         "Carbon",
         "Kaolinite"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6797,
+        "expectedCount": 1.572,
+        "countDistribution": {
+          "0": 0.3203,
+          "1": 0.3021,
+          "2": 0.1613,
+          "3": 0.0847,
+          "4": 0.053,
+          "5": 0.0345,
+          "6": 0.0211,
+          "7": 0.0115,
+          "8": 0.0061,
+          "9": 0.0031,
+          "10": 0.0014,
+          "11": 0.0006,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0001
+        }
+      }
     },
     "Sec_Rim": {
       "name": "Fool's Rim",
@@ -828,7 +927,30 @@
         "SiliciumIngot",
         "Kaolinite",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6908,
+        "expectedCount": 1.672,
+        "countDistribution": {
+          "0": 0.3092,
+          "1": 0.2912,
+          "2": 0.1613,
+          "3": 0.0896,
+          "4": 0.0584,
+          "5": 0.039,
+          "6": 0.0239,
+          "7": 0.0134,
+          "8": 0.0075,
+          "9": 0.0036,
+          "10": 0.0018,
+          "11": 0.0007,
+          "12": 0.0002,
+          "13": 0.0002,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Strand": {
       "name": "Strand",
@@ -852,7 +974,28 @@
         "Sandstone",
         "SiliciumIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6568,
+        "expectedCount": 1.428,
+        "countDistribution": {
+          "0": 0.3432,
+          "1": 0.3126,
+          "2": 0.1593,
+          "3": 0.0763,
+          "4": 0.0452,
+          "5": 0.0281,
+          "6": 0.0169,
+          "7": 0.0092,
+          "8": 0.0049,
+          "9": 0.0025,
+          "10": 0.0011,
+          "11": 0.0005,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0
+        }
+      }
     },
     "Sec_Horizon": {
       "name": "Horizon",
@@ -876,7 +1019,30 @@
         "Sulfur",
         "TitaniumIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6731,
+        "expectedCount": 1.572,
+        "countDistribution": {
+          "0": 0.3269,
+          "1": 0.2977,
+          "2": 0.1593,
+          "3": 0.0836,
+          "4": 0.0524,
+          "5": 0.0344,
+          "6": 0.0208,
+          "7": 0.0121,
+          "8": 0.007,
+          "9": 0.0031,
+          "10": 0.0017,
+          "11": 0.0007,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Ebb": {
       "name": "Ebb",
@@ -899,7 +1065,30 @@
         "Graphene",
         "TitaniumIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6731,
+        "expectedCount": 1.572,
+        "countDistribution": {
+          "0": 0.3269,
+          "1": 0.2977,
+          "2": 0.1593,
+          "3": 0.0836,
+          "4": 0.0524,
+          "5": 0.0344,
+          "6": 0.0208,
+          "7": 0.0121,
+          "8": 0.007,
+          "9": 0.0031,
+          "10": 0.0017,
+          "11": 0.0007,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Axon": {
       "name": "Axon",
@@ -924,7 +1113,30 @@
         "Graphene",
         "TitaniumIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6731,
+        "expectedCount": 1.572,
+        "countDistribution": {
+          "0": 0.3269,
+          "1": 0.2977,
+          "2": 0.1593,
+          "3": 0.0836,
+          "4": 0.0524,
+          "5": 0.0344,
+          "6": 0.0208,
+          "7": 0.0121,
+          "8": 0.007,
+          "9": 0.0031,
+          "10": 0.0017,
+          "11": 0.0007,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Idol": {
       "name": "Idol",
@@ -950,7 +1162,30 @@
         "TitaniumIngot",
         "Sulfur",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.7343,
+        "expectedCount": 1.994,
+        "countDistribution": {
+          "0": 0.2657,
+          "1": 0.2617,
+          "2": 0.1639,
+          "3": 0.1065,
+          "4": 0.0757,
+          "5": 0.054,
+          "6": 0.0332,
+          "7": 0.0195,
+          "8": 0.0105,
+          "9": 0.0051,
+          "10": 0.0027,
+          "11": 0.001,
+          "12": 0.0004,
+          "13": 0.0002,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Vestige": {
       "name": "Vestige",
@@ -978,7 +1213,30 @@
         "TitaniumIngot",
         "Sulfur",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.7343,
+        "expectedCount": 1.994,
+        "countDistribution": {
+          "0": 0.2657,
+          "1": 0.2617,
+          "2": 0.1639,
+          "3": 0.1065,
+          "4": 0.0757,
+          "5": 0.054,
+          "6": 0.0332,
+          "7": 0.0195,
+          "8": 0.0105,
+          "9": 0.0051,
+          "10": 0.0027,
+          "11": 0.001,
+          "12": 0.0004,
+          "13": 0.0002,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Obst_Hubris1": {
       "name": "Hubris Alpha",
@@ -1003,7 +1261,30 @@
         "Sandstone",
         "IronIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6787,
+        "expectedCount": 1.58,
+        "countDistribution": {
+          "0": 0.3213,
+          "1": 0.3013,
+          "2": 0.1614,
+          "3": 0.0833,
+          "4": 0.052,
+          "5": 0.035,
+          "6": 0.021,
+          "7": 0.0123,
+          "8": 0.0066,
+          "9": 0.0032,
+          "10": 0.0017,
+          "11": 0.0006,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Obst_HubrisBig": {
       "name": "Hubris Major",
@@ -1028,7 +1309,30 @@
         "Sandstone",
         "IronIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6787,
+        "expectedCount": 1.58,
+        "countDistribution": {
+          "0": 0.3213,
+          "1": 0.3013,
+          "2": 0.1614,
+          "3": 0.0833,
+          "4": 0.052,
+          "5": 0.035,
+          "6": 0.021,
+          "7": 0.0123,
+          "8": 0.0066,
+          "9": 0.0032,
+          "10": 0.0017,
+          "11": 0.0006,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Obst_Hubris2": {
       "name": "Hubris Omega",
@@ -1053,7 +1357,30 @@
         "Sandstone",
         "IronIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6787,
+        "expectedCount": 1.58,
+        "countDistribution": {
+          "0": 0.3213,
+          "1": 0.3013,
+          "2": 0.1614,
+          "3": 0.0833,
+          "4": 0.052,
+          "5": 0.035,
+          "6": 0.021,
+          "7": 0.0123,
+          "8": 0.0066,
+          "9": 0.0032,
+          "10": 0.0017,
+          "11": 0.0006,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Obst_Jester": {
       "name": "Jester",
@@ -1077,7 +1404,30 @@
         "Kaolinite",
         "TitaniumIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.7121,
+        "expectedCount": 1.814,
+        "countDistribution": {
+          "0": 0.2879,
+          "1": 0.2809,
+          "2": 0.1636,
+          "3": 0.0961,
+          "4": 0.065,
+          "5": 0.0459,
+          "6": 0.0279,
+          "7": 0.0164,
+          "8": 0.0086,
+          "9": 0.0043,
+          "10": 0.0023,
+          "11": 0.0008,
+          "12": 0.0003,
+          "13": 0.0002,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Justice": {
       "name": "Justice",
@@ -1104,7 +1454,30 @@
         "AluminiumIngot",
         "Kaolinite",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6731,
+        "expectedCount": 1.572,
+        "countDistribution": {
+          "0": 0.3269,
+          "1": 0.2977,
+          "2": 0.1593,
+          "3": 0.0836,
+          "4": 0.0524,
+          "5": 0.0344,
+          "6": 0.0208,
+          "7": 0.0121,
+          "8": 0.007,
+          "9": 0.0031,
+          "10": 0.0017,
+          "11": 0.0007,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     },
     "Sec_Glimmer": {
       "name": "Glimmer",
@@ -1129,7 +1502,30 @@
         "Sandstone",
         "SiliciumIngot",
         "PlumbingLoot"
-      ]
+      ],
+      "crateSpawn": {
+        "atLeastOne": 0.6731,
+        "expectedCount": 1.572,
+        "countDistribution": {
+          "0": 0.3269,
+          "1": 0.2977,
+          "2": 0.1593,
+          "3": 0.0836,
+          "4": 0.0524,
+          "5": 0.0344,
+          "6": 0.0208,
+          "7": 0.0121,
+          "8": 0.007,
+          "9": 0.0031,
+          "10": 0.0017,
+          "11": 0.0007,
+          "12": 0.0002,
+          "13": 0.0001,
+          "14": 0.0,
+          "15": 0.0,
+          "16": 0.0
+        }
+      }
     }
   },
   "itemDropOdds": {
