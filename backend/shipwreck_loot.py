@@ -30,6 +30,33 @@ import sys
 _BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _LOOT_PATH = os.path.join(_BASE_DIR, "game_data_extract", "shipwreck_loot.json")
 
+# secondaryMaterialPool entries are the game's own internal item ids, not
+# display names (shipwreck_loot.json doesn't carry those - only
+# game_data_extract/items.json does, which isn't bundled/loaded at runtime -
+# see this module's own docstring on why only shipwreck_loot.json is). Only
+# 12 distinct ids ever appear there across every sector, so a small
+# hardcoded lookup (looked up once from items.json) is simpler than adding a
+# second ~150KB runtime dependency + build.bat --add-data entry for a dozen
+# names - same call CLAUDE.md's RESOURCE_SIZE_VARIANTS in db.py makes for
+# other static, unlikely-to-change game data. PlumbingLoot has no real
+# in-game display name (items.json lists it as a nameless "Virtual" type
+# entry) - "Plumbing Scrap" is a humanized stand-in, not an authoritative
+# in-game string.
+SECONDARY_MATERIAL_NAMES = {
+    "AluminiumIngot": "Aluminum Ingot",
+    "Carbon": "a-Carbon",
+    "CopperIngot": "Copper Ingot",
+    "Graphene": "Graphene",
+    "IronIngot": "Iron Ingot",
+    "Kaolinite": "Kaolinite",
+    "PlumbingLoot": "Plumbing Scrap",
+    "Sandstone": "Silicate",
+    "SiliciumIngot": "Silicon Ingot",
+    "Sulfur": "Sulfur",
+    "TitaniumIngot": "Titanium Ingot",
+    "VanadiumIngot": "Vanadium Ingot",
+}
+
 _cache = None
 
 
@@ -46,7 +73,15 @@ def get_all_sectors():
     obtainable there, reorganized from itemDropOdds (already computed
     per-item/per-sector-group there - see its own _meta.mechanism_notes)
     rather than re-deriving eligibility from patchPoolByLevel/
-    blueprintPoolByLevel here too."""
+    blueprintPoolByLevel here too.
+
+    crate_spawn_* answers a DIFFERENT question from loot_level_probability
+    and the items list: whether a wreck in this sector contains a rare loot
+    crate AT ALL (as opposed to only ordinary scrap), not what's in one
+    given that it exists - see sectors[*].crateSpawn's own note in the raw
+    JSON's _meta.mechanism_notes for the full derivation (a single wreck can
+    hold more than one crate, so this is a count distribution, not a single
+    spawn-or-not %)."""
     data = _load()
     sector_items = {name: [] for name in (s["name"] for s in data["sectors"].values())}
     for category, key in (("patch", "patches"), ("blueprint", "blueprints")):
@@ -68,13 +103,19 @@ def get_all_sectors():
     for sector in data["sectors"].values():
         items = sector_items[sector["name"]]
         items.sort(key=lambda i: (i["level"], -i["pct"], i["name"]))
+        crate_spawn = sector["crateSpawn"]
         sectors.append(
             {
                 "name": sector["name"],
                 "explo_level": sector["exploLevel"],
                 "max_loot_level": sector["maxLootLevel"],
                 "loot_level_probability": sector["lootLevelProbability"],
-                "secondary_material_pool": sector["secondaryMaterialPool"],
+                "secondary_material_pool": [
+                    SECONDARY_MATERIAL_NAMES.get(m, m) for m in sector["secondaryMaterialPool"]
+                ],
+                "crate_spawn_at_least_one": crate_spawn["atLeastOne"],
+                "crate_spawn_expected_count": crate_spawn["expectedCount"],
+                "crate_spawn_count_distribution": crate_spawn["countDistribution"],
                 "items": items,
             }
         )

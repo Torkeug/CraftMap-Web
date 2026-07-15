@@ -41,6 +41,21 @@ def test_get_wreck_sectors_items_grouped_and_sorted():
     assert levels == sorted(levels)
 
 
+def test_get_wreck_sectors_crate_spawn_odds():
+    """crate_spawn_* answers a different question from loot_level_probability/
+    items: whether a wreck has a rare loot crate at all, not what's in one -
+    see backend/shipwreck_loot.py's get_all_sectors docstring."""
+    api = Api()
+    sectors = api.get_wreck_sectors()
+    json.dumps(sectors)
+    threshold = next(s for s in sectors if s["name"] == "Threshold")
+    assert 0 <= threshold["crate_spawn_at_least_one"] <= 1
+    assert threshold["crate_spawn_expected_count"] >= 0
+    dist = threshold["crate_spawn_count_distribution"]
+    assert isinstance(dist, dict) and dist
+    assert abs(sum(dist.values()) - 1) < 1e-3
+
+
 def test_get_wreck_items_returns_every_item_sorted():
     api = Api()
     items = api.get_wreck_items()

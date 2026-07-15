@@ -160,12 +160,16 @@
           ? `L${itemLevels[0]}`
           : `L${Math.min(...itemLevels)}-L${Math.max(...itemLevels)}`
         : "";
+      // avg crates/wreck on the row itself (not just the expanded "Rare
+      // crate odds" summary below) so it's visible without expanding.
+      const avgCrateText = `avg ${sector.crate_spawn_expected_count.toFixed(2)}/wreck`;
+      const rowRightText = [levelRangeText, avgCrateText].filter(Boolean).join(" · ");
 
       const sectorNode = makeGroupNode(
         `wsec|${sector.name}`,
         sector.name,
         "sector",
-        levelRangeText
+        rowRightText
       );
       const crateTargets = Object.entries(sector.loot_level_probability)
         .sort((a, b) => Number(a[0]) - Number(b[0]))
@@ -174,6 +178,18 @@
       sectorNode.children.push(
         makeSummaryNode(
           `Explo ${sector.explo_level} · max loot ${sector.max_loot_level} · crate targets: ${crateTargets}`,
+          "loc_sum"
+        )
+      );
+      // Whether a wreck HAS a rare loot crate at all, not what's in one
+      // given it exists (that's crateTargets/the items below) - a single
+      // wreck can hold more than one, hence "avg X/wreck" alongside the
+      // at-least-one %. See backend.shipwreck_loot.get_all_sectors's own
+      // docstring for the derivation.
+      sectorNode.children.push(
+        makeSummaryNode(
+          `Rare crate odds: ${fmtPct(sector.crate_spawn_at_least_one * 100)} chance of ≥1 per wreck` +
+            ` (avg ${sector.crate_spawn_expected_count.toFixed(2)}/wreck)`,
           "loc_sum"
         )
       );
