@@ -9,7 +9,8 @@
       "The eligible item pool for a crate targeting level L is NOT items with lootLevel==L exactly. src/logic/Loot.hx:461-478 (generatePrimaryItemCandidateBasic + generateAttemptDownUp) opens a 2-level window {L-1, L} and draws one uniform pick from the combined pool of both levels; only widens further (down then up, one level at a time) if that window is fully empty, which never happens for crate-relevant levels 4-9. So a lootLevel:3 recipe (e.g. Blueprint: Wire) IS reachable from a level-4 crate. Only lootLevel 2 and 10 items are truly unreachable from any wreck crate.",
       "Category choice (Patch vs Blueprint) when a primary item drops is a weighted pick per src/logic/Loot.hx:295-317 depending on a per-candidate 'itl' reference value not fully traced; this dataset approximates it as 50/50 when both categories have eligible candidates.",
       "In-game blueprint display name convention: \"Blueprint: <output item display name>\".",
-      "sectors[*].crateSpawn = stats for a randomly-rolled wreck in this sector containing rare loot crates at all, as opposed to only ordinary scrap - a DIFFERENT question from lootLevelProbability (which level a crate is, GIVEN one exists). A single wreck can contain MORE THAN ONE crate - each JunkGroup invocation independently re-rolls its own RareLoot slot(s), and Big wrecks invoke JunkGroup 5-10 times vs Small's 1-2 - so this is a full count distribution, not just a spawn-or-not %: atLeastOne (P(>=1 crate)), expectedCount (mean crates per wreck), and countDistribution (P(exactly k crates) for k=0,1,2,...). Monte Carlo simulated from the actual resGroup generation tree (ShipWreck_{Small,Big}_lvl{0,1,2} -> JunkGroup[_BlackBox] -> RareLoot_lvl{0,1,2}'s 40:25 BasicLoot-vs-LootChestRare override weight, identical at every tier), per the decompiled logic.gen.PlanetRes.generateGroup/getResGroupCount algorithm - see game_logic_notes.md Finding 8. Tier-independent; driven almost entirely by each sector's Small:Big wreck-type mix (Small wrecks average <1 crate, Big wrecks average ~3-4 and can have several)."
+      "sectors[*].crateSpawn = stats for a randomly-rolled wreck in this sector containing rare loot crates at all, as opposed to only ordinary scrap - a DIFFERENT question from lootLevelProbability (which level a crate is, GIVEN one exists). A single wreck can contain MORE THAN ONE crate - each JunkGroup invocation independently re-rolls its own RareLoot slot(s), and Big wrecks invoke JunkGroup 5-10 times vs Small's 1-2 - so this is a full count distribution, not just a spawn-or-not %: atLeastOne (P(>=1 crate)), expectedCount (mean crates per wreck), and countDistribution (P(exactly k crates) for k=0,1,2,...). Monte Carlo simulated from the actual resGroup generation tree (ShipWreck_{Small,Big}_lvl{0,1,2} -> JunkGroup[_BlackBox] -> RareLoot_lvl{0,1,2}'s 40:25 BasicLoot-vs-LootChestRare override weight, identical at every tier), per the decompiled logic.gen.PlanetRes.generateGroup/getResGroupCount algorithm - see game_logic_notes.md Finding 8. Tier-independent; driven almost entirely by each sector's Small:Big wreck-type mix (Small wrecks average <1 crate, Big wrecks average ~3-4 and can have several).",
+      "itemDropOdds[*].groups[*].pct is CONDITIONAL ON a crate already being open (P(item | one crate opened)) - it does NOT account for how many crates a wreck actually has, which varies 4x between Small and Big (see crateSpawn above). wreckSiteItemOdds composes the two: expectedPerWreck = E[crate count | wreck's SIZE] * P(item | wreck's TIER), exact via linearity of expectation (a wreck's resGen id fixes both size and tier at once, so this is computed once per (size,tier) VARIANT actually reachable in a sector's own wreckResGen list, then weight-averaged the same way crateSpawn already weights tiers). atLeastOnePct is the exact P(this item drops at least once across the WHOLE wreck site), using the real crate-count distribution rather than a Poisson approximation of expectedPerWreck."
     ]
   },
   "patchPoolByLevel": {
@@ -734,17 +735,17 @@
         "Sandstone"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.5855,
-        "expectedCount": 0.89,
+        "atLeastOne": 0.5757,
+        "expectedCount": 0.875,
         "countDistribution": {
-          "0": 0.4145,
-          "1": 0.3665,
-          "2": 0.155,
-          "3": 0.0478,
-          "4": 0.0115,
-          "5": 0.0034,
-          "6": 0.001,
-          "7": 0.0002
+          "0": 0.4243,
+          "1": 0.3616,
+          "2": 0.1512,
+          "3": 0.0462,
+          "4": 0.0126,
+          "5": 0.0031,
+          "6": 0.0009,
+          "7": 0.0001
         }
       }
     },
@@ -765,24 +766,25 @@
         "Sulfur"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6608,
-        "expectedCount": 1.435,
+        "atLeastOne": 0.6534,
+        "expectedCount": 1.427,
         "countDistribution": {
-          "0": 0.3392,
-          "1": 0.315,
-          "2": 0.16,
-          "3": 0.0773,
-          "4": 0.0447,
-          "5": 0.0283,
-          "6": 0.0171,
-          "7": 0.0092,
-          "8": 0.0049,
+          "0": 0.3466,
+          "1": 0.3112,
+          "2": 0.1565,
+          "3": 0.0766,
+          "4": 0.0439,
+          "5": 0.0288,
+          "6": 0.0173,
+          "7": 0.0099,
+          "8": 0.005,
           "9": 0.0025,
-          "10": 0.0011,
-          "11": 0.0005,
+          "10": 0.001,
+          "11": 0.0004,
           "12": 0.0002,
           "13": 0.0001,
-          "14": 0.0
+          "14": 0.0,
+          "17": 0.0
         }
       }
     },
@@ -805,24 +807,25 @@
         "SiliciumIngot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6797,
-        "expectedCount": 1.572,
+        "atLeastOne": 0.6728,
+        "expectedCount": 1.565,
         "countDistribution": {
-          "0": 0.3203,
-          "1": 0.3021,
-          "2": 0.1613,
-          "3": 0.0847,
-          "4": 0.053,
-          "5": 0.0345,
-          "6": 0.0211,
-          "7": 0.0115,
-          "8": 0.0061,
+          "0": 0.3272,
+          "1": 0.2987,
+          "2": 0.1578,
+          "3": 0.0842,
+          "4": 0.0517,
+          "5": 0.0352,
+          "6": 0.0213,
+          "7": 0.0124,
+          "8": 0.0062,
           "9": 0.0031,
-          "10": 0.0014,
-          "11": 0.0006,
-          "12": 0.0002,
+          "10": 0.0012,
+          "11": 0.0005,
+          "12": 0.0003,
           "13": 0.0001,
-          "14": 0.0001
+          "14": 0.0,
+          "17": 0.0
         }
       }
     },
@@ -844,24 +847,25 @@
         "Kaolinite"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6608,
-        "expectedCount": 1.435,
+        "atLeastOne": 0.6534,
+        "expectedCount": 1.427,
         "countDistribution": {
-          "0": 0.3392,
-          "1": 0.315,
-          "2": 0.16,
-          "3": 0.0773,
-          "4": 0.0447,
-          "5": 0.0283,
-          "6": 0.0171,
-          "7": 0.0092,
-          "8": 0.0049,
+          "0": 0.3466,
+          "1": 0.3112,
+          "2": 0.1565,
+          "3": 0.0766,
+          "4": 0.0439,
+          "5": 0.0288,
+          "6": 0.0173,
+          "7": 0.0099,
+          "8": 0.005,
           "9": 0.0025,
-          "10": 0.0011,
-          "11": 0.0005,
+          "10": 0.001,
+          "11": 0.0004,
           "12": 0.0002,
           "13": 0.0001,
-          "14": 0.0
+          "14": 0.0,
+          "17": 0.0
         }
       }
     },
@@ -883,24 +887,25 @@
         "Kaolinite"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6797,
-        "expectedCount": 1.572,
+        "atLeastOne": 0.6728,
+        "expectedCount": 1.565,
         "countDistribution": {
-          "0": 0.3203,
-          "1": 0.3021,
-          "2": 0.1613,
-          "3": 0.0847,
-          "4": 0.053,
-          "5": 0.0345,
-          "6": 0.0211,
-          "7": 0.0115,
-          "8": 0.0061,
+          "0": 0.3272,
+          "1": 0.2987,
+          "2": 0.1578,
+          "3": 0.0842,
+          "4": 0.0517,
+          "5": 0.0352,
+          "6": 0.0213,
+          "7": 0.0124,
+          "8": 0.0062,
           "9": 0.0031,
-          "10": 0.0014,
-          "11": 0.0006,
-          "12": 0.0002,
+          "10": 0.0012,
+          "11": 0.0005,
+          "12": 0.0003,
           "13": 0.0001,
-          "14": 0.0001
+          "14": 0.0,
+          "17": 0.0
         }
       }
     },
@@ -929,26 +934,26 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6908,
-        "expectedCount": 1.672,
+        "atLeastOne": 0.6862,
+        "expectedCount": 1.662,
         "countDistribution": {
-          "0": 0.3092,
-          "1": 0.2912,
-          "2": 0.1613,
-          "3": 0.0896,
-          "4": 0.0584,
-          "5": 0.039,
-          "6": 0.0239,
-          "7": 0.0134,
-          "8": 0.0075,
+          "0": 0.3138,
+          "1": 0.2885,
+          "2": 0.1605,
+          "3": 0.0889,
+          "4": 0.058,
+          "5": 0.0393,
+          "6": 0.0238,
+          "7": 0.0139,
+          "8": 0.0072,
           "9": 0.0036,
-          "10": 0.0018,
-          "11": 0.0007,
-          "12": 0.0002,
-          "13": 0.0002,
+          "10": 0.0015,
+          "11": 0.0006,
+          "12": 0.0003,
+          "13": 0.0001,
           "14": 0.0,
           "15": 0.0,
-          "16": 0.0
+          "17": 0.0
         }
       }
     },
@@ -976,24 +981,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6568,
-        "expectedCount": 1.428,
+        "atLeastOne": 0.653,
+        "expectedCount": 1.427,
         "countDistribution": {
-          "0": 0.3432,
-          "1": 0.3126,
-          "2": 0.1593,
-          "3": 0.0763,
-          "4": 0.0452,
-          "5": 0.0281,
-          "6": 0.0169,
-          "7": 0.0092,
-          "8": 0.0049,
+          "0": 0.347,
+          "1": 0.3097,
+          "2": 0.1585,
+          "3": 0.076,
+          "4": 0.0435,
+          "5": 0.0289,
+          "6": 0.0172,
+          "7": 0.01,
+          "8": 0.005,
           "9": 0.0025,
-          "10": 0.0011,
-          "11": 0.0005,
+          "10": 0.001,
+          "11": 0.0004,
           "12": 0.0002,
           "13": 0.0001,
-          "14": 0.0
+          "14": 0.0,
+          "17": 0.0
         }
       }
     },
@@ -1021,26 +1027,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6731,
-        "expectedCount": 1.572,
+        "atLeastOne": 0.6718,
+        "expectedCount": 1.561,
         "countDistribution": {
-          "0": 0.3269,
-          "1": 0.2977,
-          "2": 0.1593,
-          "3": 0.0836,
-          "4": 0.0524,
-          "5": 0.0344,
-          "6": 0.0208,
-          "7": 0.0121,
-          "8": 0.007,
+          "0": 0.3282,
+          "1": 0.2957,
+          "2": 0.1621,
+          "3": 0.0826,
+          "4": 0.0528,
+          "5": 0.0343,
+          "6": 0.0205,
+          "7": 0.012,
+          "8": 0.0063,
           "9": 0.0031,
-          "10": 0.0017,
-          "11": 0.0007,
-          "12": 0.0002,
-          "13": 0.0001,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "10": 0.0014,
+          "11": 0.0006,
+          "12": 0.0003,
+          "13": 0.0,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     },
@@ -1067,26 +1072,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6731,
-        "expectedCount": 1.572,
+        "atLeastOne": 0.6718,
+        "expectedCount": 1.561,
         "countDistribution": {
-          "0": 0.3269,
-          "1": 0.2977,
-          "2": 0.1593,
-          "3": 0.0836,
-          "4": 0.0524,
-          "5": 0.0344,
-          "6": 0.0208,
-          "7": 0.0121,
-          "8": 0.007,
+          "0": 0.3282,
+          "1": 0.2957,
+          "2": 0.1621,
+          "3": 0.0826,
+          "4": 0.0528,
+          "5": 0.0343,
+          "6": 0.0205,
+          "7": 0.012,
+          "8": 0.0063,
           "9": 0.0031,
-          "10": 0.0017,
-          "11": 0.0007,
-          "12": 0.0002,
-          "13": 0.0001,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "10": 0.0014,
+          "11": 0.0006,
+          "12": 0.0003,
+          "13": 0.0,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     },
@@ -1115,26 +1119,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6731,
-        "expectedCount": 1.572,
+        "atLeastOne": 0.6718,
+        "expectedCount": 1.561,
         "countDistribution": {
-          "0": 0.3269,
-          "1": 0.2977,
-          "2": 0.1593,
-          "3": 0.0836,
-          "4": 0.0524,
-          "5": 0.0344,
-          "6": 0.0208,
-          "7": 0.0121,
-          "8": 0.007,
+          "0": 0.3282,
+          "1": 0.2957,
+          "2": 0.1621,
+          "3": 0.0826,
+          "4": 0.0528,
+          "5": 0.0343,
+          "6": 0.0205,
+          "7": 0.012,
+          "8": 0.0063,
           "9": 0.0031,
-          "10": 0.0017,
-          "11": 0.0007,
-          "12": 0.0002,
-          "13": 0.0001,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "10": 0.0014,
+          "11": 0.0006,
+          "12": 0.0003,
+          "13": 0.0,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     },
@@ -1164,26 +1167,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.7343,
-        "expectedCount": 1.994,
+        "atLeastOne": 0.7311,
+        "expectedCount": 1.983,
         "countDistribution": {
-          "0": 0.2657,
-          "1": 0.2617,
-          "2": 0.1639,
-          "3": 0.1065,
-          "4": 0.0757,
-          "5": 0.054,
-          "6": 0.0332,
-          "7": 0.0195,
-          "8": 0.0105,
-          "9": 0.0051,
-          "10": 0.0027,
-          "11": 0.001,
-          "12": 0.0004,
-          "13": 0.0002,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "0": 0.2689,
+          "1": 0.2591,
+          "2": 0.1646,
+          "3": 0.1056,
+          "4": 0.0772,
+          "5": 0.0525,
+          "6": 0.0333,
+          "7": 0.0192,
+          "8": 0.01,
+          "9": 0.0053,
+          "10": 0.0024,
+          "11": 0.0011,
+          "12": 0.0005,
+          "13": 0.0001,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     },
@@ -1215,26 +1217,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.7343,
-        "expectedCount": 1.994,
+        "atLeastOne": 0.7311,
+        "expectedCount": 1.983,
         "countDistribution": {
-          "0": 0.2657,
-          "1": 0.2617,
-          "2": 0.1639,
-          "3": 0.1065,
-          "4": 0.0757,
-          "5": 0.054,
-          "6": 0.0332,
-          "7": 0.0195,
-          "8": 0.0105,
-          "9": 0.0051,
-          "10": 0.0027,
-          "11": 0.001,
-          "12": 0.0004,
-          "13": 0.0002,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "0": 0.2689,
+          "1": 0.2591,
+          "2": 0.1646,
+          "3": 0.1056,
+          "4": 0.0772,
+          "5": 0.0525,
+          "6": 0.0333,
+          "7": 0.0192,
+          "8": 0.01,
+          "9": 0.0053,
+          "10": 0.0024,
+          "11": 0.0011,
+          "12": 0.0005,
+          "13": 0.0001,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     },
@@ -1263,26 +1264,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6787,
-        "expectedCount": 1.58,
+        "atLeastOne": 0.673,
+        "expectedCount": 1.568,
         "countDistribution": {
-          "0": 0.3213,
-          "1": 0.3013,
-          "2": 0.1614,
+          "0": 0.327,
+          "1": 0.2971,
+          "2": 0.1606,
           "3": 0.0833,
-          "4": 0.052,
-          "5": 0.035,
-          "6": 0.021,
-          "7": 0.0123,
-          "8": 0.0066,
-          "9": 0.0032,
-          "10": 0.0017,
-          "11": 0.0006,
-          "12": 0.0002,
-          "13": 0.0001,
+          "4": 0.0527,
+          "5": 0.034,
+          "6": 0.0211,
+          "7": 0.012,
+          "8": 0.0063,
+          "9": 0.0033,
+          "10": 0.0015,
+          "11": 0.0007,
+          "12": 0.0003,
+          "13": 0.0,
           "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "15": 0.0
         }
       }
     },
@@ -1311,26 +1311,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6787,
-        "expectedCount": 1.58,
+        "atLeastOne": 0.673,
+        "expectedCount": 1.568,
         "countDistribution": {
-          "0": 0.3213,
-          "1": 0.3013,
-          "2": 0.1614,
+          "0": 0.327,
+          "1": 0.2971,
+          "2": 0.1606,
           "3": 0.0833,
-          "4": 0.052,
-          "5": 0.035,
-          "6": 0.021,
-          "7": 0.0123,
-          "8": 0.0066,
-          "9": 0.0032,
-          "10": 0.0017,
-          "11": 0.0006,
-          "12": 0.0002,
-          "13": 0.0001,
+          "4": 0.0527,
+          "5": 0.034,
+          "6": 0.0211,
+          "7": 0.012,
+          "8": 0.0063,
+          "9": 0.0033,
+          "10": 0.0015,
+          "11": 0.0007,
+          "12": 0.0003,
+          "13": 0.0,
           "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "15": 0.0
         }
       }
     },
@@ -1359,26 +1358,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6787,
-        "expectedCount": 1.58,
+        "atLeastOne": 0.673,
+        "expectedCount": 1.568,
         "countDistribution": {
-          "0": 0.3213,
-          "1": 0.3013,
-          "2": 0.1614,
+          "0": 0.327,
+          "1": 0.2971,
+          "2": 0.1606,
           "3": 0.0833,
-          "4": 0.052,
-          "5": 0.035,
-          "6": 0.021,
-          "7": 0.0123,
-          "8": 0.0066,
-          "9": 0.0032,
-          "10": 0.0017,
-          "11": 0.0006,
-          "12": 0.0002,
-          "13": 0.0001,
+          "4": 0.0527,
+          "5": 0.034,
+          "6": 0.0211,
+          "7": 0.012,
+          "8": 0.0063,
+          "9": 0.0033,
+          "10": 0.0015,
+          "11": 0.0007,
+          "12": 0.0003,
+          "13": 0.0,
           "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "15": 0.0
         }
       }
     },
@@ -1406,26 +1404,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.7121,
-        "expectedCount": 1.814,
+        "atLeastOne": 0.7058,
+        "expectedCount": 1.801,
         "countDistribution": {
-          "0": 0.2879,
-          "1": 0.2809,
-          "2": 0.1636,
-          "3": 0.0961,
-          "4": 0.065,
-          "5": 0.0459,
-          "6": 0.0279,
-          "7": 0.0164,
-          "8": 0.0086,
-          "9": 0.0043,
-          "10": 0.0023,
-          "11": 0.0008,
-          "12": 0.0003,
-          "13": 0.0002,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "0": 0.2942,
+          "1": 0.2766,
+          "2": 0.1622,
+          "3": 0.096,
+          "4": 0.0663,
+          "5": 0.0442,
+          "6": 0.0281,
+          "7": 0.0161,
+          "8": 0.0083,
+          "9": 0.0045,
+          "10": 0.002,
+          "11": 0.001,
+          "12": 0.0004,
+          "13": 0.0001,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     },
@@ -1456,26 +1453,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6731,
-        "expectedCount": 1.572,
+        "atLeastOne": 0.6718,
+        "expectedCount": 1.561,
         "countDistribution": {
-          "0": 0.3269,
-          "1": 0.2977,
-          "2": 0.1593,
-          "3": 0.0836,
-          "4": 0.0524,
-          "5": 0.0344,
-          "6": 0.0208,
-          "7": 0.0121,
-          "8": 0.007,
+          "0": 0.3282,
+          "1": 0.2957,
+          "2": 0.1621,
+          "3": 0.0826,
+          "4": 0.0528,
+          "5": 0.0343,
+          "6": 0.0205,
+          "7": 0.012,
+          "8": 0.0063,
           "9": 0.0031,
-          "10": 0.0017,
-          "11": 0.0007,
-          "12": 0.0002,
-          "13": 0.0001,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "10": 0.0014,
+          "11": 0.0006,
+          "12": 0.0003,
+          "13": 0.0,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     },
@@ -1504,26 +1500,25 @@
         "PlumbingLoot"
       ],
       "crateSpawn": {
-        "atLeastOne": 0.6731,
-        "expectedCount": 1.572,
+        "atLeastOne": 0.6718,
+        "expectedCount": 1.561,
         "countDistribution": {
-          "0": 0.3269,
-          "1": 0.2977,
-          "2": 0.1593,
-          "3": 0.0836,
-          "4": 0.0524,
-          "5": 0.0344,
-          "6": 0.0208,
-          "7": 0.0121,
-          "8": 0.007,
+          "0": 0.3282,
+          "1": 0.2957,
+          "2": 0.1621,
+          "3": 0.0826,
+          "4": 0.0528,
+          "5": 0.0343,
+          "6": 0.0205,
+          "7": 0.012,
+          "8": 0.0063,
           "9": 0.0031,
-          "10": 0.0017,
-          "11": 0.0007,
-          "12": 0.0002,
-          "13": 0.0001,
-          "14": 0.0,
-          "15": 0.0,
-          "16": 0.0
+          "10": 0.0014,
+          "11": 0.0006,
+          "12": 0.0003,
+          "13": 0.0,
+          "14": 0.0001,
+          "15": 0.0
         }
       }
     }
@@ -7349,6 +7344,7026 @@
         "bestPct": 0,
         "groups": [],
         "obtainable": false
+      }
+    ]
+  },
+  "wreckSiteItemOdds": {
+    "patches": [
+      {
+        "name": "Battery Patch: Overload I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Charted Skies I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Light Dodging I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Mag-Plasma I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Generator Patch: Power I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Increased Output I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Mining Power I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Rare Find I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Fuel Efficiency I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Heat Absorber I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Power Efficiency I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: System I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Fast I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Tough I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Precision I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Sure Shot I",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00454,
+            "atLeastOnePct": 0.451,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00377,
+            "atLeastOnePct": 0.375,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Radar Patch: Range II",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0124,
+            "atLeastOnePct": 1.23,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0115,
+            "atLeastOnePct": 1.14,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00937,
+            "atLeastOnePct": 0.93,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00645,
+            "atLeastOnePct": 0.639,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00468,
+            "atLeastOnePct": 0.465,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00358,
+            "atLeastOnePct": 0.355,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Heavy I",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0124,
+            "atLeastOnePct": 1.23,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0115,
+            "atLeastOnePct": 1.14,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00937,
+            "atLeastOnePct": 0.93,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00645,
+            "atLeastOnePct": 0.639,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00468,
+            "atLeastOnePct": 0.465,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00358,
+            "atLeastOnePct": 0.355,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Wild Shot I",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0165,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0165,
+            "atLeastOnePct": 1.63,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.015,
+            "atLeastOnePct": 1.48,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0124,
+            "atLeastOnePct": 1.23,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0115,
+            "atLeastOnePct": 1.14,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00937,
+            "atLeastOnePct": 0.93,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00921,
+            "atLeastOnePct": 0.916,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00645,
+            "atLeastOnePct": 0.639,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00468,
+            "atLeastOnePct": 0.465,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00358,
+            "atLeastOnePct": 0.355,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Battery Patch: Overload II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Charted Skies II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Edge Explorer I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Light Dodging II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Mag-Plasma II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Generator Patch: Power II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Increased Output II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Mining Power II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Rare Find II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Fuel Efficiency II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Heat Absorber II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Power Efficiency II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: System II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Fast II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Tough II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Precision II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Sure Shot II",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0219,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0219,
+            "atLeastOnePct": 2.15,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0189,
+            "atLeastOnePct": 1.86,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0179,
+            "atLeastOnePct": 1.76,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0166,
+            "atLeastOnePct": 1.64,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0156,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0147,
+            "atLeastOnePct": 1.45,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Last Yield I",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0241,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0235,
+            "atLeastOnePct": 2.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0197,
+            "atLeastOnePct": 1.94,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0193,
+            "atLeastOnePct": 1.9,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.016,
+            "atLeastOnePct": 1.57,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0133,
+            "atLeastOnePct": 1.31,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00969,
+            "atLeastOnePct": 0.962,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Mining Tier I",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0241,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0235,
+            "atLeastOnePct": 2.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0197,
+            "atLeastOnePct": 1.94,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0193,
+            "atLeastOnePct": 1.9,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.016,
+            "atLeastOnePct": 1.57,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0133,
+            "atLeastOnePct": 1.31,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00969,
+            "atLeastOnePct": 0.962,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Radar Patch: Range III",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0241,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0235,
+            "atLeastOnePct": 2.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0197,
+            "atLeastOnePct": 1.94,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0193,
+            "atLeastOnePct": 1.9,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.016,
+            "atLeastOnePct": 1.57,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0133,
+            "atLeastOnePct": 1.31,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00969,
+            "atLeastOnePct": 0.962,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Heavy II",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0241,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0235,
+            "atLeastOnePct": 2.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0197,
+            "atLeastOnePct": 1.94,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0193,
+            "atLeastOnePct": 1.9,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.016,
+            "atLeastOnePct": 1.57,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0133,
+            "atLeastOnePct": 1.31,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00969,
+            "atLeastOnePct": 0.962,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Wild Shot II",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0241,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.36,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0235,
+            "atLeastOnePct": 2.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0197,
+            "atLeastOnePct": 1.94,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0193,
+            "atLeastOnePct": 1.9,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.016,
+            "atLeastOnePct": 1.57,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0133,
+            "atLeastOnePct": 1.31,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00969,
+            "atLeastOnePct": 0.962,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Battery Patch: Overload III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Charted Skies III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Light Dodging III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Mag-Plasma III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Generator Patch: Power III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Increased Output III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Mining Power III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Rare Find III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Fuel Efficiency III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Heat Absorber III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: Power Efficiency III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Module Patch: System III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Fast III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Tough III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Precision III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Sure Shot III",
+        "level": 7,
+        "bestExpectedPerWreck": 0.019,
+        "groups": [
+          {
+            "expectedPerWreck": 0.019,
+            "atLeastOnePct": 1.87,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0188,
+            "atLeastOnePct": 1.85,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0152,
+            "atLeastOnePct": 1.5,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0113,
+            "atLeastOnePct": 1.12,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0112,
+            "atLeastOnePct": 1.1,
+            "sectors": [
+              "Horizon"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "FTL Patch: Edge Explorer II",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0226,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0226,
+            "atLeastOnePct": 2.2,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0186,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0157,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Laser Patch: Mining Tier II",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0226,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0226,
+            "atLeastOnePct": 2.2,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0186,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0157,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Shield Patch: Heavy III",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0226,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0226,
+            "atLeastOnePct": 2.2,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0186,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0157,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Weapon Patch: Wild Shot III",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0226,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0226,
+            "atLeastOnePct": 2.2,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0186,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0157,
+            "atLeastOnePct": 1.54,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      }
+    ],
+    "blueprints": [
+      {
+        "name": "Blueprint: Kaolinite",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00479,
+            "atLeastOnePct": 0.476,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00397,
+            "atLeastOnePct": 0.395,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Magnetic Coil",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00479,
+            "atLeastOnePct": 0.476,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00397,
+            "atLeastOnePct": 0.395,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Metal Sheet",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00479,
+            "atLeastOnePct": 0.476,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00397,
+            "atLeastOnePct": 0.395,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Metal Sheet",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00479,
+            "atLeastOnePct": 0.476,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00397,
+            "atLeastOnePct": 0.395,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Solid Explosive",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00479,
+            "atLeastOnePct": 0.476,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00397,
+            "atLeastOnePct": 0.395,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Wire",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00479,
+            "atLeastOnePct": 0.476,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00397,
+            "atLeastOnePct": 0.395,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Wire",
+        "level": 3,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00479,
+            "atLeastOnePct": 0.476,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00397,
+            "atLeastOnePct": 0.395,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Concrete",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Crystalline Focuser",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Crystalline Focuser",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Crystalline Focuser",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Metal Sheet",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Nut and Bolt",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Radar Patch: Range I",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Semiconductor Substrate",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Stainless Plate",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Stainless Plate",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Watertight Pipe",
+        "level": 4,
+        "bestExpectedPerWreck": 0.0174,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0174,
+            "atLeastOnePct": 1.71,
+            "sectors": [
+              "Cairn",
+              "Moor"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0159,
+            "atLeastOnePct": 1.56,
+            "sectors": [
+              "Landmark",
+              "Terminus"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00973,
+            "atLeastOnePct": 0.965,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00972,
+            "atLeastOnePct": 0.967,
+            "sectors": [
+              "Threshold"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00942,
+            "atLeastOnePct": 0.933,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00625,
+            "atLeastOnePct": 0.621,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0043,
+            "atLeastOnePct": 0.427,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00312,
+            "atLeastOnePct": 0.311,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00239,
+            "atLeastOnePct": 0.237,
+            "sectors": [
+              "Jester"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Battery Patch: Overload I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Cold-Protec Suit Chip",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Diffraction Grating",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Diffraction Grating",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Charted Skies I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Light Dodging I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Mag-Plasma I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Generator Patch: Power I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Heat-Protec Suit Chip",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Increased Output I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Power I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Rare Find I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Fuel Efficiency I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Heat Absorber I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Power Efficiency I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: System I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Semiconductor Substrate",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Shield Patch: Tough I",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Watertight Pipe",
+        "level": 5,
+        "bestExpectedPerWreck": 0.0184,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0184,
+            "atLeastOnePct": 1.81,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0144,
+            "atLeastOnePct": 1.42,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Horizon",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.38,
+            "sectors": [
+              "Strand"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0139,
+            "atLeastOnePct": 1.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Medium Radiator",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0248,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0248,
+            "atLeastOnePct": 2.43,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0205,
+            "atLeastOnePct": 2.01,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0199,
+            "atLeastOnePct": 1.95,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0164,
+            "atLeastOnePct": 1.61,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00927,
+            "atLeastOnePct": 0.921,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Radar Patch: Range II",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0248,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0248,
+            "atLeastOnePct": 2.43,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0205,
+            "atLeastOnePct": 2.01,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0199,
+            "atLeastOnePct": 1.95,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0164,
+            "atLeastOnePct": 1.61,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00927,
+            "atLeastOnePct": 0.921,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Strong Metal Sheet",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0248,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0248,
+            "atLeastOnePct": 2.43,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0205,
+            "atLeastOnePct": 2.01,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0199,
+            "atLeastOnePct": 1.95,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0164,
+            "atLeastOnePct": 1.61,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00927,
+            "atLeastOnePct": 0.921,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Strong Metal Sheet",
+        "level": 6,
+        "bestExpectedPerWreck": 0.0248,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0248,
+            "atLeastOnePct": 2.43,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0241,
+            "atLeastOnePct": 2.37,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0205,
+            "atLeastOnePct": 2.01,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0199,
+            "atLeastOnePct": 1.95,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0164,
+            "atLeastOnePct": 1.61,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0127,
+            "atLeastOnePct": 1.25,
+            "sectors": [
+              "Fool's Rim"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00927,
+            "atLeastOnePct": 0.921,
+            "sectors": [
+              "Strand"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Battery Patch: Overload II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Cooling Laser",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Charted Skies II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Edge Explorer I",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Light Dodging II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Mag-Plasma II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Generator Patch: Power II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Increased Output II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Power II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Rare Find II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Fuel Efficiency II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Heat Absorber II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Power Efficiency II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: System II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Shield Patch: Tough II",
+        "level": 7,
+        "bestExpectedPerWreck": 0.0202,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0202,
+            "atLeastOnePct": 1.98,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0201,
+            "atLeastOnePct": 1.97,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0162,
+            "atLeastOnePct": 1.6,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0123,
+            "atLeastOnePct": 1.22,
+            "sectors": [
+              "Horizon"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0121,
+            "atLeastOnePct": 1.2,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: BESS Module",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0105,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0105,
+            "atLeastOnePct": 1.04,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0095,
+            "atLeastOnePct": 0.941,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00785,
+            "atLeastOnePct": 0.779,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Gravitron",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0105,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0105,
+            "atLeastOnePct": 1.04,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0095,
+            "atLeastOnePct": 0.941,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00785,
+            "atLeastOnePct": 0.779,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Last Yield I",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0105,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0105,
+            "atLeastOnePct": 1.04,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0095,
+            "atLeastOnePct": 0.941,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00785,
+            "atLeastOnePct": 0.779,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Tier I",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0105,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0105,
+            "atLeastOnePct": 1.04,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0095,
+            "atLeastOnePct": 0.941,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00785,
+            "atLeastOnePct": 0.779,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Radar Patch: Range III",
+        "level": 8,
+        "bestExpectedPerWreck": 0.0105,
+        "groups": [
+          {
+            "expectedPerWreck": 0.0105,
+            "atLeastOnePct": 1.04,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0095,
+            "atLeastOnePct": 0.941,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00785,
+            "atLeastOnePct": 0.779,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.0039,
+            "atLeastOnePct": 0.389,
+            "sectors": [
+              "Axon",
+              "Ebb",
+              "Glimmer",
+              "Justice"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Battery Patch: Overload III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Charted Skies III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Light Dodging III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: FTL Patch: Mag-Plasma III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Generator Patch: Power III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Large Liquid Tank",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Large Solar Panel",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Increased Output III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Mining Power III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Laser Patch: Rare Find III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Fuel Efficiency III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Heat Absorber III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: Power Efficiency III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Module Patch: System III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Blueprint: Shield Patch: Tough III",
+        "level": 9,
+        "bestExpectedPerWreck": 0.00301,
+        "groups": [
+          {
+            "expectedPerWreck": 0.00301,
+            "atLeastOnePct": 0.3,
+            "sectors": [
+              "Jester"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00227,
+            "atLeastOnePct": 0.226,
+            "sectors": [
+              "Idol",
+              "Vestige"
+            ]
+          },
+          {
+            "expectedPerWreck": 0.00197,
+            "atLeastOnePct": 0.196,
+            "sectors": [
+              "Hubris Alpha",
+              "Hubris Major",
+              "Hubris Omega"
+            ]
+          }
+        ]
       }
     ]
   }

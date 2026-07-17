@@ -45,6 +45,20 @@ Two deviations from the plan as originally written:
     shape.
   - `patchPoolByLevel` / `blueprintPoolByLevel`: the raw pools, if a
     per-sector (rather than per-item) view ends up preferred instead.
+  - `wreckSiteItemOdds.patches` / `wreckSiteItemOdds.blueprints` (added
+    after the tab below was first implemented - **not yet consumed by
+    `backend/shipwreck_loot.py`/`frontend/js/wrecks.js`**): same row shape
+    as `itemDropOdds`, but composed against crate *count* too (see
+    `tools/game_logic_notes.md` Finding 9) - `{name, level,
+    bestExpectedPerWreck, groups: [{expectedPerWreck, atLeastOnePct,
+    sectors: [...]}]}`. `itemDropOdds.pct` answers "given a crate is
+    already open, what's the chance of item X" (conditional on a crate
+    existing at all); `wreckSiteItemOdds.expectedPerWreck` answers "how
+    many of item X do I expect walking one wreck site" (folds in that a
+    Big wreck averages ~3.6 crates, not 1). If the Wrecks tab UI ever
+    reads as understating Big-wreck-sector odds, this is the field to
+    switch to instead of `itemDropOdds` - not a replacement so much as a
+    more honest number for the same question a player actually asks.
 
 ## Suggested approach: mirror the Sources tab exactly
 
