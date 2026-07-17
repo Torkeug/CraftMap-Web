@@ -49,6 +49,18 @@
     return `${rounded}%`;
   }
 
+  // itemDropOdds's pct is conditional on a crate already being open;
+  // wreckSiteItemOdds's atLeastOnePct folds in the sector's own crate-count
+  // mix (Big wrecks average ~4x more crates than Small - see
+  // shipwreck_loot_integration.md), so pairing them answers both "given I
+  // find a crate" and "walking this whole wreck site". atLeastOnePct is
+  // missing (null) for the handful of items marked unobtainable, which
+  // backend/shipwreck_loot.py never gives a wreckSiteItemOdds entry at all.
+  function fmtOdds(pct, atLeastOnePct) {
+    const crateText = fmtPct(pct);
+    return atLeastOnePct == null ? crateText : `${crateText} · ${fmtPct(atLeastOnePct)}/site`;
+  }
+
   function matchesQuery(text, q) {
     return !q || text.toLowerCase().includes(q);
   }
@@ -210,7 +222,12 @@
           sectorNode.children.push(makeSummaryNode(`Loot level ${currentLevel}:`, "loc_sum"));
         }
         sectorNode.children.push(
-          makeLeafNode(item.name, "planet", fmtPct(item.pct), item.category)
+          makeLeafNode(
+            item.name,
+            "planet",
+            fmtOdds(item.pct, item.at_least_one_pct),
+            item.category
+          )
         );
       }
       roots.push(sectorNode);
@@ -234,8 +251,12 @@
         const itemMatches = matchesQuery(item.name, q);
         const sectorRows = [];
         for (const group of item.groups) {
-          for (const sectorName of group.sectors) {
-            sectorRows.push({ sectorName, pct: group.pct });
+          for (const sector of group.sectors) {
+            sectorRows.push({
+              sectorName: sector.name,
+              pct: group.pct,
+              atLeastOnePct: sector.at_least_one_pct,
+            });
           }
         }
         const visibleRows = itemMatches
@@ -245,17 +266,23 @@
         anyChild = true;
 
         const itemNode = makeGroupNode(`witem|${item.name}`, item.name, "resource");
+        const bestSiteText =
+          item.best_at_least_one_pct == null
+            ? ""
+            : ` · best ${fmtPct(item.best_at_least_one_pct)} per wreck site`;
         itemNode.children.push(
           makeSummaryNode(
             item.obtainable
-              ? `Loot level ${item.level} · best odds ${fmtPct(item.best_pct)} per rare loot crate`
+              ? `Loot level ${item.level} · best odds ${fmtPct(item.best_pct)} per rare loot crate${bestSiteText}`
               : `Loot level ${item.level} · not obtainable from any wreck crate`,
             "loc_sum"
           )
         );
         visibleRows.sort((a, b) => b.pct - a.pct || a.sectorName.localeCompare(b.sectorName));
         for (const r of visibleRows) {
-          itemNode.children.push(makeLeafNode(r.sectorName, "loc_sec", fmtPct(r.pct)));
+          itemNode.children.push(
+            makeLeafNode(r.sectorName, "loc_sec", fmtOdds(r.pct, r.atLeastOnePct))
+          );
         }
         catNode.children.push(itemNode);
       }

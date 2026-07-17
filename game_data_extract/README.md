@@ -78,12 +78,23 @@ for review before you decide how to merge.
   [`shipbuilder/tools/extract_shipwreck_loot.py`](../../shipbuilder/tools/extract_shipwreck_loot.py):
   - `sectors`: which loot levels each sector can reach (capped by
     `sector.props.maxLootLevel`, weighted by that sector's wreck-tier mix in
-    `generation.wreckResGen`), plus its secondary-material pool.
+    `generation.wreckResGen`), plus its secondary-material pool and
+    `crateSpawn` (P(a wreck here has a rare loot crate at all) — a full
+    crate-*count* distribution, since a single wreck can hold more than
+    one).
   - `itemDropOdds.patches` / `itemDropOdds.blueprints`: per-item drop
     probability by sector, sectors pre-grouped wherever the odds land on the
     same number. The concrete Patch pool is `item.type=Patch` rows with their
     own `lootLevel`; the Blueprint pool is `craft.lootLevel` rows, named
-    `"Blueprint: <output item name>"` per the game's own convention.
+    `"Blueprint: <output item name>"` per the game's own convention. This is
+    conditional on a crate already being open — it does not account for how
+    many crates a wreck actually has.
+  - `wreckSiteItemOdds.patches` / `wreckSiteItemOdds.blueprints`: same
+    per-item/per-sector shape as `itemDropOdds`, but composed against
+    `crateSpawn`'s own crate-count distribution too — `expectedPerWreck`
+    (mean count of this item per wreck) and `atLeastOnePct` (P(this item
+    drops at least once across the whole wreck site)), the more honest
+    numbers for "how many of item X do I expect visiting one wreck site."
   - `patchPoolByLevel` / `blueprintPoolByLevel`: the raw pools each of the
     above is built from.
 
@@ -94,8 +105,8 @@ for review before you decide how to merge.
   `{L-1, L}`, not just `L` (confirmed against raw HashLink opcodes in
   `src/logic/Loot.hx`, both cross-checked against an actual reported drop).
   See the file's own `_meta` block for the full derivation notes, and
-  [`shipwreck_loot_integration.md`](shipwreck_loot_integration.md) for a plan
-  to surface this in a CraftMap "Wrecks" tab (not yet implemented) and
+  [`shipwreck_loot_integration.md`](shipwreck_loot_integration.md) for how
+  this is surfaced in CraftMap's "Wrecks" tab and
   [`shipwreck_loot.html`](shipwreck_loot.html) for a standalone browsable view
   of the same data. Not merged into `resources.db` — reference data pending a
   decision on where shipwreck loot should live in the schema.

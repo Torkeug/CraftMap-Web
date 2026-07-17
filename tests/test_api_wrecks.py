@@ -37,6 +37,12 @@ def test_get_wreck_sectors_items_grouped_and_sorted():
         assert item["category"] in ("patch", "blueprint")
         assert isinstance(item["level"], int)
         assert isinstance(item["pct"], (int, float))
+        # every item here came from itemDropOdds's own groups, and
+        # wreckSiteItemOdds covers every obtainable item (see
+        # backend/shipwreck_loot.py's _wreck_site_lookup) - so both should
+        # always be populated for a sector's own item rows.
+        assert isinstance(item["expected_per_wreck"], (int, float))
+        assert isinstance(item["at_least_one_pct"], (int, float))
     levels = [i["level"] for i in threshold["items"]]
     assert levels == sorted(levels)
 
@@ -71,13 +77,27 @@ def test_get_wreck_items_returns_every_item_sorted():
         for group in item["groups"]:
             assert isinstance(group["pct"], (int, float))
             assert isinstance(group["sectors"], list) and group["sectors"]
+            for sector in group["sectors"]:
+                assert isinstance(sector["name"], str)
+                if item["obtainable"]:
+                    assert isinstance(sector["expected_per_wreck"], (int, float))
+                    assert isinstance(sector["at_least_one_pct"], (int, float))
+        if item["obtainable"]:
+            assert isinstance(item["best_expected_per_wreck"], (int, float))
+            assert isinstance(item["best_at_least_one_pct"], (int, float))
+        else:
+            # wreckSiteItemOdds never lists an unobtainable item at all -
+            # see backend/shipwreck_loot.py's _wreck_site_lookup.
+            assert item["best_expected_per_wreck"] is None
+            assert item["best_at_least_one_pct"] is None
+            assert item["groups"] == []
 
 
 def test_get_wreck_items_matches_sector_view():
     """Cross-check: an item obtainable at a given sector (per
-    get_wreck_sectors) should report that same sector/pct from
-    get_wreck_items - both are reorganizations of the same itemDropOdds
-    source data."""
+    get_wreck_sectors) should report that same sector/pct/at_least_one_pct
+    from get_wreck_items - both are reorganizations of the same
+    itemDropOdds/wreckSiteItemOdds source data."""
     api = Api()
     sectors = api.get_wreck_sectors()
     threshold = next(s for s in sectors if s["name"] == "Threshold")
@@ -85,5 +105,10 @@ def test_get_wreck_items_matches_sector_view():
 
     items = api.get_wreck_items()
     item = next(i for i in items if i["name"] == sector_item["name"])
-    matching_pct = [g["pct"] for g in item["groups"] if "Threshold" in g["sectors"]]
-    assert matching_pct == [sector_item["pct"]]
+    matching = [
+        (g["pct"], s["at_least_one_pct"])
+        for g in item["groups"]
+        for s in g["sectors"]
+        if s["name"] == "Threshold"
+    ]
+    assert matching == [(sector_item["pct"], sector_item["at_least_one_pct"])]
