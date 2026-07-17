@@ -406,23 +406,95 @@ def find_duplicate_deposit(
     return row
 
 
+# Columns the galaxy-wide dump (tools/backfill_galaxy_resources.py) can also
+# supply suggestions for - it has no res_type column (that's a deposits-only
+# user category, e.g. "Ore"/"Deposit"), so a res_type constraint only ever
+# narrows the deposits side of the union below.
+_GALAXY_DROPDOWN_COLUMNS = {"resource", "sector", "system_name", "planet"}
+
+# Node-type names confirmed (game_data_extract/resource_nodes.json's own
+# props.itemType, cross-checked by tools/report_resource_name_mismatches.py)
+# to be PlanetResource_Deposit (auto-drilled, no walkable node to visit) -
+# this app's own res_type field exists to distinguish exactly this from
+# everything else hand-gathered (PlanetResource_RegularNode/Shell/Geyser/
+# Exploration), using the values "Deposit" vs "Resources" (see
+# Api.add_galaxy_note's own docstring). Not every name is itself "obvious" -
+# "Brine Pool"/"Mercury Pool"/"Vitriol Pool" are Deposit-type despite not
+# containing the word "Deposit". Static game data, unlikely to change -
+# hardcoded rather than reading game_data_extract/ at runtime, same call
+# RESOURCE_SIZE_VARIANTS above makes.
+DEPOSIT_TYPE_RESOURCE_NAMES = {
+    "Aluminum Deposit", "Brine Pool", "Coal Deposit", "Copper Deposit",
+    "Dense Aluminum Deposit", "Dense Copper Deposit", "Dense Iron Deposit",
+    "Dense Platinum Deposit", "Iron Deposit", "Mercury Pool",
+    "Platinum Deposit", "Pyrite Deposit", "Sandstone Deposit",
+    "Sulfur Deposit", "Titanium Deposit", "Tungsten Deposit",
+    "Vanadium Deposit", "Vitriol Pool",
+}
+
+
+def _is_deposit_type_name(name):
+    """True if `name` is a Deposit-type (auto-drilled) node. Handles
+    tools/backfill_galaxy_resources.py's composite rows (e.g. "Coal Deposit
+    / Iron Deposit / Titanium Deposit") by checking every joined member,
+    since composite_rows_for_planet only ever combines resGroups where
+    EVERY member is itself Deposit-type."""
+    return all(part in DEPOSIT_TYPE_RESOURCE_NAMES for part in name.split(" / "))
+
+
 def distinct_values_where(column, constraints):
     """Cascading dropdown query - e.g. distinct `system_name` values given a
     chosen `sector`. `constraints` is {column: value}; falsy values are
-    ignored so an empty box doesn't over-constrain the query."""
+    ignored so an empty box doesn't over-constrain the query. For
+    resource/sector/system_name/planet, unions in galaxy_resources (the
+    galaxy-wide dump) alongside the user's own logged `deposits`, so
+    autocomplete can prefill correct spellings/values straight from galaxy
+    data even before anything's been manually logged.
+
+    When `column` is "resource" and `constraints["res_type"]` is exactly
+    "Deposit" or "Resources" (this app's own two mineral categories - see
+    DEPOSIT_TYPE_RESOURCE_NAMES), the result is further narrowed to just
+    that category, so picking a Type first filters the Resource suggestions
+    to match rather than mixing auto-drilled and hand-gathered names
+    together. Any other res_type (or none) leaves the result unfiltered -
+    DEPOSIT_TYPE_RESOURCE_NAMES has no coverage for non-mineral categories
+    like "Plant"/"Shipwreck" anyway."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     active = [(c, v) for c, v in constraints.items() if v]
+
     q = (
         f"SELECT DISTINCT {column} FROM deposits"
         f" WHERE {column} IS NOT NULL AND {column} != ''"
     )
+    params = []
     if active:
         q += " AND " + " AND ".join(f"{c} = ?" for c, _ in active)
+        params += [v for _, v in active]
+
+    if column in _GALAXY_DROPDOWN_COLUMNS:
+        galaxy_active = [(c, v) for c, v in active if c in _GALAXY_DROPDOWN_COLUMNS]
+        gq = (
+            f"SELECT DISTINCT {column} FROM galaxy_resources"
+            f" WHERE {column} IS NOT NULL AND {column} != ''"
+        )
+        if galaxy_active:
+            gq += " AND " + " AND ".join(f"{c} = ?" for c, _ in galaxy_active)
+        q += " UNION " + gq
+        params += [v for _, v in galaxy_active]
+
     q += f" ORDER BY {column} COLLATE NOCASE"
-    cur.execute(q, [v for _, v in active])
+    cur.execute(q, params)
     vals = [row[0] for row in cur.fetchall()]
     conn.close()
+
+    if column == "resource":
+        res_type = constraints.get("res_type")
+        if res_type == "Deposit":
+            vals = [v for v in vals if _is_deposit_type_name(v)]
+        elif res_type == "Resources":
+            vals = [v for v in vals if not _is_deposit_type_name(v)]
+
     return vals
 
 
