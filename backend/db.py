@@ -131,6 +131,21 @@ def init_db():
         c.execute(
             "ALTER TABLE recipe_station_prefs ADD COLUMN mode TEXT NOT NULL DEFAULT 'auto'"
         )
+    # Items curated as "actually a raw material" (minable/harvestable in the
+    # game, per resource_sources) even though a recipe also exists for them
+    # (e.g. Quartz, Hematite - also craftable via a Crystallizer synthesis
+    # recipe, but you'd normally just go mine them) - resolve_recipe_tree
+    # defaults any of these to raw instead of pulling in their own crafting
+    # chain, unless overridden via the normal recipe_alt_prefs mechanism.
+    # Deliberately its own curated table rather than "has resource_sources
+    # rows": plenty of items with sources (Structural Beam, Wire, Solar
+    # Cell, ...) are really salvage-loot of the finished good, not a raw
+    # material you'd default to over crafting it.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS raw_materials (
+            ingredient_name TEXT PRIMARY KEY
+        )
+    """)
     c.execute("""
         CREATE TABLE IF NOT EXISTS craft_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -348,6 +363,26 @@ def get_deposit(row_id):
     row = c.fetchone()
     conn.close()
     return row
+
+
+def get_res_type_for_resource(resource_name):
+    """The res_type already used by other logged deposits of this exact
+    resource name, if any (every resource name observed so far uses
+    exactly one res_type consistently - e.g. every 'Quartz' row is
+    'Resources', every 'Dense Iron Deposit' row is 'Deposit') - lets a
+    quick-add flow like Api.add_galaxy_note infer the right type instead
+    of leaving it blank. None if this resource has never been logged
+    before."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT res_type FROM deposits WHERE resource=? AND res_type IS NOT NULL"
+        " AND res_type != '' LIMIT 1",
+        (resource_name,),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
 
 
 def find_duplicate_deposit(
@@ -713,6 +748,38 @@ def set_checked_many(recipe_id, path_keys, checked):
     conn.close()
 
 
+def get_raw_material_names():
+    """Set of ingredient names curated as "actually a raw material" (see
+    init_db's raw_materials table comment) - resolve_recipe_tree defaults
+    any of these to raw instead of crafting them, even when a recipe
+    exists."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT ingredient_name FROM raw_materials")
+    names = {row[0] for row in c.fetchall()}
+    conn.close()
+    return names
+
+
+def add_raw_material(ingredient_name):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR IGNORE INTO raw_materials (ingredient_name) VALUES (?)",
+        (ingredient_name,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def remove_raw_material(ingredient_name):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM raw_materials WHERE ingredient_name=?", (ingredient_name,))
+    conn.commit()
+    conn.close()
+
+
 def get_alt_prefs():
     """Return {ingredient_name: recipe_id} of user-chosen alternate recipes."""
     conn = sqlite3.connect(DB_PATH)
@@ -780,11 +847,13 @@ def clear_station_pref(ingredient_name):
 
 
 def get_deposits_for_ingredient(resource_name):
-    """Deposit locations for a resource."""
+    """Deposit locations for a resource, including each one's own id/notes -
+    frontend/js/galaxy.js uses notes to show what you wrote down for an
+    already-logged planet."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT COALESCE(sector,''), system_name, planet"
+        "SELECT id, COALESCE(sector,''), system_name, planet, notes"
         " FROM deposits"
         " WHERE resource = ?"
         " ORDER BY sector COLLATE NOCASE, system_name COLLATE NOCASE, planet COLLATE NOCASE",

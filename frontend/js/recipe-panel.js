@@ -275,11 +275,16 @@
     });
     tree.appendChild(wrapper);
 
-    function insertRaw(parentEl, resName, qty, pathKey) {
+    function insertRaw(parentEl, resName, info, pathKey) {
       const isDone = checked.has(pathKey);
+      // A raw entry can still carry alts if it's a curated raw material
+      // currently defaulting to raw (see resolver.py's db.get_raw_
+      // material_names) - offer the same picker crafted rows get, so it
+      // can be switched back to its real recipe.
+      const hasOptions = nodeHasStepOptions(info);
       const { wrapper: rawWrapper } = makeBdNode({
         tagClass: isDone ? "done" : "ingredient",
-        label: `${fmtNum(qty)}×  ${resName}`,
+        label: `${fmtNum(info.qty)}×  ${resName}${hasOptions ? "  ▾" : ""}`,
         checked: isDone,
         hasChildren: true,
         key: pathKey,
@@ -287,6 +292,22 @@
           await CraftMapApi.call("set_checked_many", recipeId, [pathKey], !isDone);
           await refreshBreakdown();
         },
+        onOpenStep: hasOptions
+          ? (e) =>
+              openStepPopup(
+                e.currentTarget,
+                info,
+                false,
+                async (alt) => {
+                  await CraftMapApi.call("set_alt_pref", resName, alt.recipe_id);
+                  await refreshBreakdown({ forceFull: true });
+                },
+                async (stName, mode) => {
+                  await CraftMapApi.call("set_station_pref", resName, stName, mode);
+                  await refreshBreakdown({ forceFull: true });
+                }
+              )
+          : null,
         onFirstExpand: (el) => appendDepositLocations(el, resName, "    "),
       });
       parentEl.appendChild(rawWrapper);
@@ -296,6 +317,10 @@
     const basicEntries = Object.entries(basic).sort((a, b) =>
       a[0].toLowerCase().localeCompare(b[0].toLowerCase())
     );
+    // Computed here (not down by the Raw materials section below, where it
+    // used to live) so the Crafted section's own nested raw_names rows can
+    // also look up a raw item's alts - see the raw_names loop just below.
+    const totals = collectTotals(node);
     if (basicEntries.length) {
       const { wrapper: craftHdr, childrenEl: craftChildren } = makeBdNode({
         tagClass: "section",
@@ -350,11 +375,39 @@
         craftChildren.appendChild(entryWrapper);
 
         for (const rawName of info.raw_names) {
+          // Look up the item's real totals entry (not just its bare name)
+          // so a raw material nested here - same as one in the Raw
+          // materials section below - can still carry alts if it's a
+          // curated raw material currently overridden to a real recipe,
+          // or a real recipe currently defaulting to raw (see resolver.
+          // py's db.get_raw_material_names/RAW_MATERIAL_PREF). Previously
+          // this was a bare label with zero picker support, which is why
+          // an item reached only through a crafted parent's ingredient
+          // list (rather than its own Raw materials row) had no way to
+          // switch its recipe at all.
+          const rawInfo = totals[rawName];
+          const rawHasOptions = rawInfo ? nodeHasStepOptions(rawInfo) : false;
           const { wrapper: rawWrapper } = makeBdNode({
             tagClass: "location",
-            label: `    ${rawName}`,
+            label: `    ${rawName}${rawHasOptions ? "  ▾" : ""}`,
             hasChildren: true,
             key: `${pathKey}__raw__${rawName}`,
+            onOpenStep: rawHasOptions
+              ? (e) =>
+                  openStepPopup(
+                    e.currentTarget,
+                    rawInfo,
+                    false,
+                    async (alt) => {
+                      await CraftMapApi.call("set_alt_pref", rawName, alt.recipe_id);
+                      await refreshBreakdown({ forceFull: true });
+                    },
+                    async (stName, mode) => {
+                      await CraftMapApi.call("set_station_pref", rawName, stName, mode);
+                      await refreshBreakdown({ forceFull: true });
+                    }
+                  )
+              : null,
             onFirstExpand: (el) => appendDepositLocations(el, rawName, "      "),
           });
           entryChildren.appendChild(rawWrapper);
@@ -369,12 +422,11 @@
       key: "__raw_section__",
     });
     childrenEl.appendChild(rawHdr);
-    const totals = collectTotals(node);
     const totalEntries = Object.entries(totals).sort((a, b) =>
       a[0].toLowerCase().localeCompare(b[0].toLowerCase())
     );
-    for (const [resName, qty] of totalEntries) {
-      insertRaw(rawChildren, resName, qty, `__total__|${resName}`);
+    for (const [resName, info] of totalEntries) {
+      insertRaw(rawChildren, resName, info, `__total__|${resName}`);
     }
   }
 

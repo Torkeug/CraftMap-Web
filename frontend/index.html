@@ -104,6 +104,17 @@
               <label><input type="checkbox" id="galaxy-filter-poi" checked /> POI planets</label>
               <label><input type="checkbox" id="galaxy-filter-non-poi" checked /> Non-POI planets</label>
               <div id="galaxy-climate-filter"></div>
+              <div id="galaxy-sector-filter">
+                <label for="galaxy-sector-filter-input">Sector:</label>
+                <div class="dropdown-anchor">
+                  <input
+                    id="galaxy-sector-filter-input"
+                    type="text"
+                    placeholder="All sectors..."
+                  />
+                </div>
+                <span id="galaxy-sector-filter-clear" title="Clear sector filter">&#10005;</span>
+              </div>
             </div>
             <div class="source-row source-row-header" id="galaxy-rows-header">
               <span id="galaxy-count-label"></span>
@@ -234,7 +245,25 @@
         </div>
       </div>
     </div>
+    <div id="confirm-dialog" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span id="confirm-dialog-title">Confirm</span>
+          <button class="icon-btn close-btn" id="confirm-dialog-close-btn" title="Close">
+            &#10005;
+          </button>
+        </div>
+        <div class="modal-body">
+          <div id="confirm-dialog-message"></div>
+          <div class="modal-buttons">
+            <button class="btn btn-neutral" id="confirm-dialog-cancel-btn">Cancel</button>
+            <button class="btn btn-danger" id="confirm-dialog-ok-btn">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <script src="js/api.js"></script>
+    <script src="js/confirm-dialog.js"></script>
     <script src="js/drag-resize.js"></script>
     <script src="js/dropdown.js"></script>
     <script src="js/deposits.js"></script>

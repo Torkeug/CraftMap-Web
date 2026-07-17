@@ -519,11 +519,39 @@
           renderNested(entryChildren, childName, resName);
         }
         for (const rawName of info.raw_names || []) {
+          // Look up the item's real aggregate entry (not just its bare
+          // name) so a raw material nested here - same as one in the flat
+          // Raw Materials section - can still carry alts if it's a
+          // curated raw material currently overridden to a real recipe,
+          // or a real recipe currently defaulting to raw (see resolver.
+          // py's db.get_raw_material_names/RAW_MATERIAL_PREF). Previously
+          // this was a bare label with zero picker support, which is why
+          // an item reached only through a crafted parent's ingredient
+          // list (rather than its own promoted Raw Materials row) had no
+          // way to switch its recipe at all.
+          const rawInfo = items[rawName];
+          const rawHasOptions = rawInfo ? nodeHasStepOptions(rawInfo) : false;
           const { wrapper: rawWrapper } = makeBdNode({
             tagClass: "location",
-            label: `    ${rawName}`,
+            label: `    ${rawName}${rawHasOptions ? "  ▾" : ""}`,
             hasChildren: true,
             key: `${scopeKey}|crafted|${resName}__raw__${rawName}`,
+            onOpenStep: rawHasOptions
+              ? (e) =>
+                  openStepPopup(
+                    e.currentTarget,
+                    rawInfo,
+                    false,
+                    async (alt) => {
+                      await CraftMapApi.call("set_alt_pref", rawName, alt.recipe_id);
+                      await refreshBreakdown({ forceFull: true });
+                    },
+                    async (stName, m) => {
+                      await CraftMapApi.call("set_station_pref", rawName, stName, m);
+                      await refreshBreakdown({ forceFull: true });
+                    }
+                  )
+              : null,
             onFirstExpand: (el) => appendDepositLocations(el, rawName, "      "),
           });
           entryChildren.appendChild(rawWrapper);
@@ -618,9 +646,15 @@
     });
     parentEl.appendChild(rawHdr);
     for (const [resName, info] of rawEntries) {
+      // A raw entry can still carry alts if it's a real recipe currently
+      // forced to "Raw Material" (see resolver.py's RAW_MATERIAL_PREF) -
+      // offer the same picker crafted rows get, so it can be switched back.
+      const hasOptions = nodeHasStepOptions(info);
       const { wrapper: rawWrapper } = makeBdNode({
         tagClass: info.fully_checked ? "done" : "ingredient",
-        label: `${fmtNum(info.qty)}×  ${resName}${formatSourcesSuffix(info.sources)}`,
+        label: `${fmtNum(info.qty)}×  ${resName}${formatSourcesSuffix(info.sources)}${
+          hasOptions ? "  ▾" : ""
+        }`,
         checked: checkboxState(info),
         hasChildren: true,
         key: `${scopeKey}|raw|${resName}`,
@@ -632,6 +666,22 @@
           );
           await refreshBreakdown();
         },
+        onOpenStep: hasOptions
+          ? (e) =>
+              openStepPopup(
+                e.currentTarget,
+                info,
+                false,
+                async (alt) => {
+                  await CraftMapApi.call("set_alt_pref", resName, alt.recipe_id);
+                  await refreshBreakdown({ forceFull: true });
+                },
+                async (stName, m) => {
+                  await CraftMapApi.call("set_station_pref", resName, stName, m);
+                  await refreshBreakdown({ forceFull: true });
+                }
+              )
+          : null,
         onFirstExpand: (el) => appendDepositLocations(el, resName, "    "),
       });
       rawChildren.appendChild(rawWrapper);

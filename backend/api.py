@@ -287,6 +287,17 @@ class Api:
         db.set_station_pref(ingredient_name, station, mode)
         return True
 
+    def get_raw_material_names(self):
+        return sorted(db.get_raw_material_names())
+
+    def add_raw_material(self, ingredient_name):
+        db.add_raw_material(ingredient_name)
+        return True
+
+    def remove_raw_material(self, ingredient_name):
+        db.remove_raw_material(ingredient_name)
+        return True
+
     # ---- resource sources (frontend/js/sources.js) ----
 
     def get_resource_sources(self, resource_name):
@@ -310,9 +321,48 @@ class Api:
 
     def get_deposits_for_ingredient(self, resource_name):
         return [
-            {"sector": sec, "system_name": sysn, "planet": pla}
-            for sec, sysn, pla in db.get_deposits_for_ingredient(resource_name)
+            {"id": rid, "sector": sec, "system_name": sysn, "planet": pla, "notes": notes}
+            for rid, sec, sysn, pla, notes in db.get_deposits_for_ingredient(resource_name)
         ]
+
+    def add_galaxy_note(self, resource_name, sector, system_name, planet, notes):
+        """Logs a deposit purely to attach a note to a galaxy-sourced planet
+        row (frontend/js/galaxy.js) that isn't logged yet - the same
+        deposits-row-exists check that drives that row's LOGGED pin
+        (get_deposits_for_ingredient) is what picks this note up afterwards,
+        so this is "log this planet" rather than a separate notes-only
+        mechanism. res_type is inferred from whatever other deposits of
+        this exact resource already use (db.get_res_type_for_resource) -
+        every resource name observed so far uses exactly one res_type
+        consistently. That precedent lookup only has something to go on
+        once this resource has been logged before, though - for a resource
+        logged here for the very first time, every "Deposit"-typed name in
+        the data (Coal Deposit, Dense Iron Deposit, Coal/Iron/Sandstone (4
+        deposits), ...) literally has "deposit" in its own name, and no
+        "Resources"-typed one does, so that's the fallback signal; anything
+        else falls back further to "Resources" itself (what virtually every
+        other Galaxy-tab-tracked resource uses, as opposed to "Plant"/
+        "Shipwreck", which are different tracking concepts entirely).
+        Leaving it blank would show the row as "(Uncategorized)" in the
+        deposit tracker instead of grouping with this resource's other
+        entries."""
+        if not planet:
+            raise ValueError("Planet is required.")
+        notes = (notes or "").strip()
+        if not notes:
+            # Unlike add_deposit (a real logged deposit, note optional),
+            # a note is this method's whole reason to exist - an empty one
+            # would just silently consume the "+ note" control without
+            # leaving anything behind for the LOGGED pin to show.
+            raise ValueError("Note is required.")
+        res_type = db.get_res_type_for_resource(resource_name)
+        if not res_type:
+            res_type = "Deposit" if "deposit" in resource_name.lower() else "Resources"
+        if db.find_duplicate_deposit(res_type, resource_name, sector, system_name, planet):
+            raise ValueError("This planet is already logged for this resource.")
+        logged_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        db.insert_row(res_type, resource_name, sector, system_name, planet, notes, logged_at)
+        return True
 
     # ---- galaxy data (frontend/js/galaxy.js) ----
 
@@ -368,12 +418,14 @@ class Api:
     def get_recipe_breakdown(self, name, qty_needed=1.0, root_recipe_id=None):
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()
+        raw_material_names = db.get_raw_material_names()
         return resolver.resolve_recipe_tree(
             name,
             qty_needed=qty_needed,
             _root_recipe_id=root_recipe_id,
             _alt_prefs=alt_prefs,
             _station_prefs=station_prefs,
+            _raw_material_names=raw_material_names,
         )
 
     # How many levels of the tree get resolved (and sent across the
@@ -398,12 +450,14 @@ class Api:
         checked = list(db.get_checked_paths(recipe_id))
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()
+        raw_material_names = db.get_raw_material_names()
         tree = resolver.resolve_recipe_tree(
             output_name,
             qty_needed=qty_needed,
             _root_recipe_id=recipe_id,
             _alt_prefs=alt_prefs,
             _station_prefs=station_prefs,
+            _raw_material_names=raw_material_names,
             max_depth=self._INITIAL_RESOLVE_DEPTH,
         )
         return {"output_name": output_name, "checked": checked, "tree": tree}
@@ -418,12 +472,14 @@ class Api:
         one go."""
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()
+        raw_material_names = db.get_raw_material_names()
         return resolver.resolve_recipe_tree(
             name,
             qty_needed=qty_needed,
             _visited=frozenset(ancestor_names),
             _alt_prefs=alt_prefs,
             _station_prefs=station_prefs,
+            _raw_material_names=raw_material_names,
             max_depth=self._INITIAL_RESOLVE_DEPTH,
         )
 
@@ -637,12 +693,14 @@ class Api:
         _qid, recipe_id, _rname, output_name, qty, station, _combine, mode = job
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()
+        raw_material_names = db.get_raw_material_names()
         tree = resolver.resolve_recipe_tree(
             output_name,
             qty_needed=qty,
             _root_recipe_id=recipe_id,
             _alt_prefs=alt_prefs,
             _station_prefs=station_prefs,
+            _raw_material_names=raw_material_names,
             max_depth=self._INITIAL_RESOLVE_DEPTH,
         )
         self._apply_job_station_override(tree, recipe_id, station, mode)
@@ -710,12 +768,14 @@ class Api:
             return cached[1]
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()
+        raw_material_names = db.get_raw_material_names()
         node = resolver.resolve_recipe_tree(
             output_name,
             qty_needed=qty,
             _root_recipe_id=recipe_id,
             _alt_prefs=alt_prefs,
             _station_prefs=station_prefs,
+            _raw_material_names=raw_material_names,
         )
         self._apply_job_station_override(node, recipe_id, station, mode)
         specs = resolver.build_occurrence_specs(node)

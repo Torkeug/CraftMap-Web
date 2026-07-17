@@ -197,7 +197,10 @@ def test_alternate_recipes_are_listed(db):
 
     tree = db.resolve_recipe_tree("Energy", qty_needed=1)
 
-    # First-created recipe (by id) is the default.
+    # First-created recipe (by id) is the default. No "Raw Material" option
+    # here - Energy isn't in the curated raw-material list (see
+    # test_raw_material_option_offered_only_for_curated_items), so the
+    # picker only ever offers other real recipes for it.
     assert tree["recipe_name"] == "Fuel"
     assert len(tree["alts"]) == 1
     assert tree["alts"][0]["recipe_name"] == "Battery"
@@ -381,6 +384,20 @@ def test_station_prefs_round_trip(db):
     assert db.get_station_prefs() == {}
 
 
+def test_raw_material_names_round_trip(db):
+    assert db.get_raw_material_names() == set()
+
+    db.add_raw_material("Quartz")
+    db.add_raw_material("Hematite")
+    assert db.get_raw_material_names() == {"Quartz", "Hematite"}
+
+    db.add_raw_material("Quartz")  # idempotent, no duplicate/error
+    assert db.get_raw_material_names() == {"Quartz", "Hematite"}
+
+    db.remove_raw_material("Quartz")
+    assert db.get_raw_material_names() == {"Hematite"}
+
+
 def test_craft_mode_defaults_to_manual_when_no_auto_time(db):
     # A manual-only station (e.g. "Ship (on-board)") has no auto value at
     # all - the default mode must fall back to manual rather than pointing
@@ -499,3 +516,100 @@ def test_node_has_step_options_true_for_alts_and_multi_mode_stations(db):
     assert db._node_has_step_options(energy_tree) is True  # has alts
     assert db._node_has_step_options(steel_tree) is True  # multi-mode stations
     assert db._node_has_step_options(iron_ore_tree) is False  # raw, no options
+
+
+def test_alt_pref_raw_material_sentinel_forces_raw(db):
+    # A recipe exists for "Quartz", but a RAW_MATERIAL_PREF alt pref should
+    # override it - is_recipe False, no children, and the real recipe still
+    # listed in alts (as "Raw Material"'s own exclude target) so the picker
+    # can offer switching back.
+    quartz_id = db.save_recipe(
+        None,
+        "Quartz",
+        outputs=[("Quartz", 25)],
+        ingredients=[("Silicon Ingot", 32)],
+        stations=DEFAULT_STATIONS,
+    )
+
+    tree = db.resolve_recipe_tree(
+        "Quartz", qty_needed=6, _alt_prefs={"Quartz": resolver.RAW_MATERIAL_PREF}
+    )
+
+    assert tree["is_recipe"] is False
+    assert tree["children"] == []
+    assert tree["cycle_cut"] is False  # forced raw, not a cycle artifact
+    assert len(tree["alts"]) == 1
+    assert tree["alts"][0]["recipe_id"] == quartz_id
+    assert tree["alts"][0]["recipe_name"] == "Quartz"
+
+
+def test_raw_material_option_offered_only_for_curated_items(db):
+    # "Raw Material" must be LIMITED to the curated list (db.get_raw_
+    # material_names) - an item with a recipe but no gather source of its
+    # own (Energy here) never gets the option at all, even though it's
+    # is_recipe True same as a curated item would be.
+    fuel_id = db.save_recipe(
+        None,
+        "Fuel",
+        outputs=[("Energy", 1)],
+        ingredients=[("Coal", 2)],
+        stations=DEFAULT_STATIONS,
+    )
+
+    plain_tree = db.resolve_recipe_tree("Energy", qty_needed=1)
+    assert plain_tree["is_recipe"] is True
+    assert plain_tree["alts"] == []
+
+    # Curated + no explicit _alt_prefs override at all - defaults straight
+    # to raw (the actual point of db.get_raw_material_names), with the real
+    # recipe offered in the picker to switch to crafted.
+    default_raw_tree = db.resolve_recipe_tree(
+        "Energy", qty_needed=1, _raw_material_names={"Energy"}
+    )
+    assert default_raw_tree["is_recipe"] is False
+    assert default_raw_tree["children"] == []
+    assert [alt["recipe_id"] for alt in default_raw_tree["alts"]] == [fuel_id]
+
+    # Explicitly overridden to the real recipe - Raw Material reappears as
+    # the one thing not currently active, to switch back to.
+    crafted_tree = db.resolve_recipe_tree(
+        "Energy",
+        qty_needed=1,
+        _raw_material_names={"Energy"},
+        _alt_prefs={"Energy": fuel_id},
+    )
+    assert crafted_tree["is_recipe"] is True
+    crafted_alt_names = [alt["recipe_name"] for alt in crafted_tree["alts"]]
+    assert crafted_alt_names == [resolver.RAW_MATERIAL_RECIPE_NAME]
+
+
+def test_cycle_cut_occurrence_not_counted_as_shared(db):
+    # Root -> P -> A -> B -> A (cycle). A's second occurrence (under B) is
+    # a cycle-detection placeholder, not a genuine second consumer - it
+    # must not make A look "shared" between P and B (mirrors the real
+    # h-Crystal Matrix / Hematite cycle in resources.db that motivated this
+    # fix: both occurrences trace back to the same job, not two jobs).
+    db.save_recipe(
+        None, "Root", outputs=[("Root", 1)], ingredients=[("P", 1)], stations=DEFAULT_STATIONS
+    )
+    db.save_recipe(
+        None, "P", outputs=[("P", 1)], ingredients=[("A", 1)], stations=DEFAULT_STATIONS
+    )
+    db.save_recipe(
+        None, "A", outputs=[("A", 1)], ingredients=[("B", 1)], stations=DEFAULT_STATIONS
+    )
+    db.save_recipe(
+        None, "B", outputs=[("B", 1)], ingredients=[("A", 1)], stations=DEFAULT_STATIONS
+    )
+
+    tree = db.resolve_recipe_tree("Root", qty_needed=1)
+    specs = resolver.build_occurrence_specs(tree)
+    occurrences = resolver.filter_unchecked_occurrences(specs, set())
+    for occ in occurrences:
+        occ["queue_id"] = 1
+    aggregated = resolver.aggregate_item_occurrences(occurrences)
+
+    a_entry = aggregated["A"]
+    assert len(a_entry["occurrences"]) == 2  # under P (real), and under B (cycle-cut)
+    assert a_entry["is_shared"] is False
+    assert a_entry["is_root_demand"] is False

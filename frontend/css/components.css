@@ -238,7 +238,7 @@
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
 }
 
@@ -251,7 +251,7 @@
      That's exactly what happens during DragResize's measuring pass (see
      theme.css's #app.measuring-min-size), where #deposits-view is made
      shrink-to-fit to find its real floor size - without this, .form-grid
-     falls back to each of its 6 columns' min-content width instead of
+     falls back to each of its 5 columns' min-content width instead of
      the ~0 the minmax(0, 1fr) tracks above allow, ballooning the
      measured minimum window width far past what the form actually needs. */
   min-width: 0;
@@ -950,6 +950,45 @@
   flex-wrap: wrap;
 }
 
+#galaxy-sector-filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+
+#galaxy-sector-filter-input {
+  width: 110px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#galaxy-sector-filter-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#galaxy-sector-filter-clear {
+  cursor: pointer;
+  color: var(--muted);
+  visibility: hidden;
+}
+
+#galaxy-sector-filter-clear.show {
+  visibility: visible;
+}
+
+#galaxy-sector-filter-clear:hover {
+  color: var(--text);
+}
+
 #galaxy-current-system-row {
   flex: 0 0 auto;
   display: flex;
@@ -1210,6 +1249,64 @@
 
 .galaxy-sep {
   color: var(--faint);
+}
+
+.galaxy-note {
+  color: var(--text);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.galaxy-note-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.galaxy-note-link {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.galaxy-note-input {
+  width: 140px;
+  box-sizing: border-box;
+  height: 18px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: var(--ui);
+  font-size: 9.5px;
+}
+
+.galaxy-note-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.galaxy-note-save {
+  border: none;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: var(--ui);
+  font-size: 9px;
+  cursor: pointer;
+  color: white;
+  background: var(--accent);
+}
+
+.galaxy-note-save:hover {
+  filter: brightness(1.1);
+}
+
+.galaxy-note-save:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .galaxy-nodes {
@@ -1622,4 +1719,12 @@
 
 .modal-buttons .btn {
   flex: 1 1 auto;
+}
+
+/* .btn-danger's own margin-left: auto is meant to push it to the right in
+   a wider button row (see #btn-delete in the deposit tracker's edit form)
+   - here it would fight .modal-buttons .btn's own flex sizing above, so a
+   danger button in a modal's button row stays evenly split like any other. */
+.modal-buttons .btn-danger {
+  margin-left: 0;
 }

@@ -12,6 +12,21 @@ from .paths import DB_PATH
 
 # ---------- Recipe tree resolution ----------
 
+# Sentinel recipe_id stored in recipe_alt_prefs to mean "treat this
+# ingredient as a raw material, even though a recipe exists for it" - real
+# recipe ids are SQLite AUTOINCREMENT starting at 1, so 0 never collides
+# with one. This is the explicit per-ingredient OVERRIDE form; the more
+# common path is db.get_raw_material_names()'s curated list (threaded
+# through as _raw_material_names below), which makes raw the DEFAULT for
+# specific items that are both minable AND craftable (e.g. Quartz, also
+# produced by a Crystallizer recipe - see aggregate_item_occurrences's
+# is_shared docstring for the circular-recipe case that motivated this) -
+# this sentinel is what lets the alt-recipe picker send such an item back
+# to raw after it's been overridden to a real recipe (or force raw for an
+# item outside that curated list, via a direct set_alt_pref call).
+RAW_MATERIAL_PREF = 0
+RAW_MATERIAL_RECIPE_NAME = "Raw Material"
+
 
 def _load_recipe_data():
     """Load all recipes, outputs, and ingredients in a few queries."""
@@ -75,6 +90,62 @@ def _load_recipe_data():
     )
 
 
+def _build_alts(
+    output_name,
+    exclude_recipe_id,
+    qty_needed,
+    _alts_by_output,
+    _outputs_by_recipe,
+    _stations_by_recipe,
+    offer_raw_option,
+):
+    """Every OTHER recipe producing `output_name` (for the alt-recipe
+    picker popup), same scope note as resolve_recipe_tree's own inline
+    version used to carry: each entry's own ingredients are deliberately
+    NOT resolved. Shared by both the normal is_recipe case (excludes the
+    currently-chosen recipe_id) and the forced-raw case (exclude_recipe_id
+    is None there, since raw isn't itself a recipe_id to exclude).
+
+    offer_raw_option appends a synthetic 'treat as raw material' entry
+    (recipe_id=RAW_MATERIAL_PREF) whenever at least one real recipe exists
+    for this output - the is_recipe case wants it (there's always a real
+    recipe to fall back to raw from), the forced-raw case doesn't (raw is
+    already the active choice, so it shouldn't re-list itself - same
+    "exclude the current choice" convention the real alternates follow)."""
+    alts = []
+    entries = (_alts_by_output or {}).get(output_name, [])
+    for alt_rid, alt_rname, alt_oqty in entries:
+        if alt_rid == exclude_recipe_id:
+            continue
+        alt_crafts = math.ceil(qty_needed / alt_oqty)
+        alt_outputs = _outputs_by_recipe.get(alt_rid, [(output_name, alt_oqty)])
+        alt_byproducts = [
+            {"name": n, "qty": alt_crafts * q}
+            for n, q in alt_outputs
+            if n != output_name
+        ]
+        alts.append(
+            {
+                "recipe_id": alt_rid,
+                "recipe_name": alt_rname,
+                "output_qty": alt_oqty,
+                "byproducts": alt_byproducts,
+                "stations": (_stations_by_recipe or {}).get(alt_rid, []),
+            }
+        )
+    if offer_raw_option and entries:
+        alts.append(
+            {
+                "recipe_id": RAW_MATERIAL_PREF,
+                "recipe_name": RAW_MATERIAL_RECIPE_NAME,
+                "output_qty": 1.0,
+                "byproducts": [],
+                "stations": [],
+            }
+        )
+    return alts
+
+
 def resolve_recipe_tree(
     name,
     qty_needed=1.0,
@@ -89,6 +160,7 @@ def resolve_recipe_tree(
     _alt_prefs=None,
     _stations_by_recipe=None,
     _station_prefs=None,
+    _raw_material_names=None,
     max_depth=None,
     _depth=0,
 ):
@@ -105,6 +177,11 @@ def resolve_recipe_tree(
     _root_recipe_id: forces a specific recipe at the top level (for alternate recipe views).
     _alt_prefs: {ingredient_name: recipe_id} of user-selected alternate recipes.
     _station_prefs: {ingredient_name: station} of user-selected preferred stations.
+    _raw_material_names: set of ingredient names curated as "actually a raw
+    material" (db.get_raw_material_names()) - any of these defaults to raw
+    instead of its own recipe, even though one exists, unless _alt_prefs
+    explicitly overrides it back to a real recipe_id (or to
+    RAW_MATERIAL_PREF, for an item forced raw outside this default set).
     max_depth: stop recursing past this many levels below the root (None = no
     limit) - a node that would have had children but hit the limit comes back
     with 'children': [] and 'truncated': True instead, so the caller can tell
@@ -127,13 +204,36 @@ def resolve_recipe_tree(
     if _visited is None:
         _visited = frozenset()
 
+    forced_raw = False
     if _root_recipe_id is not None:
         recipe_id = _root_recipe_id
     elif _alt_prefs and name in _alt_prefs:
-        recipe_id = _alt_prefs[name]
+        pref_recipe_id = _alt_prefs[name]
+        if pref_recipe_id == RAW_MATERIAL_PREF:
+            recipe_id = None
+            forced_raw = True
+        else:
+            recipe_id = pref_recipe_id
     else:
-        recipe_id = _recipe_map.get(name)
+        potential_recipe_id = _recipe_map.get(name)
+        if potential_recipe_id is not None and name in (_raw_material_names or ()):
+            # Curated raw material (see db.get_raw_material_names) - default
+            # to raw even though a recipe exists, rather than pulling its
+            # crafting chain into every tree that needs it.
+            recipe_id = None
+            forced_raw = True
+        else:
+            recipe_id = potential_recipe_id
     is_recipe = recipe_id is not None and name not in _visited
+    # A recipe exists for `name` but got suppressed by cycle detection
+    # (name is its own ancestor somewhere up this chain) - this node is a
+    # placeholder marking "you'd need to already have this," not a genuine
+    # second consumer of it. build_occurrence_specs/aggregate_item_
+    # occurrences use this to keep such placeholders out of is_shared, so a
+    # self-referential recipe chain (see e.g. h-Crystal Matrix <-> Hematite
+    # in resources.db) doesn't get mislabeled as "shared" with something
+    # else just because the cutoff landed under a different parent name.
+    cycle_cut = recipe_id is not None and not is_recipe
 
     children = []
     alts = []
@@ -196,45 +296,49 @@ def resolve_recipe_tree(
                     _alt_prefs=_alt_prefs,
                     _stations_by_recipe=_stations_by_recipe,
                     _station_prefs=_station_prefs,
+                    _raw_material_names=_raw_material_names,
                     max_depth=max_depth,
                     _depth=_depth + 1,
                 )
                 children.append(child)
-            # Find every other recipe that produces the same output - listed
-            # for the alt-recipe picker popup only (frontend/js/breakdown-
-            # tree.js's openStepPopup reads nothing but recipe_id/recipe_name
-            # off each entry; set_alt_pref takes it from there), so unlike
-            # the chosen recipe's own ingredients above, an alt's own
-            # ingredient tree is deliberately NOT resolved here - no
-            # consumer anywhere has ever read an alt's `children`. That
-            # used to recurse into every alternate's full ingredient tree
-            # (including THEIR alts, recursively) - fine when max_depth
-            # capped it, but unbounded and potentially exponential for a
-            # full (max_depth=None) resolve like Api.get_queue_totals_view's,
-            # which is what made the queue Totals view slow to generate.
-            for alt_rid, alt_rname, alt_oqty in (_alts_by_output or {}).get(
-                actual_output, []
-            ):
-                if alt_rid == recipe_id:
-                    continue
-                alt_crafts = math.ceil(qty_needed / alt_oqty)
-                alt_outputs = _outputs_by_recipe.get(
-                    alt_rid, [(actual_output, alt_oqty)]
-                )
-                alt_byproducts = [
-                    {"name": n, "qty": alt_crafts * q}
-                    for n, q in alt_outputs
-                    if n != actual_output
-                ]
-                alts.append(
-                    {
-                        "recipe_id": alt_rid,
-                        "recipe_name": alt_rname,
-                        "output_qty": alt_oqty,
-                        "byproducts": alt_byproducts,
-                        "stations": (_stations_by_recipe or {}).get(alt_rid, []),
-                    }
-                )
+            # Find every other recipe that produces the same output, plus a
+            # synthetic "treat as raw material" option when this output is
+            # a curated raw material (offer_raw_option below) - listed for
+            # the alt-recipe picker popup only (frontend/js/breakdown-
+            # tree.js's openStepPopup reads nothing but recipe_id/
+            # recipe_name off each entry; set_alt_pref takes it from
+            # there), so unlike the chosen recipe's own ingredients above,
+            # an alt's own ingredient tree is deliberately NOT resolved
+            # here - no consumer anywhere has ever read an alt's
+            # `children`. That used to recurse into every alternate's full
+            # ingredient tree (including THEIR alts, recursively) - fine
+            # when max_depth capped it, but unbounded and potentially
+            # exponential for a full (max_depth=None) resolve like Api.
+            # get_queue_totals_view's, which is what made the queue Totals
+            # view slow to generate.
+            alts = _build_alts(
+                actual_output,
+                recipe_id,
+                qty_needed,
+                _alts_by_output,
+                _outputs_by_recipe,
+                _stations_by_recipe,
+                offer_raw_option=actual_output in (_raw_material_names or ()),
+            )
+    elif forced_raw:
+        # No children to resolve (we're treating this as raw), but still
+        # offer every real recipe for `name` in the picker so the user can
+        # switch back off of raw - see _build_alts's offer_raw_option note
+        # for why raw itself isn't re-listed here.
+        alts = _build_alts(
+            name,
+            None,
+            qty_needed,
+            _alts_by_output,
+            _outputs_by_recipe,
+            _stations_by_recipe,
+            offer_raw_option=False,
+        )
 
     return {
         "name": name,
@@ -251,6 +355,7 @@ def resolve_recipe_tree(
         "craft_mode": craft_mode,
         "stations": stations,
         "truncated": truncated,
+        "cycle_cut": cycle_cut,
     }
 
 
@@ -313,13 +418,15 @@ def _collect_path_keys(node, path_parts):
 
 
 def _node_has_step_options(node):
-    """Whether this node has an alternate recipe or more than one usable
-    (station, mode) combination - i.e. whether its _StepPopup would show
-    anything at all."""
-    if not node.get("is_recipe"):
-        return False
+    """Whether this node has an alternate recipe (or a raw-material
+    override - a forced-raw node has is_recipe False but can still carry
+    alts, so this check comes before the is_recipe gate) or more than one
+    usable (station, mode) combination - i.e. whether its _StepPopup would
+    show anything at all."""
     if node.get("alts"):
         return True
+    if not node.get("is_recipe"):
+        return False
     modes_available = sum(
         (1 if st_auto else 0) + (1 if st_manual else 0)
         for _name, st_auto, st_manual in node.get("stations", [])
@@ -366,7 +473,16 @@ def _walk_occurrence_specs(node, path_parts, parent_index, specs):
             "path_key": _node_path_key(child, child_path_parts),
             "parent_name": node["name"],
             "parent_index": parent_index,
+            "cycle_cut": child.get("cycle_cut", False),
         }
+        if not child["is_recipe"] and child.get("alts"):
+            # A raw leaf can still carry alts if it's a real recipe
+            # currently forced to "Raw Material" (RAW_MATERIAL_PREF) - keep
+            # just the alts (nothing else in the recipe-metadata block
+            # below applies to a node with no active recipe), so the
+            # Totals view's alt-recipe picker can still offer switching it
+            # back to crafted.
+            spec["alts"] = child["alts"]
         if child["is_recipe"]:
             spec.update(
                 {
@@ -455,9 +571,16 @@ def aggregate_item_occurrences(occurrences):
         item off shouldn't reshuffle where it sits in the tree) is a
         direct child of some job's own root (parent_index is None).
       is_shared: whether this name has 2+ DISTINCT parent_names among its
-        occurrences (checked or not, same structural rationale as
-        is_root_demand) - i.e. genuinely used by more than one thing, not
-        just repeated under one. root-demand items and shared items are
+        NON-cycle_cut occurrences (checked or not, same structural
+        rationale as is_root_demand) - i.e. genuinely used by more than one
+        thing, not just repeated under one. A cycle_cut occurrence (see
+        resolve_recipe_tree) is excluded from this count: it's a cycle-
+        detection placeholder marking "you'd need to already have this,"
+        not a second real consumer - counting it would mislabel a self-
+        referential recipe chain (item A's own default recipe eventually
+        requires A again) as "shared" just because the cutoff happened to
+        land under a different parent name than the item's first
+        occurrence. root-demand items and shared items are
         both "promoted" by the frontend (own guaranteed row, own nested
         children) since both have a stable, findable home to give a
         cross-reference a meaningful destination - an item with neither
@@ -489,7 +612,10 @@ def aggregate_item_occurrences(occurrences):
             "fully_checked": fully_checked,
             "any_checked": any_checked,
             "is_root_demand": any(o["parent_index"] is None for o in occs),
-            "is_shared": len({o["parent_name"] for o in occs}) >= 2,
+            "is_shared": len(
+                {o["parent_name"] for o in occs if not o.get("cycle_cut")}
+            )
+            >= 2,
             "sources": sources_list,
             "occurrences": [
                 {
@@ -528,6 +654,14 @@ def aggregate_item_occurrences(occurrences):
                     ],
                 }
             )
+        else:
+            # Not currently a recipe, but may still carry alts if this is a
+            # real recipe forced to "Raw Material" (RAW_MATERIAL_PREF) -
+            # surface them so the frontend's raw-row picker can offer
+            # switching it back, same as a crafted row's own alts do.
+            alts = next((o["alts"] for o in occs if o.get("alts")), None)
+            if alts:
+                entry["alts"] = alts
         result[name] = entry
     return result
 

@@ -138,8 +138,12 @@ const BreakdownTree = (function () {
   }
 
   function nodeHasStepOptions(node) {
-    if (!node.is_recipe) return false;
+    // alts check comes before the is_recipe gate: a node forced to "Raw
+    // Material" via set_alt_pref has is_recipe false but still carries
+    // alts (the real recipes it could switch back to) - see resolver.py's
+    // _node_has_step_options for the matching backend logic.
     if (node.alts && node.alts.length) return true;
+    if (!node.is_recipe) return false;
     let modesAvailable = 0;
     for (const st of node.stations || []) {
       if (st[1]) modesAvailable++;
@@ -151,7 +155,13 @@ const BreakdownTree = (function () {
   function collectTotals(node, totals) {
     totals = totals || {};
     if (!node.is_recipe && node.children.length === 0) {
-      totals[node.name] = (totals[node.name] || 0) + node.qty;
+      // alts carries a real recipe here whenever this raw leaf is a
+      // curated raw material currently defaulting to raw (see resolver.
+      // py's db.get_raw_material_names) - preserved so insertRaw can still
+      // offer switching it to crafted, same as a genuinely raw node (no
+      // recipe at all, alts always []) just never gets the option.
+      if (!totals[node.name]) totals[node.name] = { qty: 0.0, alts: node.alts || [] };
+      totals[node.name].qty += node.qty;
     }
     for (const child of node.children) collectTotals(child, totals);
     return totals;

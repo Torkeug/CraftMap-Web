@@ -34,7 +34,12 @@
  * same node name (get_deposits_for_ingredient, the same lookup
  * breakdown-tree.js's ingredient-location popup already uses) to mark
  * rows you've already found in-game with a LOGGED pin - the one place
- * manual and automatic data actually meet.
+ * manual and automatic data actually meet. A logged row's own notes (if
+ * any) render inline in its detail line; a not-yet-logged row instead
+ * gets an inline "+ note" control (see buildAddNoteControl) - saving one
+ * calls add_galaxy_note (backend/api.py), which inserts a deposits row
+ * with res_type left blank, i.e. it's really just "log this planet" with
+ * no type set, so the row picks up its own LOGGED pin on the next render.
  *
  * "Current system" (galaxy-current-system) is a manually re-typed stand-in
  * for where the player currently is - CraftMap never reads the live game
@@ -52,6 +57,8 @@
   const poiCheckbox = document.getElementById("galaxy-filter-poi");
   const nonPoiCheckbox = document.getElementById("galaxy-filter-non-poi");
   const climateFilterEl = document.getElementById("galaxy-climate-filter");
+  const sectorFilterInput = document.getElementById("galaxy-sector-filter-input");
+  const sectorFilterClearEl = document.getElementById("galaxy-sector-filter-clear");
   const countLabelEl = document.getElementById("galaxy-count-label");
   const rowsEl = document.getElementById("galaxy-rows");
   const currentSystemInput = document.getElementById("galaxy-current-system");
@@ -62,6 +69,12 @@
   let currentNode = null;
   let currentRows = []; // raw rows from the last fetch (post asteroid-filter, pre climate-filter)
   const climateFilterState = new Map(); // chip label -> checked (session-only, rebuilt per node)
+  // Unlike climate (a handful of fixed categories - checkboxes work fine),
+  // a resource can turn up in dozens of distinct sectors, so this is a
+  // single free-typed/autocompleted filter (same LiveDropdown pattern as
+  // "Current system" below) rather than a checkbox per sector. Empty
+  // string = no filter (show every sector).
+  let sectorFilter = "";
   // {systemName, planet} of a specific entry someone jumped here from (a
   // deposit leaf's or Sources row's double-click - see showForNode) -
   // survives filter-driven re-renders of the SAME node (so the row stays
@@ -166,6 +179,10 @@
     return chips.every((c) => climateFilterState.get(c.label) !== false);
   }
 
+  function passesSectorFilter(row) {
+    return !sectorFilter || row.sector === sectorFilter;
+  }
+
   // ---- POI detail (revealed on row click - see makeRow's disclosure) ----
   function poiDescription(row) {
     if (!row.poi_tags) return "No POI placement data available for this planet.";
@@ -202,8 +219,95 @@
     return el;
   }
 
+  // ---- add-note control (rows with no matching deposit yet) ----
+  // Clicking "+ note" swaps to an inline input + Save button, right there
+  // in the detail line - saving calls add_galaxy_note (backend/api.py),
+  // which is functionally "log this planet" with res_type left blank, so
+  // the row picks up its own LOGGED pin + note on the next render same as
+  // any other logged planet. e.stopPropagation() throughout since the
+  // whole row also has its own click-to-expand handler (see makeRow) that
+  // would otherwise fire on every click inside this control.
+  function buildAddNoteControl(row) {
+    const container = document.createElement("span");
+    container.className = "galaxy-note-add";
+
+    function renderLink() {
+      container.innerHTML = "";
+      const link = document.createElement("a");
+      link.className = "galaxy-note-link";
+      link.textContent = "+ note";
+      link.addEventListener("click", (e) => {
+        e.stopPropagation();
+        renderForm();
+      });
+      container.appendChild(link);
+    }
+
+    function renderForm() {
+      container.innerHTML = "";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "galaxy-note-input";
+      input.placeholder = "Add a note...";
+      input.addEventListener("click", (e) => e.stopPropagation());
+      input.addEventListener("input", () => {
+        saveBtn.disabled = !input.value.trim();
+      });
+      input.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") save();
+        else if (e.key === "Escape") renderLink();
+      });
+      container.appendChild(input);
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "galaxy-note-save";
+      saveBtn.textContent = "Save";
+      // Starts disabled (input starts empty) - an empty note has nothing
+      // to show inline and would just silently consume the "+ note"
+      // affordance without leaving anything behind, so there's nothing
+      // meaningful to save yet.
+      saveBtn.disabled = true;
+      saveBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        save();
+      });
+      container.appendChild(saveBtn);
+
+      input.focus();
+
+      async function save() {
+        const notes = input.value.trim();
+        if (!notes) return; // guards the Enter-key path too, not just the button
+        saveBtn.disabled = true;
+        try {
+          await CraftMapApi.call(
+            "add_galaxy_note",
+            currentNode,
+            row.sector,
+            row.system_name,
+            row.planet,
+            notes
+          );
+        } catch (e) {
+          saveBtn.disabled = false;
+          return; // error banner already shown by CraftMapApi.call
+        }
+        await renderRows();
+      }
+    }
+
+    renderLink();
+    return container;
+  }
+
   // ---- row rendering ----
-  function makeRow(row, rank, isTop, effective, best, logged, highlighted, hops) {
+  // deposit (or null): the matching get_deposits_for_ingredient row for
+  // this exact system/planet, if any - {id, sector, system_name, planet,
+  // notes}. Truthy deposit is what the LOGGED pin means; its notes (if
+  // any) render inline, and its absence is what shows the add-note control
+  // instead.
+  function makeRow(row, rank, isTop, effective, best, deposit, highlighted, hops) {
     const wrapper = document.createElement("div");
     wrapper.className =
       "galaxy-row" + (isTop ? " top" : "") + (highlighted ? " highlighted expanded" : "");
@@ -232,7 +336,7 @@
     planetEl.title = row.planet; // still truncates on very long names - full name on hover
     top.appendChild(planetEl);
 
-    if (logged) {
+    if (deposit) {
       const pinEl = document.createElement("span");
       pinEl.className = "galaxy-pin";
       pinEl.textContent = "LOGGED";
@@ -311,6 +415,20 @@
       detail.appendChild(chipEl);
     }
 
+    if (deposit && deposit.notes) {
+      const sep = document.createElement("span");
+      sep.className = "galaxy-sep";
+      sep.textContent = " · ";
+      detail.appendChild(sep);
+      const noteEl = document.createElement("span");
+      noteEl.className = "galaxy-note";
+      noteEl.textContent = `📝 ${deposit.notes}`;
+      noteEl.title = deposit.notes;
+      detail.appendChild(noteEl);
+    } else if (!deposit) {
+      detail.appendChild(buildAddNoteControl(row));
+    }
+
     wrapper.appendChild(detail);
 
     const expandEl = makeExpandDetail(row);
@@ -326,7 +444,9 @@
 
   async function renderRows({ scrollToHighlight = false } = {}) {
     rowsEl.innerHTML = "";
-    const visible = currentRows.filter((row) => passesPoiFilter(row) && passesClimateFilter(row));
+    const visible = currentRows.filter(
+      (row) => passesPoiFilter(row) && passesClimateFilter(row) && passesSectorFilter(row)
+    );
     countLabelEl.textContent = currentNode
       ? `${visible.length} of ${currentRows.length} explored planets`
       : "";
@@ -344,8 +464,16 @@
       rowsEl.appendChild(empty);
       return;
     }
-    const loggedRows = await CraftMapApi.call("get_deposits_for_ingredient", currentNode);
-    const loggedKeys = new Set(loggedRows.map((r) => `${r.system_name}|${r.planet}`));
+    const depositRows = await CraftMapApi.call("get_deposits_for_ingredient", currentNode);
+    // Keyed by system+planet only (not sector/id) - matches the LOGGED-pin
+    // lookup this replaced; a stray duplicate for the same planet (e.g.
+    // logged once with a typo'd sector, once without) just means the first
+    // one found wins for note display purposes.
+    const depositByKey = new Map();
+    for (const d of depositRows) {
+      const key = `${d.system_name}|${d.planet}`;
+      if (!depositByKey.has(key)) depositByKey.set(key, d);
+    }
     // Normalize each dimension to its own max among the CURRENTLY shown
     // rows first (0-1 ratio) - density and node_count are on unrelated
     // scales (a resource-dependent raw count vs. an already-area-rescaled
@@ -384,10 +512,10 @@
     let highlightEl = null;
     visible.forEach((row, i) => {
       const effective = effectiveFor(row);
-      const logged = loggedKeys.has(`${row.system_name}|${row.planet}`);
+      const deposit = depositByKey.get(`${row.system_name}|${row.planet}`) || null;
       const highlighted = isHighlightedRow(row);
       const hops = hopFor(row);
-      const rowEl = makeRow(row, i + 1, i === 0, effective, best, logged, highlighted, hops);
+      const rowEl = makeRow(row, i + 1, i === 0, effective, best, deposit, highlighted, hops);
       if (highlighted) highlightEl = rowEl;
       rowsEl.appendChild(rowEl);
     });
@@ -491,6 +619,29 @@
     });
   }
 
+  // Suggestions are scoped to sectors the CURRENTLY loaded node actually
+  // turns up in (like the climate filter's chips), not every sector in the
+  // galaxy - no point suggesting one this resource was never found in.
+  function setSectorFilter(name) {
+    sectorFilter = name || "";
+    sectorFilterInput.value = sectorFilter;
+    sectorFilterClearEl.classList.toggle("show", !!sectorFilter);
+    renderRows();
+  }
+
+  function setupSectorFilterDropdown() {
+    new LiveDropdown(sectorFilterInput, {
+      getValues: () => [...new Set(currentRows.map((r) => r.sector).filter(Boolean))].sort(),
+      onSelect: (name) => setSectorFilter(name),
+    });
+    sectorFilterInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        setSectorFilter(sectorFilterInput.value.trim());
+      }
+    });
+    sectorFilterClearEl.addEventListener("click", () => setSectorFilter(""));
+  }
+
   function setSortMode(mode) {
     sortMode = mode;
     sortRankBtn.classList.toggle("active", mode === "rank");
@@ -512,6 +663,7 @@
 
   setupDropdown();
   setupCurrentSystemDropdown();
+  setupSectorFilterDropdown();
   renderRows();
 
   // ---- external entry point: js/sources.js's double-click, or

@@ -244,4 +244,12 @@ def test_get_deposits_for_ingredient(api):
     api.add_deposit("Ore", "Iron Ore", "Sec1", "Sys1", "PlanetA", "")
     locs = api.get_deposits_for_ingredient("Iron Ore")
     json.dumps(locs)
-    assert locs == [{"sector": "Sec1", "system_name": "Sys1", "planet": "PlanetA"}]
+    assert locs == [
+        {
+            "id": locs[0]["id"],
+            "sector": "Sec1",
+            "system_name": "Sys1",
+            "planet": "PlanetA",
+            "notes": "",
+        }
+    ]
