@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Keep this file current, not just appended-to.** If a change here (an
+architecture decision, a data-model field, a pattern described above)
+gets superseded or reversed later, correct/update that section in place
+rather than leaving it stale and just adding a new note elsewhere - this
+file is trusted as current state, not read as a changelog. The same goes
+for any future numbered-finding-style investigation doc under
+`game_data_extract/` (matching the convention in the sibling `shipbuilder`
+repo's `tools/game_logic_notes.md`/`hmd_format_notes.md`) if one gets
+started here - a later finding that invalidates an earlier one should
+correct it in place, not just get appended after it. This does NOT apply
+to `game_data_extract/shipwreck_loot_integration.md`, which is explicitly
+a frozen design record by intent (see its own header), or to
+`missing_recipes_review.md`, which is a regenerated snapshot, not a
+hand-maintained log.
+
 ## What this is
 
 **CraftMap** is a Windows desktop overlay that tracks in-game resource deposits and crafting recipes. It sits always-on-top over a game window (borderless mode) and can be toggled visible/hidden via a global hotkey (default: F1, rebindable from the in-app Settings dialog). A separate, independently pinnable Craft Queue window tracks multiple recipes' crafting progress at once.
