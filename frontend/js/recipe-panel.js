@@ -387,9 +387,10 @@
           // switch its recipe at all.
           const rawInfo = totals[rawName];
           const rawHasOptions = rawInfo ? nodeHasStepOptions(rawInfo) : false;
+          const rawQty = info.raw_qty[rawName] || 0;
           const { wrapper: rawWrapper } = makeBdNode({
             tagClass: "location",
-            label: `    ${rawName}${rawHasOptions ? "  ▾" : ""}`,
+            label: `${fmtNum(rawQty)}×  ${rawName}${rawHasOptions ? "  ▾" : ""}`,
             hasChildren: true,
             key: `${pathKey}__raw__${rawName}`,
             onOpenStep: rawHasOptions

@@ -531,9 +531,16 @@
           // way to switch its recipe at all.
           const rawInfo = items[rawName];
           const rawHasOptions = rawInfo ? nodeHasStepOptions(rawInfo) : false;
+          // Same "qty attributable to THIS parent" lookup as renderXref -
+          // rawInfo.qty is the item's grand total across every parent, which
+          // would overstate what's actually needed via this one crafted row.
+          const rawSrc = rawInfo
+            ? (rawInfo.sources || []).find((s) => s.parent_name === resName)
+            : null;
+          const rawQty = rawSrc ? rawSrc.qty : rawInfo ? rawInfo.qty : 0;
           const { wrapper: rawWrapper } = makeBdNode({
             tagClass: "location",
-            label: `    ${rawName}${rawHasOptions ? "  ▾" : ""}`,
+            label: `${fmtNum(rawQty)}×  ${rawName}${rawHasOptions ? "  ▾" : ""}`,
             hasChildren: true,
             key: `${scopeKey}|crafted|${resName}__raw__${rawName}`,
             onOpenStep: rawHasOptions

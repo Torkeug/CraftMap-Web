@@ -184,6 +184,12 @@ const BreakdownTree = (function () {
             raw_names: [...new Set(child.children.map((c) => c.name))].sort((a, b) =>
               a.toLowerCase().localeCompare(b.toLowerCase())
             ),
+            // qty-by-name needed via THIS crafted item specifically, summed
+            // across every occurrence of it in the tree - unlike totals[name]
+            // itself (which mixes in demand from every OTHER parent too),
+            // this is what a raw row nested under this crafted item's own
+            // row should actually display.
+            raw_qty: {},
             station: child.station,
             auto_craft_seconds: child.auto_craft_seconds,
             manual_craft_seconds: child.manual_craft_seconds,
@@ -192,6 +198,9 @@ const BreakdownTree = (function () {
           };
         }
         totals[child.name].qty += child.qty;
+        for (const c of child.children) {
+          totals[child.name].raw_qty[c.name] = (totals[child.name].raw_qty[c.name] || 0) + c.qty;
+        }
       }
     }
     return totals;

@@ -457,51 +457,111 @@ def build_occurrence_specs(node):
     this is what lets filter_unchecked_occurrences reproduce
     _subtree_remaining_seconds's prune-at-checked-node rule (a checked
     node is still recorded, but nothing under it is) via one cheap linear
-    pass instead of a tree walk."""
+    pass instead of a tree walk.
+
+    See build_root_occurrence_spec for the root's own spec (not included
+    here) and Api.get_queue_totals_view for how the two combine - a job's
+    root only gets its own merged row, and its direct children only stop
+    counting as top-level demand in THAT job specifically, when the root's
+    own item name is independently demanded somewhere else in the queue
+    too; otherwise the root stays invisible (the job list already shows
+    it, a second identical row would add nothing) and its direct children
+    keep serving as this job's own reachable top-level entries, same as
+    ever."""
     specs = []
     _walk_occurrence_specs(node, [], None, specs)
     return specs
 
 
+def build_root_occurrence_spec(node):
+    """Spec-shaped view of a job's own root node itself - the one thing
+    build_occurrence_specs excludes, since a job's own final output is
+    normally shown by its own header row, not a demand on anything.
+    Api.get_queue_totals_view uses this CONDITIONALLY: only when the job's
+    own queued item is ALSO independently demanded as an ingredient
+    elsewhere in the queue (e.g. Hydraulic Actuator queued directly AND
+    consumed by Large Module Kit) does folding this in add anything - the
+    two demands must merge into one total (a job that contributed zero
+    occurrences for its own item name would otherwise silently drop its
+    own queued quantity from that merge - an actual reported bug). A job
+    whose own item is never anyone's ingredient gets no such row: the job
+    list already shows its quantity, so an identical extra "Crafted" row
+    would be pure noise (also reported, the other direction).
+
+    `path_key` is the bare item name (no ancestor chain), which every real
+    descendant spec's path_key can never collide with (they all join at
+    least [root_name, child_name]) - used as this job's own "mark this
+    queued amount done" checkbox key."""
+    return _build_spec(node, node["name"], "Queued directly", None)
+
+
+def _build_spec(node, path_key, parent_name, parent_index):
+    spec = {
+        "name": node["name"],
+        "qty": node["qty"],
+        "is_recipe": node["is_recipe"],
+        "path_key": path_key,
+        "parent_name": parent_name,
+        "parent_index": parent_index,
+        "cycle_cut": node.get("cycle_cut", False),
+    }
+    if not node["is_recipe"] and node.get("alts"):
+        # A raw leaf can still carry alts if it's a real recipe currently
+        # forced to "Raw Material" (RAW_MATERIAL_PREF) - keep just the
+        # alts (nothing else in the recipe-metadata block below applies to
+        # a node with no active recipe), so the Totals view's alt-recipe
+        # picker can still offer switching it back to crafted.
+        spec["alts"] = node["alts"]
+    if node["is_recipe"]:
+        spec.update(
+            {
+                "output_qty": node.get("output_qty", 1.0),
+                "recipe_name": node.get("recipe_name"),
+                "alts": node.get("alts", []),
+                "byproducts": node.get("byproducts", []),
+                "station": node.get("station"),
+                "stations": node.get("stations", []),
+                "auto_craft_seconds": node.get("auto_craft_seconds"),
+                "manual_craft_seconds": node.get("manual_craft_seconds"),
+                "craft_mode": node.get("craft_mode", "auto"),
+                "raw_names": [c["name"] for c in node["children"] if not c["is_recipe"]],
+                "crafted_names": [c["name"] for c in node["children"] if c["is_recipe"]],
+            }
+        )
+    return spec
+
+
 def _walk_occurrence_specs(node, path_parts, parent_index, specs):
     child_path_parts = path_parts + [node["name"]]
     for child in node["children"]:
-        spec = {
-            "name": child["name"],
-            "qty": child["qty"],
-            "is_recipe": child["is_recipe"],
-            "path_key": _node_path_key(child, child_path_parts),
-            "parent_name": node["name"],
-            "parent_index": parent_index,
-            "cycle_cut": child.get("cycle_cut", False),
-        }
-        if not child["is_recipe"] and child.get("alts"):
-            # A raw leaf can still carry alts if it's a real recipe
-            # currently forced to "Raw Material" (RAW_MATERIAL_PREF) - keep
-            # just the alts (nothing else in the recipe-metadata block
-            # below applies to a node with no active recipe), so the
-            # Totals view's alt-recipe picker can still offer switching it
-            # back to crafted.
-            spec["alts"] = child["alts"]
-        if child["is_recipe"]:
-            spec.update(
-                {
-                    "output_qty": child.get("output_qty", 1.0),
-                    "recipe_name": child.get("recipe_name"),
-                    "alts": child.get("alts", []),
-                    "byproducts": child.get("byproducts", []),
-                    "station": child.get("station"),
-                    "stations": child.get("stations", []),
-                    "auto_craft_seconds": child.get("auto_craft_seconds"),
-                    "manual_craft_seconds": child.get("manual_craft_seconds"),
-                    "craft_mode": child.get("craft_mode", "auto"),
-                    "raw_names": [c["name"] for c in child["children"] if not c["is_recipe"]],
-                    "crafted_names": [c["name"] for c in child["children"] if c["is_recipe"]],
-                }
-            )
+        path_key = _node_path_key(child, child_path_parts)
+        spec = _build_spec(child, path_key, node["name"], parent_index)
         my_index = len(specs)
         specs.append(spec)
         _walk_occurrence_specs(child, child_path_parts, my_index, specs)
+
+
+def demote_root_child_occurrences(occurrences):
+    """Called on one job's own occurrence list (see filter_unchecked_
+    occurrences) ONLY when Api.get_queue_totals_view has determined this
+    job's own root item is independently demanded elsewhere in the queue,
+    and is therefore about to get its own merged row via build_root_
+    occurrence_spec. That row is this job's direct children's real parent
+    now - so those children (parent_index None, i.e. "direct child of
+    THIS job's root") must stop ALSO counting as independent top-level
+    demand (aggregate_item_occurrences's is_root_demand), or they'd get a
+    force-promoted row of their own even when they only ever conceptually
+    belong nested under the root's now-visible one (the second reported
+    bug this guards against - an item nested two tiers under one job's
+    root, but directly under ANOTHER job's own [independently-demanded]
+    root, was wrongly force-promoted via the latter). Mutates and returns
+    the same list; `parent_name` is left alone (still the root's real
+    name, used for "sources" grouping) - only `parent_index` changes, to
+    a sentinel not equal to any real index or None."""
+    for occ in occurrences:
+        if occ["parent_index"] is None:
+            occ["parent_index"] = "job_root"
+    return occurrences
 
 
 def filter_unchecked_occurrences(specs, checked):
@@ -569,7 +629,19 @@ def aggregate_item_occurrences(occurrences):
       is_root_demand: whether ANY occurrence (checked or not - this is a
         structural property, not a remaining-quantity one, so checking an
         item off shouldn't reshuffle where it sits in the tree) is a
-        direct child of some job's own root (parent_index is None).
+        direct child of some job's own root (parent_index is None) - this
+        covers both "IS a job's own queued item" (via build_root_
+        occurrence_spec, only added when that item is independently
+        demanded elsewhere - see Api.get_queue_totals_view) and "is a
+        first-tier ingredient of a job whose own root ISN'T independently
+        demanded" (the common case - most jobs' own item is never anyone
+        else's ingredient, so its direct children remain each job's own
+        reachable top-level entries, same as the job's own header would
+        otherwise be the only visible trace of them). The one case this
+        deliberately excludes: a job whose root IS independently demanded
+        gets its OWN merged row, so THAT job's direct children are demoted
+        (see demote_root_child_occurrences) rather than also force-
+        promoted - they nest under the root's own now-visible row instead.
       is_shared: whether this name has 2+ DISTINCT parent_names among its
         NON-cycle_cut occurrences (checked or not, same structural
         rationale as is_root_demand) - i.e. genuinely used by more than one

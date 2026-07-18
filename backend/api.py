@@ -64,9 +64,10 @@ class Api:
         # already owns the hotkey thread/handle.
         self._app_ctrl = None
         # Per-job cache of build_occurrence_specs's flattened, checked-
-        # state-independent structural walk, for the Totals view - see
+        # state-independent structural walk, PLUS the job's own root spec
+        # (build_root_occurrence_spec) - for the Totals view, see
         # _get_totals_job_specs.
-        # {queue_id: ((recipe_id, qty, station, mode), specs)}.
+        # {queue_id: ((recipe_id, qty, station, mode), specs, root_spec)}.
         self._totals_specs_cache = {}
 
     # ---- config ----
@@ -765,7 +766,7 @@ class Api:
         cache_key = (recipe_id, qty, station, mode)
         cached = None if force_full else self._totals_specs_cache.get(qid)
         if cached is not None and cached[0] == cache_key:
-            return cached[1]
+            return cached[1], cached[2]
         alt_prefs = db.get_alt_prefs()
         station_prefs = db.get_station_prefs()
         raw_material_names = db.get_raw_material_names()
@@ -779,8 +780,14 @@ class Api:
         )
         self._apply_job_station_override(node, recipe_id, station, mode)
         specs = resolver.build_occurrence_specs(node)
-        self._totals_specs_cache[qid] = (cache_key, specs)
-        return specs
+        # Cheap (no extra DB/resolve work - `node` is already in hand) to
+        # always build this alongside specs, even though get_queue_totals_
+        # view only ends up using it for a job whose own item turns out to
+        # be independently demanded elsewhere - see that method and
+        # resolver.build_root_occurrence_spec.
+        root_spec = resolver.build_root_occurrence_spec(node)
+        self._totals_specs_cache[qid] = (cache_key, specs, root_spec)
+        return specs, root_spec
 
     def get_queue_totals_view(self, force_full=False):
         """Aggregate every unique item - raw material OR crafted, at ANY
@@ -809,26 +816,72 @@ class Api:
         non-combined jobs, which never even feed the merge above) was pure
         waste. Fetched on demand, only for a job whose own section is
         actually expanded, via get_queue_totals_job_view - same on-demand
-        principle as Api.get_recipe_subtree for a truncated node."""
+        principle as Api.get_recipe_subtree for a truncated node.
+
+        Two passes over the combined jobs, not one: pass 1 collects every
+        job's own (root-excluded) occurrences and, along the way, every
+        NAME any of them demands, plus how many combined jobs share each
+        output_name (two different queue rows CAN be the same recipe - see
+        test_add_to_queue_different_station_is_separate_job - each is then
+        "demanded" by the other, same as any third recipe needing it).
+        Pass 2 then folds each job's own root back in (build_root_
+        occurrence_spec) ONLY if that job's output_name is either
+        independently demanded elsewhere OR shared by 2+ combined jobs -
+        the only cases where merging its own queued quantity into that
+        name's total actually changes anything. A job whose item is queued
+        exactly once and never anyone's ingredient is left alone entirely:
+        its quantity already shows via the job list/its own queue row, so
+        an identical extra "Crafted" row here would be pure noise (this
+        was reported both ways - a merge-worthy item's own queued amount
+        silently missing from its total, AND a queue-only item cluttering
+        the Crafted list with a row that added nothing). When a job DOES
+        turn out merge-worthy, its own direct children are demoted
+        (resolver.demote_root_child_occurrences) so they stop ALSO
+        force-promoting themselves as top-level demand now that the root
+        itself gives them a real, visible row to nest under instead (see
+        aggregate_item_occurrences's is_root_demand docstring)."""
         jobs = db.get_craft_queue()
         live_qids = {row[0] for row in jobs}
         for stale_qid in set(self._totals_specs_cache) - live_qids:
             del self._totals_specs_cache[stale_qid]
 
-        all_occurrences = []
         per_job = []
+        combined_jobs = []
+        demanded_names = set()
+        output_name_counts = {}
         combined_count = 0
         for job in jobs:
-            qid, _recipe_id, rname, _output_name, qty, _station, combine, _mode = job
+            qid, _recipe_id, rname, output_name, qty, _station, combine, _mode = job
             per_job.append({"queue_id": qid, "recipe_name": rname, "qty": qty})
             if not combine:
                 continue
             combined_count += 1
-            specs = self._get_totals_job_specs(job, force_full=force_full)
+            # Two DIFFERENT combined jobs can share the same output_name
+            # (e.g. the same recipe queued at two different stations,
+            # add_to_queue's own same-recipe-and-station merge only
+            # collapses an exact match) - each is independently "demanded"
+            # by the other, same as if a third recipe needed it, so this
+            # counts toward merge-worthiness exactly like demanded_names.
+            output_name_counts[output_name] = output_name_counts.get(output_name, 0) + 1
+            specs, root_spec = self._get_totals_job_specs(job, force_full=force_full)
             job_checked = db.get_queue_checked(qid)
             job_occurrences = resolver.filter_unchecked_occurrences(specs, job_checked)
             for occ in job_occurrences:
                 occ["queue_id"] = qid
+                demanded_names.add(occ["name"])
+            combined_jobs.append((qid, output_name, root_spec, job_checked, job_occurrences))
+
+        all_occurrences = []
+        for qid, output_name, root_spec, job_checked, job_occurrences in combined_jobs:
+            merge_worthy = (
+                output_name_counts[output_name] >= 2 or output_name in demanded_names
+            )
+            if merge_worthy:
+                resolver.demote_root_child_occurrences(job_occurrences)
+                root_checked = root_spec["path_key"] in job_checked
+                all_occurrences.append(
+                    {**root_spec, "checked": root_checked, "queue_id": qid}
+                )
             all_occurrences.extend(job_occurrences)
 
         return {
@@ -850,7 +903,7 @@ class Api:
         job = jobs_by_id.get(queue_id)
         if job is None:
             return {"items": {}}
-        specs = self._get_totals_job_specs(job)
+        specs, _root_spec = self._get_totals_job_specs(job)
         job_checked = db.get_queue_checked(queue_id)
         job_occurrences = resolver.filter_unchecked_occurrences(specs, job_checked)
         for occ in job_occurrences:
@@ -880,13 +933,19 @@ class Api:
             job = jobs_by_id.get(qid)
             if job is None:
                 continue
-            specs = self._get_totals_job_specs(job)
-            cascade_keys = [
+            specs, _root_spec = self._get_totals_job_specs(job)
+            # `path_keys` themselves are included explicitly, not just
+            # specs matched against them - a checked row's path_key can be
+            # the job's own root's bare item name (see build_root_
+            # occurrence_spec), which never appears in `specs` (specs
+            # excludes the root - see build_occurrence_specs) and so would
+            # never persist via the startswith-match below on its own.
+            cascade_keys = set(path_keys) | {
                 s["path_key"]
                 for s in specs
                 if any(s["path_key"] == p or s["path_key"].startswith(p + "|") for p in path_keys)
-            ]
-            db.set_queue_checked_many(qid, cascade_keys, checked)
+            }
+            db.set_queue_checked_many(qid, list(cascade_keys), checked)
         return True
 
     # ---- lifecycle ----

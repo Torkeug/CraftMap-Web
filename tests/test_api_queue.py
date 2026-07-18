@@ -229,17 +229,57 @@ def test_get_queue_totals_view_aggregates_combined_jobs(api):
     assert view["combined_count"] == 2
     assert view["all_items"]["Iron Ore"]["qty"] == 16  # (3+5)*2
     assert view["all_items"]["Iron Ore"]["is_recipe"] is False
-    # Iron Bar is each job's own root - occurrences deliberately exclude
-    # the root (it's shown by the job's own header, not a demand on
-    # anything), so it's absent from all_items entirely, not merely
-    # excluded from some "crafted" bucket.
-    assert "Iron Bar" not in view["all_items"]
+    # Iron Bar is each job's own root - build_occurrence_specs excludes it
+    # from each job's own descendant list (it's shown by that job's own
+    # header, not a demand on anything), but get_queue_totals_view folds
+    # each job's own queued amount back in via build_root_occurrence_spec
+    # specifically so two jobs of the same item merge into one total here,
+    # rather than silently dropping each job's own quantity from the
+    # aggregate (the actual reported bug this guards against).
+    assert view["all_items"]["Iron Bar"]["qty"] == 8  # 3+5
+    assert view["all_items"]["Iron Bar"]["is_recipe"] is True
+    assert view["all_items"]["Iron Bar"]["is_root_demand"] is True
     assert len(view["per_job"]) == 2
     # per_job only carries identity - a job's own items are fetched lazily
     # via get_queue_totals_job_view, only once its section is expanded, not
     # shipped eagerly for every job on every call.
     for job in view["per_job"]:
         assert set(job.keys()) == {"queue_id", "recipe_name", "qty"}
+
+
+def test_get_queue_totals_view_merges_direct_and_ingredient_demand(api):
+    """Regression test for the reported bug: an item queued directly (its
+    own job's root) AND separately demanded as another queued job's
+    ingredient must merge into ONE total covering both, not just whichever
+    side happens to produce occurrences. Mirrors the real-world report -
+    Hydraulic Actuator queued directly (qty 8) while also being an
+    ingredient of Large Module Kit (qty 4, needing 4 each = 16) - which
+    previously showed only the ingredient-demand half (16), silently
+    dropping the direct-queue half (8) because build_occurrence_specs
+    excludes a job's own root from its occurrences."""
+    part_id = api.save_recipe(
+        None,
+        "Part",
+        outputs=[{"name": "Part", "qty": 1}],
+        ingredients=[{"name": "Sub", "qty": 5}],
+        stations=DEFAULT_STATIONS,
+    )
+    assembly_id = api.save_recipe(
+        None,
+        "Assembly",
+        outputs=[{"name": "Assembly", "qty": 1}],
+        ingredients=[{"name": "Part", "qty": 4}],
+        stations=DEFAULT_STATIONS,
+    )
+    api.add_to_queue(part_id, 8)  # direct demand
+    api.add_to_queue(assembly_id, 4)  # ingredient demand: 4*4 = 16
+
+    view = api.get_queue_totals_view()
+    json.dumps(view)
+    assert view["all_items"]["Part"]["qty"] == 24  # 8 direct + 16 via Assembly
+    assert view["all_items"]["Part"]["is_recipe"] is True
+    assert view["all_items"]["Part"]["is_root_demand"] is True
+    assert view["all_items"]["Sub"]["qty"] == 120  # 24 * 5
 
 
 def test_get_queue_totals_view_excludes_uncombined_jobs(api):
@@ -294,6 +334,11 @@ def test_get_queue_totals_view_marks_root_demand_and_crafted_names_for_nested_bo
     # job root AND via another crafted item, so it must be a top-level
     # ("is_root_demand") entry with its own Steel Ingot nested beneath it,
     # while Steel Ingot itself (never a direct root ingredient) is not.
+    # Battleship Hull is queued exactly once and never anyone's own
+    # ingredient, so it's NOT merge-worthy (see get_queue_totals_view) -
+    # it doesn't get its own row (the job list already shows its "1"), and
+    # its direct children (Steel Plate, Titanium Frame) keep their normal
+    # root-demand promotion instead of being demoted/nested under it.
     api.save_recipe(
         None,
         "Steel Ingot",
@@ -339,9 +384,14 @@ def test_get_queue_totals_view_marks_root_demand_and_crafted_names_for_nested_bo
     view = api.get_queue_totals_view()
     json.dumps(view)
 
+    # Not merge-worthy (never anyone's ingredient, queued exactly once) -
+    # no row of its own, unlike Steel Plate/Titanium Frame below.
+    assert "Battleship Hull" not in view["all_items"]
+
     steel_plate = view["all_items"]["Steel Plate"]
     assert steel_plate["qty"] == 6  # 4 direct + 2 via Titanium Frame
     assert steel_plate["is_root_demand"] is True
+    assert steel_plate["is_shared"] is True  # 2 distinct parents
     assert steel_plate["crafted_names"] == ["Steel Ingot"]
     sources = {s["parent_name"]: s["qty"] for s in steel_plate["sources"]}
     assert sources == {"Battleship Hull": 4, "Titanium Frame": 2}
@@ -491,7 +541,11 @@ def test_get_queue_totals_view_marks_is_shared_for_non_root_demand_items(api):
     # A, Assembly B), NEITHER of which is a job root itself - so Base Part
     # is genuinely shared (is_shared) without ever being root-demand,
     # unlike the earlier Steel Plate/Titanium Frame scenario where sharing
-    # happened to coincide with a direct root ingredient.
+    # happened to coincide with a direct root ingredient. Top Thing itself
+    # is queued exactly once and never anyone's ingredient, so it's not
+    # merge-worthy (see get_queue_totals_view) - no row of its own, and its
+    # direct children (Assembly A, Assembly B) keep their normal
+    # root-demand promotion.
     api.save_recipe(
         None,
         "Base Part",
@@ -527,6 +581,7 @@ def test_get_queue_totals_view_marks_is_shared_for_non_root_demand_items(api):
     view = api.get_queue_totals_view()
     json.dumps(view)
 
+    assert "Top Thing" not in view["all_items"]
     assert view["all_items"]["Assembly A"]["is_root_demand"] is True
     assert view["all_items"]["Assembly A"]["is_shared"] is False
     assert view["all_items"]["Assembly B"]["is_root_demand"] is True
