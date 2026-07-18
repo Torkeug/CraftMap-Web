@@ -66,6 +66,33 @@ def test_get_galaxy_sources_shapes_rows_as_dicts(api):
             "temperature_name": "Temperate",
             "attributes": None,
             "attribute_names": None,
+            "poi_landmarks": [],
+            "poi_sun_states": [],
+        }
+    ]
+
+
+def test_get_galaxy_sources_includes_poi_landmarks(api):
+    db_module.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 36, 0.29, "poi0", 4.96, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db_module.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6159, 0.0412),
+    ])
+    rows = api.get_galaxy_sources("Aquamarine")
+    json.dumps(rows)
+    assert rows[0]["poi_sun_states"] == ["day"]
+    assert rows[0]["poi_landmarks"] == [
+        {
+            "poi_index": "poi0",
+            "name": "Meteor Crater",
+            "indicator_id": "BalisePOI",
+            "sun_side": "day",
+            "light_value": 0.6159,
+            "area": 0.0412,
         }
     ]
 

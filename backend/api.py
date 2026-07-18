@@ -390,11 +390,14 @@ class Api:
                 "temperature_name": temperature_name,
                 "attributes": attributes,
                 "attribute_names": attribute_names,
+                "poi_landmarks": poi_landmarks,
+                "poi_sun_states": poi_sun_states,
             }
             for (
                 system_name, planet, sector, node_count, density, poi_tags,
                 pure_poi, poi_area_density, is_asteroid, temperature,
                 temperature_name, attributes, attribute_names,
+                poi_landmarks, poi_sun_states,
             ) in db.get_galaxy_sources_for_resource(
                 node_name, include_asteroids=not exclude_asteroids
             )

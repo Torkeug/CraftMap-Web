@@ -23,6 +23,12 @@
      concepts and shouldn't share a color, same reasoning "system" already
      gets its own purple beyond the four semantic tokens above. */
   --water: #39c5cf;
+  /* POI lighting state (js/galaxy.js's day/night/twilight filter chips) -
+     each its own hue for the same reason --water is, rather than reusing
+     Hot/Frozen: unrelated concepts. */
+  --sun-day: #e3b341;
+  --sun-twilight: #cf6ac6;
+  --sun-night: #6e40c9;
   --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
   --ui: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
 }

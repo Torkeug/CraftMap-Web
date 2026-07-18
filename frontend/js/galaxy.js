@@ -10,10 +10,49 @@
  * backend.db.get_galaxy_sources_for_resource) - shown here as a relative
  * bar/multiplier against the best row CURRENTLY shown, re-baselining
  * whenever a filter changes, since the raw number has no meaning in
- * isolation. A filled ◆ marks a purely POI-anchored planet (already priced
- * into the ranking, not a separate judgment) vs a plain · for scattered/
- * mixed ones. Climate/water chips only render for non-default attributes -
- * a plain Temperate row gets no chip at all.
+ * isolation. A 3-way mark (poiState) shows ◆ for a purely POI-anchored
+ * planet (its rank IS area-adjusted - a real, honest number), ◐ for one
+ * where the resource is BOTH at a POI and scattered elsewhere, and a plain
+ * · for one where it's scattered with no POI at all. The ◐/· distinction
+ * is display-only, NOT priced into the rank - both fall back to identical
+ * plain-density ranking (the live-memory dump only ever gives a per-planet
+ * TOTAL, never split between a resource's general and POI portions, so a
+ * mixed row's POI-anchored slice can't be area-adjusted out from its
+ * general slice - see get_galaxy_sources_for_resource's own docstring). So
+ * a ◐ row and a · row of equal density tie in rank despite the ◐ one
+ * having a genuine practical edge (part of it IS walkable-POI-concentrated)
+ * - the mark is what surfaces that, since the number can't. Climate/water
+ * chips only render for non-default attributes - a plain Temperate row
+ * gets no chip at all.
+ *
+ * Day/Night/Twilight POI chips (sunChips) are a separate filter dimension
+ * from climate/water, driven by poi_landmarks - every in-game POI turns out
+ * to have a landmark (one of 3 kinds - Meteor Crater/High Peak/Natural
+ * Canyon, see tools/extract_poi_icons.py; confirmed empirically, poiSizes
+ * and poiLandmarks share the exact same index set for every planet), so
+ * this filter applies to every pure/mixed row, never just a lucky subset.
+ * Unlike climate/water's AND-across-chips semantics (passesClimateFilter),
+ * a row can carry BOTH a Day and a Night chip at once (different POIs on
+ * the same planet), so this filter is OR-within-category (passesSunFilter):
+ * unchecking "Night POI" only hides a row that's night-side EVERYWHERE it
+ * has a landmark, not one that still has an unchecked-off Day POI. The
+ * moment any lighting chip is unchecked, ranking for the WHOLE list
+ * switches from poi_area_density's rate to an estimated surviving quantity
+ * (density * area-weighted survival fraction, see densityFor/
+ * survivingAreaFraction) - a rate can't honestly shrink from excluding
+ * part of its own footprint (mathematically invariant under the uniform-
+ * density assumption it relies on), so only a quantity estimate, applied
+ * consistently to every row at once, can actually respond to the filter.
+ * Real, stable per-POI data (planets don't rotate
+ * in this game) - not a "goes stale" snapshot. Per-planet-accurate POI
+ * marker COLOR (poiMarkerColor) IS reproduced now - reverse-engineered
+ * from the game's own bytecode (ui.comp.ResourceIcon's constructor): a
+ * POI's color is purely (its ordinal position in the planet's own POI
+ * list) % 5, cycling through 5 fixed palette colors - NOT tied to landmark
+ * kind, so two Meteor Craters on different planets can have different
+ * colors. Our own poi_index ("poi0"/"poi1"/...) already IS that exact
+ * ordinal position (confirmed against the same bytecode), so this needed
+ * no new data capture, just the formula.
  *
  * "Best value" (sortMode "combined") re-ranks by density AND node_count
  * together - density alone answers "most concentrated per trip" but says
@@ -55,8 +94,12 @@
   const breadcrumbEl = document.getElementById("galaxy-breadcrumb");
   const asteroidCheckbox = document.getElementById("galaxy-filter-asteroids");
   const poiCheckbox = document.getElementById("galaxy-filter-poi");
+  const mixedPoiCheckbox = document.getElementById("galaxy-filter-mixed-poi");
   const nonPoiCheckbox = document.getElementById("galaxy-filter-non-poi");
   const climateFilterEl = document.getElementById("galaxy-climate-filter");
+  const climateFilterRowEl = document.getElementById("galaxy-climate-filter-row");
+  const sunFilterEl = document.getElementById("galaxy-sun-filter");
+  const sunFilterRowEl = document.getElementById("galaxy-sun-filter-row");
   const sectorFilterInput = document.getElementById("galaxy-sector-filter-input");
   const sectorFilterClearEl = document.getElementById("galaxy-sector-filter-clear");
   const countLabelEl = document.getElementById("galaxy-count-label");
@@ -69,6 +112,7 @@
   let currentNode = null;
   let currentRows = []; // raw rows from the last fetch (post asteroid-filter, pre climate-filter)
   const climateFilterState = new Map(); // chip label -> checked (session-only, rebuilt per node)
+  const sunFilterState = new Map(); // "Day POI"/"Night POI"/"Twilight POI" -> checked, see passesSunFilter
   // Unlike climate (a handful of fixed categories - checkboxes work fine),
   // a resource can turn up in dozens of distinct sectors, so this is a
   // single free-typed/autocompleted filter (same LiveDropdown pattern as
@@ -93,8 +137,38 @@
   const hopDistancesCache = new Map(); // system_name -> already-fetched hop dict
   let sortMode = "rank"; // "rank" (density) | "distance" (hop count) | "combined" (density+qty)
 
+  // isLightingFilterNarrowed/survivingAreaFraction are declared further
+  // below (function hoisting) - see densityFor's own comment for the full
+  // reasoning on why the ranking basis switches entirely, for every row,
+  // the moment any lighting chip is unchecked, rather than only adjusting
+  // the specific rows that have an excluded POI.
   function densityFor(row) {
-    return row.poi_area_density ?? row.density;
+    if (!isLightingFilterNarrowed()) return row.poi_area_density ?? row.density;
+    return row.density * survivingAreaFraction(row);
+  }
+
+  // Describes ranking with the lighting filter at its default (fully
+  // checked) state - see densityFor for how this changes once it's
+  // narrowed. "pure" (poi_tags set, no "general") ranks on
+  // poi_area_density - a real area-adjusted figure. "none" (no poi_tags,
+  // or only "general") ranks on plain density with nothing else
+  // contributing. "mixed" (poi_tags has BOTH a real POI and "general")
+  // ALSO ranks on plain density - see
+  // backend.db.get_galaxy_sources_for_resource's own docstring for why
+  // (the dump never splits a planet's total density between its general
+  // and POI portions, so there's no honest denominator to area-adjust
+  // with) - meaning a mixed row ties with a "none" row of equal density
+  // even though it has a real advantage (part of it IS at a walkable POI).
+  // The ranking number can't reflect that; this mark exists so the row
+  // itself still shows it.
+  function poiState(row) {
+    if (!row.poi_tags) return "none";
+    const tags = row.poi_tags.split(",");
+    const hasPoi = tags.some((t) => t !== "general");
+    const hasGeneral = tags.includes("general");
+    if (hasPoi && hasGeneral) return "mixed";
+    if (hasPoi) return "pure";
+    return "none";
   }
 
   function quantityFor(row) {
@@ -129,26 +203,98 @@
     return { cls: "chip-water", label: "Water" };
   }
 
+  // One chip per distinct sun_side among this row's own poi_landmarks (see
+  // backend.db.get_galaxy_sources_for_resource) - a row split across a Day
+  // POI and a Night POI gets BOTH chips. Kept OUT of chipsForRow/
+  // climateFilterState on purpose: that filter is AND-across-chips (a row
+  // needs EVERY chip it has currently checked to show - fine for
+  // independent attributes like climate+water, which a row has at most one
+  // of each of), but a mixed Day+Night row has TWO chips from the SAME
+  // dimension, and unchecking "Night POI" should only hide a row that is
+  // EXCLUSIVELY night-side, not one that still has an unchecked-off Day POI
+  // to offer - see passesSunFilter's own OR-within-category logic.
+  const SUN_CHIPS = {
+    day: { cls: "chip-sun-day", label: "Day POI" },
+    twilight: { cls: "chip-sun-twilight", label: "Twilight POI" },
+    night: { cls: "chip-sun-night", label: "Night POI" },
+  };
+
+  function sunChips(row) {
+    return (row.poi_sun_states || []).map((s) => SUN_CHIPS[s]).filter(Boolean);
+  }
+
   function chipsForRow(row) {
     return [climateChip(row), waterChip(row)].filter(Boolean);
   }
 
+  const LANDMARK_ICONS = {
+    BalisePOI: "assets/poi/meteor-crater.png",
+    BalisePOI1: "assets/poi/high-peak.png",
+    BalisePOI2: "assets/poi/natural-canyon.png",
+  };
+
+  // Real in-game POI marker colors (data.cdb's resource sheet, ColorPOI1..5
+  // rows) and the real in-game SELECTION rule, reverse-engineered from the
+  // game's own bytecode (ui.comp.ResourceIcon's constructor, findex 13872):
+  // colorSlot = (index % 5) + 1, where `index` is simply the POI's own
+  // ordinal position in the planet's POI list - NOT tied to landmark kind
+  // at all (a Meteor Crater and a High Peak on the same planet can get any
+  // of the 5 colors; it's purely "which position in the list is this POI"
+  // that decides it). Confirmed our own poi_index ("poi0"/"poi1"/..., see
+  // tools/backfill_galaxy_resources.py's load_poi_landmark_rows) already IS
+  // that same raw ordinal position (dump_planet_resources.py's
+  // read_planet_poi_landmarks iterates the identical array in the identical
+  // order, index-for-index - traced independently against the same
+  // bytecode range and found to agree exactly), so this is computable
+  // directly from data already stored - no new capture needed.
+  const POI_MARKER_COLORS = ["#E71000", "#0074F6", "#00F24F", "#FFE400", "#D800CB"];
+
+  function poiMarkerColor(poiIndex) {
+    const n = parseInt(String(poiIndex).replace("poi", ""), 10);
+    return Number.isNaN(n) ? null : POI_MARKER_COLORS[n % 5];
+  }
+
+  // The raw ColorPOI1..5 values are the game's own fully-saturated HUD
+  // marker colors - rendered solid at 100% opacity here they read as too
+  // bright against this app's dark panel background (this is a small
+  // detail-line badge, not the game's own HUD). Blended down to 55% over
+  // the badge's own dark background instead of dimming the hue itself, so
+  // it's still unambiguously "which of the 5 colors" at a glance.
+  function poiMarkerBadgeColor(poiIndex) {
+    const hex = poiMarkerColor(poiIndex);
+    if (!hex) return null;
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
+    return `rgba(${r}, ${g}, ${b}, 0.55)`;
+  }
+
   // ---- filter row (dynamic, rebuilt per node - only chips actually
   // present get a checkbox, mirroring js/deposits.js's own type-filter) ----
-  function rebuildClimateFilter(rows) {
+  // Shared by rebuildClimateFilter and rebuildSunFilter - the AND-vs-OR
+  // filtering semantics live in passesClimateFilter/passesSunFilter, not
+  // here; this only builds "one checkbox per chip label currently present,
+  // defaulting to checked, pruning stale ones" for whichever (rows, chipsFn,
+  // stateMap, containerEl, rowEl) combination is passed in. rowEl (the
+  // labeled "Climate:"/"Lighting:" sub-row - see index.html's
+  // #galaxy-filters) is hidden entirely when no row currently has a chip
+  // of that kind, rather than showing a bare label with nothing next to
+  // it - most resources never trigger climate OR lighting chips at all.
+  function rebuildChipFilter(rows, chipsFn, stateMap, containerEl, rowEl) {
     const present = new Map(); // label -> cls
     for (const row of rows) {
-      for (const chip of chipsForRow(row)) present.set(chip.label, chip.cls);
+      for (const chip of chipsFn(row)) present.set(chip.label, chip.cls);
     }
-    climateFilterEl.innerHTML = "";
+    containerEl.innerHTML = "";
     for (const [label, cls] of present) {
-      if (!climateFilterState.has(label)) climateFilterState.set(label, true);
+      if (!stateMap.has(label)) stateMap.set(label, true);
       const lbl = document.createElement("label");
       const cb = document.createElement("input");
       cb.type = "checkbox";
-      cb.checked = climateFilterState.get(label);
+      cb.checked = stateMap.get(label);
       cb.addEventListener("change", () => {
-        climateFilterState.set(label, cb.checked);
+        stateMap.set(label, cb.checked);
         renderRows();
       });
       lbl.appendChild(cb);
@@ -156,21 +302,31 @@
       chipEl.className = `chip ${cls}`;
       chipEl.textContent = label;
       lbl.appendChild(chipEl);
-      climateFilterEl.appendChild(lbl);
+      containerEl.appendChild(lbl);
     }
-    for (const stale of [...climateFilterState.keys()].filter((l) => !present.has(l))) {
-      climateFilterState.delete(stale);
+    for (const stale of [...stateMap.keys()].filter((l) => !present.has(l))) {
+      stateMap.delete(stale);
     }
+    rowEl.classList.toggle("hidden", present.size === 0);
   }
 
-  // Reuses row.pure_poi (same field driving the ◆/· mark - see makeRow)
-  // rather than a looser "has any poi tag at all" test: a "general,poi2"
-  // row is already shown with a plain "·" since most of the resource is
-  // still scattered planet-wide, so it belongs with the non-POI rows here
-  // too - otherwise the checkboxes would disagree with the marks already
-  // on screen.
+  function rebuildClimateFilter(rows) {
+    rebuildChipFilter(rows, chipsForRow, climateFilterState, climateFilterEl, climateFilterRowEl);
+  }
+
+  function rebuildSunFilter(rows) {
+    rebuildChipFilter(rows, sunChips, sunFilterState, sunFilterEl, sunFilterRowEl);
+  }
+
+  // 3-way, matching poiState/the ◆◐· mark exactly (see makeRow) so the
+  // checkboxes never disagree with what's actually shown on screen - a
+  // "general,poi2" row is its own "Mixed" category now, not lumped into
+  // "Non-POI" (that used to hide the fact it had ANY POI presence at all).
   function passesPoiFilter(row) {
-    return row.pure_poi ? poiCheckbox.checked : nonPoiCheckbox.checked;
+    const state = poiState(row);
+    if (state === "pure") return poiCheckbox.checked;
+    if (state === "mixed") return mixedPoiCheckbox.checked;
+    return nonPoiCheckbox.checked;
   }
 
   function passesClimateFilter(row) {
@@ -179,33 +335,137 @@
     return chips.every((c) => climateFilterState.get(c.label) !== false);
   }
 
+  // OR-within-category (unlike passesClimateFilter's AND-across-chips): a
+  // row with no landmark data at all always passes (a resource that's never
+  // POI-anchored on this planet has nothing for the filter to judge), and a
+  // row WITH landmark data passes as long as AT LEAST ONE of its sun states
+  // is still checked - so a Day+Night mixed row only disappears once BOTH
+  // are unchecked, and a Night-only row disappears as soon as "Night POI" is.
+  function passesSunFilter(row) {
+    const chips = sunChips(row);
+    if (!chips.length) return true;
+    return chips.some((c) => sunFilterState.get(c.label) !== false);
+  }
+
+  // True once ANY lighting checkbox has been unchecked (regardless of
+  // which rows that actually affects) - densityFor uses this to switch
+  // ranking basis for the WHOLE visible list at once, not just rows with
+  // an excluded POI. Necessary because poi_area_density is a RATE (density
+  // per unit area) that's mathematically invariant to which subset of a
+  // row's own footprint you look at (under the uniform-density-per-area
+  // assumption it already relies on: excluding part of the footprint
+  // shrinks the numerator and denominator by the same proportion, leaving
+  // the ratio unchanged) - so there's no way to shrink JUST the affected
+  // rows' numbers while leaving everyone else on the rate scale; that
+  // would compare two different kinds of numbers in one sort. So instead
+  // every row moves to the same (density * survivingAreaFraction) scale
+  // together the moment filtering starts, and back once it stops.
+  function isLightingFilterNarrowed() {
+    return [...sunFilterState.values()].some((v) => v === false);
+  }
+
+  // Estimate of how much of a row's density is still "reachable" once
+  // some of its POIs are excluded by the lighting filter, weighted by
+  // each POI's own AREA (galaxy_poi_landmarks.area - see
+  // import_galaxy_poi_landmarks's own docstring) rather than assuming
+  // every POI on a planet is equally sized: a night POI that's 90% of a
+  // resource's combined POI footprint should demote the row far more than
+  // one that's a sliver of it. Returns 1 (no reduction) for a row with no
+  // area data to weight by, or with nothing currently excluded - so an
+  // unaffected row's density stays exactly its own density, same scale as
+  // an affected row's reduced estimate.
+  function survivingAreaFraction(row) {
+    const landmarks = (row.poi_landmarks || []).filter((lm) => lm.area != null);
+    if (!landmarks.length) return 1;
+    const total = landmarks.reduce((sum, lm) => sum + lm.area, 0);
+    if (!total) return 1;
+    const surviving = landmarks.reduce((sum, lm) => {
+      const chip = SUN_CHIPS[lm.sun_side];
+      const excluded = chip && sunFilterState.get(chip.label) === false;
+      return sum + (excluded ? 0 : lm.area);
+    }, 0);
+    return surviving / total;
+  }
+
   function passesSectorFilter(row) {
     return !sectorFilter || row.sector === sectorFilter;
   }
 
   // ---- POI detail (revealed on row click - see makeRow's disclosure) ----
-  function poiDescription(row) {
-    if (!row.poi_tags) return "No POI placement data available for this planet.";
+  // One inline (icon-badge + text) unit for a single POI index - the badge
+  // sits directly in front of ITS OWN poi's name/sun-side text (not in a
+  // separate strip elsewhere in the row), so which marker belongs to which
+  // POI is never ambiguous even when a row lists several. No badge only if
+  // this specific poi_index has no matching entry in row.poi_landmarks at
+  // all (shouldn't happen in practice - every in-game POI has a landmark -
+  // but kept as a safe fallback to the bare "poiN" tag as text, e.g. for
+  // older/incomplete data imported before this table existed).
+  function makePoiSegment(poiIndex, row) {
+    const seg = document.createElement("span");
+    seg.className = "galaxy-poi-segment";
+    seg.title = poiIndex; // the raw "poiN" tag - kept as a hover tooltip, not shown as text
+    const lm = (row.poi_landmarks || []).find((l) => l.poi_index === poiIndex);
+    const src = lm && LANDMARK_ICONS[lm.indicator_id];
+    if (lm && src) {
+      const badge = document.createElement("span");
+      badge.className = "poi-landmark-badge";
+      const color = poiMarkerBadgeColor(lm.poi_index);
+      if (color) badge.style.backgroundColor = color;
+      const img = document.createElement("img");
+      img.className = "poi-landmark-icon";
+      img.src = src;
+      badge.appendChild(img);
+      seg.appendChild(badge);
+    }
+    // The icon badge IS the identifier once one exists - no need to also
+    // spell out "poiN" in the visible text, that's an internal index the
+    // player never sees in-game. Falls back to the bare poiIndex only when
+    // there's no landmark/icon to show instead (nothing else to go on).
+    const text = document.createElement("span");
+    text.textContent = lm && lm.name ? `${lm.name}${lm.sun_side ? ` (${lm.sun_side})` : ""}` : poiIndex;
+    seg.appendChild(text);
+    return seg;
+  }
+
+  function appendPoiList(container, poiIndexes, row) {
+    poiIndexes.forEach((poiIndex, i) => {
+      if (i > 0) container.appendChild(document.createTextNode(", "));
+      container.appendChild(makePoiSegment(poiIndex, row));
+    });
+  }
+
+  function makePoiLine(row) {
+    const poiLine = document.createElement("div");
+    poiLine.className = "galaxy-poi-line";
+    if (!row.poi_tags) {
+      poiLine.textContent = "No POI placement data available for this planet.";
+      return poiLine;
+    }
     const tags = row.poi_tags.split(",");
     const pois = tags.filter((t) => t !== "general");
     const hasGeneral = tags.includes("general");
     if (pois.length && !hasGeneral) {
       const plural = pois.length > 1 ? "s" : "";
-      return `Concentrated at ${pois.length} POI${plural}: ${pois.join(", ")} - every node reachable without crossing the planet.`;
+      poiLine.appendChild(document.createTextNode(`Concentrated at ${pois.length} POI${plural}: `));
+      appendPoiList(poiLine, pois, row);
+      poiLine.appendChild(
+        document.createTextNode(" - every node reachable without crossing the planet.")
+      );
+    } else if (pois.length && hasGeneral) {
+      poiLine.appendChild(document.createTextNode("Partly concentrated ("));
+      appendPoiList(poiLine, pois, row);
+      poiLine.appendChild(document.createTextNode(") and partly scattered across the rest of the planet."));
+    } else {
+      poiLine.textContent = "Scattered across the whole planet - no POI anchor.";
     }
-    if (pois.length && hasGeneral) {
-      return `Partly concentrated (${pois.join(", ")}) and partly scattered across the rest of the planet.`;
-    }
-    return "Scattered across the whole planet - no POI anchor.";
+    return poiLine;
   }
 
   function makeExpandDetail(row) {
     const el = document.createElement("div");
     el.className = "galaxy-row-expand";
 
-    const poiLine = document.createElement("div");
-    poiLine.textContent = poiDescription(row);
-    el.appendChild(poiLine);
+    el.appendChild(makePoiLine(row));
 
     const statsLine = document.createElement("div");
     statsLine.className = "galaxy-row-stats";
@@ -325,9 +585,17 @@
     rankEl.textContent = `#${rank}`;
     top.appendChild(rankEl);
 
+    const state = poiState(row);
+    const MARK_TEXT = { pure: "◆", mixed: "◐", none: "·" };
     const markEl = document.createElement("span");
-    markEl.className = "galaxy-mark" + (row.pure_poi ? "" : " scattered");
-    markEl.textContent = row.pure_poi ? "◆" : "·";
+    markEl.className = "galaxy-mark" + (state === "none" ? " scattered" : state === "mixed" ? " mixed" : "");
+    markEl.textContent = MARK_TEXT[state];
+    markEl.title =
+      state === "pure"
+        ? "Purely POI-anchored - ranked by area-adjusted density"
+        : state === "mixed"
+        ? "Partly POI-anchored, partly scattered - ranked by plain density (can't be area-adjusted, see docs)"
+        : "Scattered planet-wide, no POI anchor";
     top.appendChild(markEl);
 
     const planetEl = document.createElement("span");
@@ -404,7 +672,11 @@
     nodesEl.textContent = `${row.node_count} nodes`;
     detail.appendChild(nodesEl);
 
-    for (const chip of chipsForRow(row)) {
+    // sunChips kept separate from chipsForRow (see that function's own
+    // comment - passesClimateFilter's AND-across-chips semantics don't fit
+    // a row that legitimately carries both a Day and a Night chip at once),
+    // but both render as ordinary pills right here on the row.
+    for (const chip of [...chipsForRow(row), ...sunChips(row)]) {
       const sep = document.createElement("span");
       sep.className = "galaxy-sep";
       sep.textContent = " · ";
@@ -445,7 +717,8 @@
   async function renderRows({ scrollToHighlight = false } = {}) {
     rowsEl.innerHTML = "";
     const visible = currentRows.filter(
-      (row) => passesPoiFilter(row) && passesClimateFilter(row) && passesSectorFilter(row)
+      (row) =>
+        passesPoiFilter(row) && passesClimateFilter(row) && passesSunFilter(row) && passesSectorFilter(row)
     );
     countLabelEl.textContent = currentNode
       ? `${visible.length} of ${currentRows.length} explored planets`
@@ -505,7 +778,15 @@
         const db = hb === null ? Infinity : hb;
         return da - db;
       });
-    } else if (sortMode === "combined") {
+    } else {
+      // "rank" and "combined" both re-sort by effectiveFor client-side,
+      // rather than trusting currentRows' existing backend-provided order,
+      // because effectiveFor/densityFor can now differ from the backend's
+      // own poi_area_density/density whenever the lighting filter is
+      // narrowed (isLightingFilterNarrowed) - the backend has no notion of
+      // which sun-state chips are currently unchecked, only the frontend
+      // does. Re-sorting here (not just adjusting the displayed bar width)
+      // is what actually moves a demoted row down in rank position.
       visible.sort((a, b) => effectiveFor(b) - effectiveFor(a));
     }
 
@@ -543,6 +824,7 @@
       !asteroidCheckbox.checked
     );
     rebuildClimateFilter(currentRows);
+    rebuildSunFilter(currentRows);
     await renderRows({ scrollToHighlight: !!highlight });
   }
 
@@ -659,6 +941,7 @@
   });
 
   poiCheckbox.addEventListener("change", () => renderRows());
+  mixedPoiCheckbox.addEventListener("change", () => renderRows());
   nonPoiCheckbox.addEventListener("change", () => renderRows());
 
   setupDropdown();

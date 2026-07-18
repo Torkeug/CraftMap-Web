@@ -64,8 +64,11 @@ def test_get_galaxy_sources_ranks_by_effective_density_not_pure_poi_alone(db):
     assert results[0][8] is True  # PlanetC is_asteroid
     assert results[1][8] is False  # PlanetA is_asteroid
     # temperature/temperature_name/attributes/attribute_names pass through untouched
-    assert results[3][9:] == ("PlanetHot1", "Hot", "PlanetHot1", "Hot")  # PlanetB
-    assert results[4][9:] == ("PlanetTemperate", "Temperate", "PlanetWater", "Water presence")  # PlanetE
+    assert results[3][9:13] == ("PlanetHot1", "Hot", "PlanetHot1", "Hot")  # PlanetB
+    assert results[4][9:13] == ("PlanetTemperate", "Temperate", "PlanetWater", "Water presence")  # PlanetE
+    # no galaxy_poi_landmarks rows imported in this test - both trailing
+    # fields are always empty
+    assert all(r[13] == [] and r[14] == [] for r in results)
 
 
 def test_get_galaxy_sources_can_exclude_asteroids(db):
@@ -150,3 +153,59 @@ def test_get_galaxy_sources_leaves_poi_area_density_none_when_variants_have_diff
     assert combined[5] == "general,poi0"  # union of both rows' tags
     assert combined[6] is False  # pure_poi - "general" is present
     assert combined[7] is None  # can't combine poi_area_density across differing footprints
+
+
+def test_import_galaxy_poi_landmarks_is_replace_not_ignore(db):
+    rows = [("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05)]
+    db.import_galaxy_poi_landmarks(rows)
+    # re-running with fresher lighting data for the same (system, planet,
+    # poi_index) should overwrite, not be silently ignored like
+    # import_galaxy_resources - see that function's own docstring
+    db.import_galaxy_poi_landmarks(
+        [("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "night", -0.5, 0.05)]
+    )
+    conn = db_module.sqlite3.connect(db_module.DB_PATH)
+    row = conn.execute(
+        "SELECT sun_side, light_value FROM galaxy_poi_landmarks"
+        " WHERE system_name='Sys1' AND planet='PlanetA' AND poi_index='poi0'"
+    ).fetchone()
+    conn.close()
+    assert row == ("night", -0.5)
+
+
+def test_get_galaxy_sources_attaches_matching_poi_landmarks_only(db):
+    db.import_galaxy_resources([
+        # anchored at poi0 AND poi1 - only poi0 has a landmark
+        (
+            "Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+        # poi2 has a landmark too, but nothing on PlanetA is anchored there -
+        # must NOT leak into this row's poi_landmarks
+        ("Sys1", "PlanetA", "poi2", "High Peak", "BalisePOI1", "night", -0.5, 0.08),
+    ])
+    results = db.get_galaxy_sources_for_resource("Iron")
+    assert len(results) == 1
+    poi_landmarks, poi_sun_states = results[0][13], results[0][14]
+    assert [lm["poi_index"] for lm in poi_landmarks] == ["poi0"]
+    assert poi_landmarks[0]["name"] == "Meteor Crater"
+    assert poi_landmarks[0]["area"] == pytest.approx(0.05)
+    assert poi_sun_states == ["day"]
+
+
+def test_get_galaxy_sources_reports_mixed_sun_states_across_pois(db):
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+        ("Sys1", "PlanetA", "poi1", "High Peak", "BalisePOI1", "night", -0.5, 0.08),
+    ])
+    results = db.get_galaxy_sources_for_resource("Iron")
+    assert results[0][14] == ["day", "night"]

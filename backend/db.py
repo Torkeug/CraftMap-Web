@@ -227,6 +227,22 @@ def init_db():
             near_system_names TEXT
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS galaxy_poi_landmarks (
+            system_name TEXT NOT NULL,
+            planet TEXT NOT NULL,
+            poi_index TEXT NOT NULL,
+            landmark_name TEXT,
+            indicator_id TEXT,
+            sun_side TEXT,
+            light_value REAL,
+            area REAL,
+            UNIQUE (system_name, planet, poi_index)
+        )
+    """)
+    c.execute("PRAGMA table_info(galaxy_poi_landmarks)")
+    if "area" not in [row[1] for row in c.fetchall()]:
+        c.execute("ALTER TABLE galaxy_poi_landmarks ADD COLUMN area REAL")
     conn.commit()
     conn.close()
 
@@ -1258,9 +1274,24 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     arbitrary pure-POI-first override. Each row is also annotated with
     pure_poi (True if poi_tags is set with no "general" entry).
     include_asteroids=False filters out ent.Asteroid debris fields, keeping
-    only regular numbered planets. Returns (system_name, planet, sector,
-    node_count, density, poi_tags, pure_poi, poi_area_density, is_asteroid,
-    temperature, temperature_name, attributes, attribute_names) tuples."""
+    only regular numbered planets.
+
+    Also annotated with poi_landmarks (list of {poi_index, name,
+    indicator_id, sun_side, light_value} dicts, one per POI this row's own
+    poi_tags references - see import_galaxy_poi_landmarks; every in-game POI
+    has a landmark, one of 3 kinds, confirmed by checking that poiSizes and
+    poiLandmarks share the exact same index set for every planet in the
+    live dump - so this is empty only for a "general"-only row with no POI
+    anchor at all, never for a genuinely POI-anchored one) and poi_sun_states
+    (sorted list of the distinct sun_side values among those landmarks, e.g. ["day"],
+    ["day", "night"] for a row split across POIs with different lighting,
+    or [] when this row has no landmark data at all - the frontend's
+    day/night/twilight filter chips are driven directly off this list, see
+    js/galaxy.js's chipsForRow).
+
+    Returns (system_name, planet, sector, node_count, density, poi_tags,
+    pure_poi, poi_area_density, is_asteroid, temperature, temperature_name,
+    attributes, attribute_names, poi_landmarks, poi_sun_states) tuples."""
     family = _resource_family(resource_name)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -1275,6 +1306,24 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
         query += " AND is_asteroid IS NOT 1"
     c.execute(query, params)
     rows = c.fetchall()
+
+    # Small table (bounded by known-planet count, a handful of landmarks
+    # each) - loaded whole rather than filtered per-planet in SQL, same
+    # "combine in Python" style already used for `rows` above.
+    c.execute(
+        "SELECT system_name, planet, poi_index, landmark_name, indicator_id,"
+        " sun_side, light_value, area FROM galaxy_poi_landmarks"
+    )
+    landmarks_by_planet = {}
+    for (system_name, planet, poi_index, landmark_name, indicator_id, sun_side, light_value, area) in c.fetchall():
+        landmarks_by_planet.setdefault((system_name, planet), {})[poi_index] = {
+            "poi_index": poi_index,
+            "name": landmark_name,
+            "indicator_id": indicator_id,
+            "sun_side": sun_side,
+            "light_value": light_value,
+            "area": area,
+        }
     conn.close()
 
     def is_pure_poi(poi_tags):
@@ -1309,13 +1358,32 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
             if len(entry["poi_tags_seen"]) == 1 and entry["poi_area_densities"]
             else None
         )
+        planet_landmarks = landmarks_by_planet.get((system_name, planet), {})
+        poi_landmarks = [
+            planet_landmarks[tag] for tag in sorted(entry["poi_tag_labels"])
+            if tag in planet_landmarks
+        ]
+        poi_sun_states = sorted({lm["sun_side"] for lm in poi_landmarks if lm["sun_side"]})
         annotated.append((
             system_name, planet, entry["sector"], entry["node_count"],
             entry["density"], poi_tags, is_pure_poi(poi_tags), poi_area_density,
             bool(entry["is_asteroid"]), entry["temperature"], entry["temperature_name"],
-            entry["attributes"], entry["attribute_names"],
+            entry["attributes"], entry["attribute_names"], poi_landmarks, poi_sun_states,
         ))
 
+    # KNOWN RANKING LIMITATION: a "general,poiN" (mixed) row and a pure-
+    # "general" row of equal plain `density` rank IDENTICALLY here, even
+    # though the mixed row has a real advantage (part of its total IS
+    # reachable at a walkable POI) - poi_area_density is None for both (see
+    # the loop above), so both fall back to plain density with no way to
+    # credit the mixed row's POI portion. This isn't a bug to fix so much
+    # as a hard ceiling: the live-memory dump never records how a planet's
+    # total density splits between its general and POI portions (only
+    # THAT a POI is involved, via poi_tags) - see this function's own
+    # docstring and tools/backfill_galaxy_resources.py's load_rows. Only
+    # mitigation currently in place: js/galaxy.js's poiState gives mixed
+    # rows their own ◐ mark (vs · for pure-general) so this distinction is
+    # at least visible, even though it isn't priced into the sort.
     annotated.sort(key=lambda r: -((r[7] if r[7] is not None else r[4]) or 0))
     return annotated
 
@@ -1344,6 +1412,44 @@ def import_galaxy_systems(rows):
     c.executemany(
         "INSERT OR REPLACE INTO galaxy_systems (system_name, x, y, z, near_system_names)"
         " VALUES (?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+
+
+def import_galaxy_poi_landmarks(rows):
+    """Bulk INSERT OR REPLACE galaxy_poi_landmarks rows - `rows` is a list
+    of (system_name, planet, poi_index, landmark_name, indicator_id,
+    sun_side, light_value, area) tuples, one per POI (every in-game POI has
+    a landmark - see tools/backfill_galaxy_resources.py's
+    load_poi_landmark_rows for the empirical confirmation). poi_index is
+    the same "poiN" string used by galaxy_resources.poi_tags (same index
+    space, confirmed in the dump), so a resource row's poi_tags can be
+    matched directly against this table's poi_index without any
+    translation - see get_galaxy_sources_for_resource. sun_side is
+    "day"/"night"/"twilight", light_value the raw signed value it was
+    thresholded from (see the sibling spacecraft-memory-research repo's
+    classify_light) - planets don't rotate in this game, so this is a
+    stable per-POI fact, not a stale snapshot. area is this POI's own
+    surface-area fraction of the planet (tools/backfill_galaxy_resources.py's
+    poi_surface(poiSizes[poi_index]), same conversion import_galaxy_resources'
+    poi_area_density already uses, just kept per-POI instead of pre-combined
+    across a whole row's footprint) - None when this POI's size wasn't
+    known at import time. Used by js/galaxy.js's survivingAreaFraction to
+    estimate how much of a row's density is still "reachable" once some of
+    its POIs are excluded by the lighting filter - see that function's own
+    comment for why a per-POI area (not a raw count) is what's needed for a
+    meaningful estimate. REPLACE (not IGNORE, like import_galaxy_systems)
+    since re-running the backfill after further exploration should pick up
+    freshly-observed landmarks/lighting rather than freeze on whatever was
+    first seen."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.executemany(
+        "INSERT OR REPLACE INTO galaxy_poi_landmarks"
+        " (system_name, planet, poi_index, landmark_name, indicator_id, sun_side, light_value, area)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()

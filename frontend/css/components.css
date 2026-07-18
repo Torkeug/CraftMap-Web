@@ -922,12 +922,28 @@
 #galaxy-filters {
   flex: 0 0 auto;
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.galaxy-filter-row {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 10px;
-  color: var(--muted);
   min-height: 16px;
+}
+
+.galaxy-filter-row.hidden {
+  display: none;
+}
+
+.galaxy-filter-row-label {
+  flex: 0 0 auto;
+  color: var(--faint);
+  min-width: 40px;
 }
 
 #galaxy-filters label {
@@ -943,7 +959,8 @@
   cursor: pointer;
 }
 
-#galaxy-climate-filter {
+#galaxy-climate-filter,
+#galaxy-sun-filter {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -954,8 +971,6 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-left: 8px;
-  border-left: 1px solid var(--line);
 }
 
 #galaxy-sector-filter-input {
@@ -1059,6 +1074,56 @@
   color: var(--water);
 }
 
+.chip-sun-day {
+  background: rgba(227, 179, 65, 0.14);
+  color: var(--sun-day);
+}
+
+.chip-sun-twilight {
+  background: rgba(207, 106, 198, 0.14);
+  color: var(--sun-twilight);
+}
+
+.chip-sun-night {
+  background: rgba(110, 64, 201, 0.16);
+  color: var(--sun-night);
+}
+
+.poi-landmark-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  /* background-color set inline per-badge (poiMarkerColor) - the game's
+     own marker color, real per-planet data, not an app-invented scheme -
+     see js/galaxy.js's own comment on poiMarkerColor. */
+  background-color: var(--faint);
+}
+
+.poi-landmark-icon {
+  width: 14px;
+  height: 14px;
+  /* the extracted icon PNGs are light/near-white glyphs on transparent
+     backgrounds (see tools/extract_poi_icons.py) - the game renders them
+     over their own colored marker background the same way, so no filter/
+     tint needed here beyond the badge's own background-color. */
+}
+
+.galaxy-poi-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.galaxy-poi-segment {
+  display: inline-flex;
+  align-items: center;
+}
+
 #galaxy-rows.scroll-rows {
   flex: 1 1 auto;
   min-height: 60px;
@@ -1125,6 +1190,13 @@
 
 .galaxy-mark.scattered {
   color: var(--faint);
+}
+
+.galaxy-mark.mixed {
+  /* deliberately not --warn/--danger/--water/--sun-* - those are already
+     chip colors that can appear on the SAME row, and this mark isn't a
+     chip category, just a POI-footprint indicator (see poiState). */
+  color: var(--accent);
 }
 
 .galaxy-planet {

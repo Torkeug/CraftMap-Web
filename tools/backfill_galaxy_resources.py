@@ -317,6 +317,60 @@ def load_system_rows(dump_path):
     return list(seen.values())
 
 
+def load_poi_landmark_rows(dump_path):
+    """One (system_name, planet, poi_index, landmark_name, indicator_id,
+    sun_side, light_value, area) tuple per POI - poiLandmarks (per planet,
+    keyed "poi0"/"poi1"/... - the SAME index space as poiSizes/
+    resourcesByPoi, confirmed against the live dump, so this lines up
+    directly with galaxy_resources.poi_tags with no translation needed).
+    Every in-game POI turns out to have a landmark - confirmed empirically
+    across the full live dump, poiSizes and poiLandmarks share the exact
+    same index set for every planet, zero gaps either direction - one of
+    only 3 landmark kinds (Meteor Crater/High Peak/Natural Canyon,
+    indicatorId BalisePOI/BalisePOI1/BalisePOI2 - see
+    tools/extract_poi_icons.py, which crops their icons from the game's own
+    UI sprite sheet). `color` (the dump's own poiLandmarks[*].color field,
+    always null - the only traced icon-selection code path never routes
+    through the game's own ColorPOI1..5 rows) is likewise NOT carried over
+    here, but NOT because color is unknowable: the real per-planet marker
+    color is fully reproducible from poi_index alone (reverse-engineered
+    selection rule: colorSlot = ordinal-position-in-planet's-POI-list % 5 -
+    NOT tied to landmark kind at all), so it's computed client-side
+    (js/galaxy.js's poiMarkerColor) rather than stored redundantly here.
+    sun_side/light_value ARE real per-POI facts (the planet's lighting at
+    that landmark's location - planets don't rotate in this game, so this
+    doesn't go stale). area is poi_surface(poiSizes[poi_index]) - this
+    POI's OWN surface-area fraction, the same conversion load_rows already
+    applies when combining ALL of a resource's POIs into one
+    poi_area_density figure, just kept per-POI here instead - lets
+    js/galaxy.js's survivingAreaFraction estimate how much of a row's
+    density survives once some of its POIs are excluded by the lighting
+    filter, weighted by each excluded POI's actual size rather than
+    assuming every POI on a planet is equally sized. None when this POI's
+    size wasn't in poiSizes."""
+    planets = json.loads(dump_path.read_text(encoding="utf-8"))
+    rows = []
+    for p in planets:
+        system_name = p.get("system_name")
+        planet = p.get("planet_name")
+        if not system_name or not planet:
+            continue
+        poi_sizes = p.get("poiSizes") or {}
+        for poi_index, landmark in (p.get("poiLandmarks") or {}).items():
+            size = poi_sizes.get(poi_index)
+            rows.append((
+                system_name,
+                planet,
+                poi_index,
+                landmark.get("name"),
+                landmark.get("indicatorId"),
+                landmark.get("sunSide"),
+                landmark.get("lightValue"),
+                poi_surface(size) if size is not None else None,
+            ))
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -340,6 +394,7 @@ def main():
     init_db()
     rows = load_rows(dump_path)
     system_rows = load_system_rows(dump_path)
+    landmark_rows = load_poi_landmark_rows(dump_path)
 
     if args.dry_run:
         existing = db.get_galaxy_resource_keys()
@@ -354,6 +409,7 @@ def main():
             f"Would add/refresh {len(system_rows)} systems' position/neighbor data"
             f" ({len(new_systems)} not previously known) for jump-hop distance."
         )
+        print(f"Would add/refresh {len(landmark_rows)} POI landmarks (sun-side/lighting data).")
         return
 
     inserted = db.import_galaxy_resources(rows)
@@ -363,6 +419,8 @@ def main():
     )
     db.import_galaxy_systems(system_rows)
     print(f"Refreshed position/neighbor data for {len(system_rows)} systems.")
+    db.import_galaxy_poi_landmarks(landmark_rows)
+    print(f"Refreshed {len(landmark_rows)} POI landmarks (sun-side/lighting data).")
 
 
 if __name__ == "__main__":

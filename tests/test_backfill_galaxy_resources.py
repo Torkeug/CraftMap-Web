@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.backfill_galaxy_resources import (  # noqa: E402
     composite_rows_for_planet,
+    load_poi_landmark_rows,
     load_rows,
     load_system_rows,
     poi_surface,
@@ -254,3 +255,95 @@ def test_load_system_rows_dedupes_by_system_first_seen_wins(tmp_path):
 
     rows = load_system_rows(dump_path)
     assert rows == [("Sys1", 1.0, 1.0, 1.0, "Sys2")]
+
+
+def test_load_poi_landmark_rows_extracts_name_indicator_sunside_lightvalue(tmp_path):
+    dump = [
+        {
+            "system_name": "Sys1",
+            "planet_name": "PlanetA",
+            "poiLandmarks": {
+                "poi0": {
+                    "planetGenId": "Craters",
+                    "indicatorId": "BalisePOI",
+                    "name": "Meteor Crater",
+                    "color": None,
+                    "lat": 1.06,
+                    "lon": 1.44,
+                    "lightValue": 0.6159,
+                    "sunSide": "day",
+                },
+            },
+        },
+        # a planet with no poiLandmarks at all - contributes nothing
+        {"system_name": "Sys2", "planet_name": "PlanetB", "resourceCounts": {}},
+    ]
+    dump_path = tmp_path / "galaxy_resources.json"
+    dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+    rows = load_poi_landmark_rows(dump_path)
+    # no poiSizes in this dump entry - area is None, not computed from
+    # nothing (see load_poi_landmark_rows's own docstring)
+    assert rows == [
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6159, None)
+    ]
+
+
+def test_load_poi_landmark_rows_handles_multiple_landmarks_per_planet(tmp_path):
+    dump = [
+        {
+            "system_name": "Sys1",
+            "planet_name": "PlanetA",
+            "poiLandmarks": {
+                "poi0": {
+                    "indicatorId": "BalisePOI",
+                    "name": "Meteor Crater",
+                    "lightValue": 0.6,
+                    "sunSide": "day",
+                },
+                "poi1": {
+                    "indicatorId": "BalisePOI1",
+                    "name": "High Peak",
+                    "lightValue": -0.5,
+                    "sunSide": "night",
+                },
+            },
+        },
+    ]
+    dump_path = tmp_path / "galaxy_resources.json"
+    dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+    rows = load_poi_landmark_rows(dump_path)
+    assert {(r[2], r[5]) for r in rows} == {("poi0", "day"), ("poi1", "night")}
+
+
+def test_load_poi_landmark_rows_computes_area_from_poi_sizes(tmp_path):
+    dump = [
+        {
+            "system_name": "Sys1",
+            "planet_name": "PlanetA",
+            "poiSizes": {"poi0": 0.1231817752122879},
+            "poiLandmarks": {
+                "poi0": {
+                    "indicatorId": "BalisePOI",
+                    "name": "Meteor Crater",
+                    "lightValue": 0.6,
+                    "sunSide": "day",
+                },
+                # no matching poiSizes entry - area stays None, not a guess
+                "poi1": {
+                    "indicatorId": "BalisePOI1",
+                    "name": "High Peak",
+                    "lightValue": -0.5,
+                    "sunSide": "night",
+                },
+            },
+        },
+    ]
+    dump_path = tmp_path / "galaxy_resources.json"
+    dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+    rows = load_poi_landmark_rows(dump_path)
+    by_poi = {r[2]: r[7] for r in rows}
+    assert by_poi["poi0"] == poi_surface(0.1231817752122879)
+    assert by_poi["poi1"] is None
