@@ -213,10 +213,16 @@
   // dimension, and unchecking "Night POI" should only hide a row that is
   // EXCLUSIVELY night-side, not one that still has an unchecked-off Day POI
   // to offer - see passesSunFilter's own OR-within-category logic.
+  // "chip-lighting" (shared outlined shape, see components.css) plus its
+  // own color class - and a leading glyph baked right into the label text,
+  // not a separate icon element, so it survives anywhere the label string
+  // gets used verbatim (filter checkboxes, chip itself) with no extra
+  // wiring. Distinct shape+glyph+hue, not hue alone - see components.css's
+  // own comment on .chip-lighting for why.
   const SUN_CHIPS = {
-    day: { cls: "chip-sun-day", label: "Day POI" },
-    twilight: { cls: "chip-sun-twilight", label: "Twilight POI" },
-    night: { cls: "chip-sun-night", label: "Night POI" },
+    day: { cls: "chip-lighting chip-sun-day", label: "☀ Day POI" },
+    twilight: { cls: "chip-lighting chip-sun-twilight", label: "◐ Twilight POI" },
+    night: { cls: "chip-lighting chip-sun-night", label: "☾ Night POI" },
   };
 
   function sunChips(row) {

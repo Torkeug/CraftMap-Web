@@ -1055,38 +1055,50 @@
 }
 
 .chip-hot {
-  background: rgba(240, 136, 62, 0.14);
-  color: var(--warn);
+  background: rgba(217, 89, 38, 0.16);
+  color: var(--chip-hot);
 }
 
 .chip-veryhot {
-  background: rgba(218, 54, 51, 0.14);
-  color: var(--danger);
+  background: rgba(230, 103, 103, 0.16);
+  color: var(--chip-veryhot);
 }
 
 .chip-frozen {
-  background: rgba(31, 111, 235, 0.14);
-  color: #58a6ff;
+  background: rgba(57, 135, 229, 0.16);
+  color: var(--chip-frozen);
 }
 
 .chip-water {
-  background: rgba(57, 197, 207, 0.14);
-  color: var(--water);
+  background: rgba(25, 158, 112, 0.18);
+  color: var(--chip-water);
+}
+
+/* Lighting chips (Day/Twilight/Night POI) deliberately do NOT share
+   climate/water's filled-pill look, even though they now also have their
+   own well-separated hues (see theme.css) - a planet row can show both
+   kinds of chip side by side, and color alone is a thin channel at 9px.
+   Outlined (not filled) + a leading glyph baked into the label text
+   (js/galaxy.js's SUN_CHIPS) gives shape and symbol as independent,
+   color-blind-safe cues on top of hue - so "which kind of chip is this"
+   never depends on correctly reading a small color swatch. */
+.chip-lighting {
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 5px;
 }
 
 .chip-sun-day {
-  background: rgba(227, 179, 65, 0.14);
-  color: var(--sun-day);
+  color: var(--chip-day);
 }
 
 .chip-sun-twilight {
-  background: rgba(207, 106, 198, 0.14);
-  color: var(--sun-twilight);
+  color: var(--chip-twilight);
 }
 
 .chip-sun-night {
-  background: rgba(110, 64, 201, 0.16);
-  color: var(--sun-night);
+  color: var(--chip-night);
 }
 
 .poi-landmark-badge {

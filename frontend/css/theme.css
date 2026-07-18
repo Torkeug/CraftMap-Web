@@ -18,17 +18,32 @@
   --good: #3fb950;
   --warn: #f0883e;
   --danger: #da3633;
-  /* Water-presence planet attribute (js/galaxy.js) - deliberately its own
-     hue, not reusing the Frozen chip's blue: water and cold are unrelated
-     concepts and shouldn't share a color, same reasoning "system" already
-     gets its own purple beyond the four semantic tokens above. */
-  --water: #39c5cf;
-  /* POI lighting state (js/galaxy.js's day/night/twilight filter chips) -
-     each its own hue for the same reason --water is, rather than reusing
-     Hot/Frozen: unrelated concepts. */
-  --sun-day: #e3b341;
-  --sun-twilight: #cf6ac6;
-  --sun-night: #6e40c9;
+  /* Galaxy tab chip palette (js/galaxy.js's climate/water/lighting filter
+     chips) - a dedicated categorical set, NOT --warn/--danger/--water
+     above (those are reused elsewhere - buttons, borders - and changing
+     them would ripple beyond the chips). Chosen via the dataviz skill's
+     method (references/color-formula.md): 7 identities that must all stay
+     mutually distinguishable when co-displayed on one row (a planet can
+     show Hot AND Night POI AND Water at once), not just within their own
+     climate/lighting sub-group, so they're one shared 7-slot categorical
+     set, not two independently-picked palettes. Validated via
+     scripts/validate_palette.js against this app's own panel surface
+     (#161b22): adjacent-pair CVD/contrast/lightness/chroma all PASS.
+     All-pairs (every chip could in principle sit next to any other) fails
+     for any 7-hue set per the skill's own documentation (no 8-hue ordering
+     clears it either) - the required mitigation is secondary encoding, not
+     more hue-picking: every chip already carries a full text label (never
+     color-only), and lighting chips additionally get a distinct outlined
+     shape + glyph instead of climate/water's filled pill (see
+     .chip-lighting) - shape and icon carry identity color can't guarantee
+     alone at 9px. */
+  --chip-frozen: #3987e5;
+  --chip-water: #199e70;
+  --chip-hot: #d95926;
+  --chip-veryhot: #e66767;
+  --chip-day: #c98500;
+  --chip-twilight: #d55181;
+  --chip-night: #9085e9;
   --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
   --ui: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
 }
