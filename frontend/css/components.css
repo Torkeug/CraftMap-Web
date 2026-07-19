@@ -1659,40 +1659,6 @@
    window's chrome does - #pin-btn needs its OWN styling below, since the
    shared .icon-btn base rules in theme.css/components.css are scoped to
    `#dragbar .icon-btn`, which doesn't exist in this window at all. ---------- */
-#app.wreck-tracker-app {
-  position: relative; /* anchors #pin-btn's absolute positioning below */
-}
-
-#app.wreck-tracker-app #pin-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 1;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.45;
-}
-
-#app.wreck-tracker-app #pin-btn:hover {
-  background: #21262d;
-  color: var(--text);
-}
-
-#app.wreck-tracker-app #pin-btn.active {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  opacity: 1;
-}
-
 #wreck-tracker-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1702,11 +1668,79 @@
   gap: 6px;
 }
 
+/* Planet name + pin button share one row (pin moved off the old floating
+   top-right overlay per user request, to claw back vertical space) -
+   #pin-btn needs its OWN styling here rather than relying on the shared
+   .icon-btn base rules, which are scoped to `#dragbar .icon-btn` and this
+   window has no dragbar at all (removed - see this section's own header
+   comment). */
+#wreck-tracker-planet-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+#wreck-tracker-planet {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 600;
+  min-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#wreck-tracker-planet-row #pin-btn {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.45;
+}
+
+#wreck-tracker-planet-row #pin-btn:hover {
+  background: #21262d;
+  color: var(--text);
+}
+
+#wreck-tracker-planet-row #pin-btn.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  opacity: 1;
+}
+
+/* Status + legend share one row too (merged per user request) - status
+   truncates rather than wrapping/pushing the legend off, since its text
+   can run long on an error ("Tracker stopped unexpectedly - check the
+   script path..."), while the legend (just two short dot+label pairs
+   now - the old always-visible hint text moved to this row's own title
+   attribute/tooltip, see wreck-tracker.html) stays a fixed size. */
+#wreck-tracker-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 #wreck-tracker-status {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 11px;
   color: var(--muted);
-  flex: 0 0 auto;
-  padding-right: 22px; /* clears the floating #pin-btn overlaid top-right */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #wreck-tracker-status.running {
@@ -1715,14 +1749,6 @@
 
 #wreck-tracker-status.starting {
   color: var(--warn);
-}
-
-#wreck-tracker-planet {
-  font-size: 12px;
-  color: var(--text);
-  font-weight: 600;
-  flex: 0 0 auto;
-  min-height: 14px;
 }
 
 #heading-strip {
@@ -1782,6 +1808,15 @@
   align-items: center;
   gap: 1px;
   cursor: default;
+  z-index: 1;
+}
+
+/* Wreck (hull) markers stack above crate markers when they overlap -
+   explicit z-index rather than relying on DOM append order, since
+   js/wreck-tracker-panel.js's renderMarkers just iterates the snapshot's
+   node list in whatever order it came back in. */
+.heading-strip-marker.hull {
+  z-index: 2;
 }
 
 .heading-strip-marker-dot {
@@ -1839,9 +1874,6 @@
   background: var(--warn);
 }
 
-.wreck-tracker-legend-hint {
-  margin-left: auto;
-}
 
 /* Queue tab in the main window's tab row - a toggle button for the
    separate queue.html window, not a real screen switch (see js/screens.js's

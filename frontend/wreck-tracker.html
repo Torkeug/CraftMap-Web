@@ -8,29 +8,32 @@
   </head>
   <body>
     <div id="app" class="wreck-tracker-app">
-      <button
-        class="icon-btn"
-        id="pin-btn"
-        title="Keep visible when the main window hides"
-      >
-        &#128204;
-      </button>
       <div id="wreck-tracker-body">
-        <div id="wreck-tracker-status">Not running.</div>
-        <div id="wreck-tracker-planet"></div>
+        <div id="wreck-tracker-planet-row">
+          <div id="wreck-tracker-planet"></div>
+          <button
+            class="icon-btn"
+            id="pin-btn"
+            title="Keep visible when the main window hides"
+          >
+            &#128204;
+          </button>
+        </div>
         <div id="heading-strip">
           <div id="heading-strip-ticks"></div>
           <div id="heading-strip-center"></div>
           <div id="heading-strip-markers"></div>
         </div>
-        <div id="wreck-tracker-legend">
-          <span class="wreck-tracker-legend-item"
-            ><span class="wreck-tracker-dot hull"></span>Wreck</span
-          >
-          <span class="wreck-tracker-legend-item"
-            ><span class="wreck-tracker-dot crate"></span>Crate</span
-          >
-          <span class="wreck-tracker-legend-hint">Bigger = closer · number = distance</span>
+        <div id="wreck-tracker-footer-row">
+          <div id="wreck-tracker-status">Not running.</div>
+          <div id="wreck-tracker-legend" title="Bigger dot = closer · number = distance">
+            <span class="wreck-tracker-legend-item"
+              ><span class="wreck-tracker-dot hull"></span>Wreck</span
+            >
+            <span class="wreck-tracker-legend-item"
+              ><span class="wreck-tracker-dot crate"></span>Crate</span
+            >
+          </div>
         </div>
       </div>
       <div id="error-banner"></div>
@@ -41,14 +44,15 @@
     <script src="js/wreck-tracker-panel.js"></script>
     <script>
       // No dragbar (removed per user request - this window has no
-      // titlebar, just the pin button floating in a corner) - the whole
-      // window is draggable instead, which DragResize.attach already
-      // supports safely: its dragbarEl pointerdown handler already
-      // ignores clicks on .icon-btn elements (see that module's own
-      // comment), so passing #app itself here doesn't break clicking the
-      // floating pin button. Closing is no longer a manual action on
-      // this window at all - see js/wrecks.js's toggleTracking, which
-      // hides this window as part of "Stop Live Tracking" instead.
+      // titlebar, the pin button just sits inline on the planet-name
+      // row) - the whole window is draggable instead, which
+      // DragResize.attach already supports safely: its dragbarEl
+      // pointerdown handler already ignores clicks on .icon-btn elements
+      // (see that module's own comment), so passing #app itself here
+      // doesn't break clicking the pin button regardless of where it
+      // sits in the layout. Closing is no longer a manual action on this
+      // window at all - see js/wrecks.js's toggleTracking, which hides
+      // this window as part of "Stop Live Tracking" instead.
       DragResize.attach({
         dragbarEl: document.getElementById("app"),
         gripEl: document.getElementById("resize-grip"),
@@ -57,13 +61,16 @@
         resizeWindow: (x, y, w, h) => CraftMapApi.call("resize_wreck_tracker_window", x, y, w, h),
         saveGeometry: (x, y, w, h) => CraftMapApi.call("save_wreck_tracker_window_geometry", x, y, w, h),
         minW: 260,
-        minH: 70,
-        // Tiny single-purpose layout (one status line, one strip, one
-        // legend row) - the shared 100px default (tuned for the main
-        // window's multi-row forms) was nearly doubling this window's
-        // real minimum height. See drag-resize.js's own comment on
-        // DEFAULT_HEIGHT_MARGIN.
-        heightMargin: 12,
+        minH: 50,
+        // Tiny, fixed, non-scrolling 3-row layout (planet+pin row, the
+        // strip, status+legend row) - no space-filling flex:1 panes that
+        // could genuinely need slack the way the main window's forms do,
+        // so this only needs enough margin to absorb sub-pixel rounding,
+        // not a whole row's worth. The shared 100px default (tuned for
+        // those multi-row forms) was nearly doubling this window's real
+        // minimum height even at an earlier, more generous 12px setting.
+        // See drag-resize.js's own comment on DEFAULT_HEIGHT_MARGIN.
+        heightMargin: 4,
       });
     </script>
   </body>

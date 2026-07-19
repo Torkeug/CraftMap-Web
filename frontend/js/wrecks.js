@@ -442,6 +442,26 @@
       }
     }
 
+    // The live snapshot FILE persists on disk across poller restarts - a
+    // freshly (re)started poller's get_live_wreck_snapshot immediately
+    // returns a previous session's leftover the instant it's called,
+    // well before the new poller has actually attached/written anything
+    // of its own (attach alone can take 1-3 minutes cold - see
+    // wreck_tracker.py's own module docstring). Without checking the
+    // timestamp's actual age, that leftover reads as current ("Running -
+    // updated <plausible old time>") instead of "still starting up" -
+    // confirmed live: this exact confusion happened, a stale
+    // not-in-planet snapshot from a dead poller instance was shown as
+    // if it were this session's real status. Threshold generous
+    // relative to normal cycle time but far shorter than any realistic
+    // attach time.
+    const STALE_THRESHOLD_MS = 5000;
+
+    function isFresh(snapshot) {
+      if (!snapshot) return false;
+      return Date.now() - new Date(snapshot.observed_at).getTime() < STALE_THRESHOLD_MS;
+    }
+
     async function poll() {
       let snapshot = null;
       try {
@@ -449,7 +469,7 @@
       } catch (e) {
         // CraftMapApi.call already surfaces this via the error banner
       }
-      if (snapshot) {
+      if (isFresh(snapshot)) {
         sawFirstSnapshot = true;
         setStatus(`Running - updated ${fmtTime(snapshot.observed_at)}`, "running");
       } else if (!sawFirstSnapshot) {

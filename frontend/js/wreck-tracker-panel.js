@@ -195,6 +195,26 @@
     renderMarkers(entries);
   }
 
+  // The live snapshot FILE persists on disk across poller restarts - if a
+  // previous session already wrote one, a freshly (re)started poller's
+  // get_live_wreck_snapshot immediately returns that old leftover the
+  // instant it's called, well before the new poller has attached/written
+  // anything of its own (attach alone can take 1-3 minutes on a cold
+  // scan - see wreck_tracker.py's own module docstring). Without this
+  // check, that leftover renders as if it were current ("Running -
+  // updated <plausible-looking old time>"), which is actively misleading,
+  // not just uninformative. Threshold is generous relative to normal
+  // cycle time (--ship-interval defaults to 0.2s) but far shorter than
+  // any realistic attach time, so it only ever flags genuinely stale
+  // carry-over data, not ordinary poll jitter.
+  const STALE_THRESHOLD_MS = 5000;
+
+  function isFresh(snapshot) {
+    if (!snapshot) return false;
+    const age = Date.now() - new Date(snapshot.observed_at).getTime();
+    return age < STALE_THRESHOLD_MS;
+  }
+
   async function poll() {
     let snapshot = null;
     try {
@@ -202,17 +222,18 @@
     } catch (e) {
       // CraftMapApi.call already surfaces this via the error banner
     }
+    const fresh = isFresh(snapshot);
     const status = await CraftMapApi.call("get_wreck_tracking_status");
     if (status.running) {
-      statusEl.textContent = snapshot
+      statusEl.textContent = fresh
         ? `Running - updated ${new Date(snapshot.observed_at).toLocaleTimeString()}`
         : "Starting up, scanning game memory (can take 1-3 minutes the first time)...";
-      statusEl.className = snapshot ? "running" : "starting";
+      statusEl.className = fresh ? "running" : "starting";
     } else {
       statusEl.textContent = "Not running (start it from the Wrecks tab).";
       statusEl.className = "";
     }
-    render(snapshot);
+    render(fresh ? snapshot : null);
   }
 
   async function initPin() {
