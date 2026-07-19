@@ -117,11 +117,16 @@
   // read-nothing way to tell closest-from-farthest apart at a glance,
   // replacing the old text list (removed per user feedback: it ate a lot
   // of window space for what the strip's positions mostly already
-  // conveyed). Range is deliberately generous (very close to
-  // moderately-far-on-the-same-planet) rather than tuned to one sample
-  // planet's exact wreck spacing.
-  const NEAR_DISTANCE = 50; // at or below this: full size/opacity
-  const FAR_DISTANCE = 3000; // at or beyond this: minimum size/opacity
+  // conveyed). Range recalibrated from an initial guess (50-3000) that
+  // was WAY too small - confirmed live, real observed distances while
+  // in-planet run from ~1000 up to ~150000-200000 units (being
+  // "in_planet" per wreck_tracker.py's own snapshot doesn't mean being
+  // near the surface - the ship can be far out in orbit, see this
+  // repo's own read_player_ship_position derivation), so every dot was
+  // clamping to the minimum size regardless of its real relative
+  // distance under the old range.
+  const NEAR_DISTANCE = 500; // at or below this: full size/opacity
+  const FAR_DISTANCE = 150000; // at or beyond this: minimum size/opacity
   const DOT_SIZE_MAX = 16;
   const DOT_SIZE_MIN = 6;
 
@@ -154,6 +159,11 @@
       dot.style.width = `${size}px`;
       dot.style.height = `${size}px`;
       marker.appendChild(dot);
+
+      const dist = document.createElement("span");
+      dist.className = "heading-strip-marker-dist";
+      dist.textContent = fmtDistance(e.distance);
+      marker.appendChild(dist);
 
       stripMarkersEl.appendChild(marker);
     }
