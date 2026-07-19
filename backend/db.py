@@ -1556,21 +1556,38 @@ def get_galaxy_hop_distances(from_system):
 # ---- Wreck events (tools/import_wreck_events.py, sibling repo's wreck_tracker.py) ----
 
 
-# Display names/tiers for the 6 resourceIds wreck_tracker.py ever logs -
+# Display names/tiers for the resourceIds wreck_tracker.py ever logs -
 # static, data.cdb-derived, same "small hardcoded table" call
 # RESOURCE_SIZE_VARIANTS/DEPOSIT_TYPE_RESOURCE_NAMES above already make for
 # similarly tiny/unlikely-to-change lookups, rather than adding a runtime
 # dependency on the sibling repo's data.cdb loading. Both hull and crate
-# resourceIds share the SAME display name across all 3 "_lvl0/1/2" tiers
-# in data.cdb (id -> name: ShipWreck_Lvl0/1/2 -> "Shipwreck",
+# resourceIds share the SAME display name across all their tiers in
+# data.cdb (id -> name: ShipWreck_Lvl0/1/2 and the BigPiece1/BigPiece2/
+# SmallPiece1/SmallPiece2 hull-piece variants -> "Shipwreck",
 # ShipWreck_LootChestRare_lvl0/1/2 -> "Precious Cargo") - the trailing
 # digit is a loot-level/progression tier, not a separate display identity,
 # so it's surfaced as its own `level` field rather than folded into the
-# name.
+# name. SmallPiece1/SmallPiece2 have no _lvl suffix in data.cdb at all
+# (level=None) - not a gap, they're simply not tiered.
+#
+# Originally only had the plain Lvl0/1/2 hull ids - missed that a wreck's
+# hull can instead be built from BigPiece1/BigPiece2/SmallPiece1/
+# SmallPiece2 sibling pieces (same parentId, same data.cdb type=7
+# "Shipwreck" category, see wreck_tracker.py's WRECK_HULL_IDS for the full
+# derivation) - any such event fell back to raw resource_id/kind=None here,
+# same underlying gap as the frontend's wreck-tracker-panel.js HULL_IDS.
 WRECK_RESOURCE_INFO = {
     "ShipWreck_Lvl0": {"display_name": "Shipwreck", "kind": "hull", "level": 0},
     "ShipWreck_Lvl1": {"display_name": "Shipwreck", "kind": "hull", "level": 1},
     "ShipWreck_Lvl2": {"display_name": "Shipwreck", "kind": "hull", "level": 2},
+    "ShipWreck_BigPiece1_lvl0": {"display_name": "Shipwreck", "kind": "hull", "level": 0},
+    "ShipWreck_BigPiece1_lvl1": {"display_name": "Shipwreck", "kind": "hull", "level": 1},
+    "ShipWreck_BigPiece1_lvl2": {"display_name": "Shipwreck", "kind": "hull", "level": 2},
+    "ShipWreck_BigPiece2_lvl0": {"display_name": "Shipwreck", "kind": "hull", "level": 0},
+    "ShipWreck_BigPiece2_lvl1": {"display_name": "Shipwreck", "kind": "hull", "level": 1},
+    "ShipWreck_BigPiece2_lvl2": {"display_name": "Shipwreck", "kind": "hull", "level": 2},
+    "ShipWreck_SmallPiece1": {"display_name": "Shipwreck", "kind": "hull", "level": None},
+    "ShipWreck_SmallPiece2": {"display_name": "Shipwreck", "kind": "hull", "level": None},
     "ShipWreck_LootChestRare_lvl0": {"display_name": "Precious Cargo", "kind": "crate", "level": 0},
     "ShipWreck_LootChestRare_lvl1": {"display_name": "Precious Cargo", "kind": "crate", "level": 1},
     "ShipWreck_LootChestRare_lvl2": {"display_name": "Precious Cargo", "kind": "crate", "level": 2},

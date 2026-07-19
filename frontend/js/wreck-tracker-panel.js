@@ -50,11 +50,31 @@
   // behind you still shows SOME hint of which side to turn toward.
   const BEARING_RANGE_DEG = 100;
 
-  const HULL_IDS = new Set(["ShipWreck_Lvl0", "ShipWreck_Lvl1", "ShipWreck_Lvl2"]);
+  // Kept in sync with wreck_tracker.py's WRECK_HULL_IDS (spacecraft-memory-
+  // research repo) - a wreck's hull isn't always a single ShipWreck_Lvl0/1/2
+  // node, it can instead be built from BigPiece1/BigPiece2/SmallPiece1/
+  // SmallPiece2 sibling pieces (same parentId, same data.cdb type=7
+  // "Shipwreck" category). Missed here originally the same way it was
+  // missed backend-side: a wreck using the BigPiece/SmallPiece variant had
+  // its crates show on the strip but not its hull.
+  const HULL_IDS = new Set([
+    "ShipWreck_Lvl0", "ShipWreck_Lvl1", "ShipWreck_Lvl2",
+    "ShipWreck_BigPiece1_lvl0", "ShipWreck_BigPiece1_lvl1", "ShipWreck_BigPiece1_lvl2",
+    "ShipWreck_BigPiece2_lvl0", "ShipWreck_BigPiece2_lvl1", "ShipWreck_BigPiece2_lvl2",
+    "ShipWreck_SmallPiece1", "ShipWreck_SmallPiece2",
+  ]);
   const RESOURCE_DISPLAY = {
     ShipWreck_Lvl0: "Wreck",
     ShipWreck_Lvl1: "Wreck",
     ShipWreck_Lvl2: "Wreck",
+    ShipWreck_BigPiece1_lvl0: "Wreck",
+    ShipWreck_BigPiece1_lvl1: "Wreck",
+    ShipWreck_BigPiece1_lvl2: "Wreck",
+    ShipWreck_BigPiece2_lvl0: "Wreck",
+    ShipWreck_BigPiece2_lvl1: "Wreck",
+    ShipWreck_BigPiece2_lvl2: "Wreck",
+    ShipWreck_SmallPiece1: "Wreck",
+    ShipWreck_SmallPiece2: "Wreck",
     ShipWreck_LootChestRare_lvl0: "Crate",
     ShipWreck_LootChestRare_lvl1: "Crate",
     ShipWreck_LootChestRare_lvl2: "Crate",
