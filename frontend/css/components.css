@@ -1801,8 +1801,18 @@
 }
 
 .heading-strip-marker {
+  /* left/top are fixed (0, 50%) and never touched after creation - ALL
+     dynamic positioning happens via a per-frame `transform` in
+     js/wreck-tracker-panel.js's updateMarkerEl instead of ever writing
+     left/width/height directly. transform (and opacity) are GPU-
+     compositor-only properties that don't force a synchronous browser
+     layout recalculation the way left/width/height do - confirmed live
+     as a real contributor to visible stutter at the HUD's 60Hz poll
+     rate, on top of the DOM-node-reuse fix (see renderMarkers' own
+     comment) that was already applied first. */
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1820,8 +1830,17 @@
 }
 
 .heading-strip-marker-dot {
-  width: 8px;
-  height: 8px;
+  /* Fixed at the MAX size - distance scaling shrinks it via `transform:
+     scale()` (see js/wreck-tracker-panel.js's updateMarkerEl) instead of
+     changing width/height directly, same layout-vs-compositor reasoning
+     as .heading-strip-marker's own left/top above. box-shadow (the ring)
+     scales proportionally along with the rest of the element under
+     transform:scale, so it thins out on smaller/farther dots too - a
+     minor, acceptable visual side effect of this being a single
+     composited layer rather than a layout cost worth re-triggering
+     every frame. */
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   box-shadow: 0 0 0 2px var(--panel);
 }

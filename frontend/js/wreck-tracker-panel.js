@@ -32,15 +32,19 @@
   const stripTicksEl = document.getElementById("heading-strip-ticks");
   const pinBtn = document.getElementById("pin-btn");
 
-  // Matches wreck_tracker.py's own --ship-interval default (0.2s, NOT
+  // Matches wreck_tracker.py's own --ship-interval default (1/60s, NOT
   // --interval - that one's just the slower wreck/crate node-scan
   // cadence, decoupled from ship position/heading freshness on purpose,
-  // see that script's own module docstring) - polling much slower than
-  // the poller's own write cadence here was the actual remaining
-  // bottleneck after splitting the poller's two loops (this file kept
-  // its old 2000ms value, which capped the HUD's real-world refresh
-  // rate regardless of how fast the underlying file was updating).
-  const POLL_MS = 200;
+  // see that script's own module docstring). Polling much slower than
+  // the poller's own write cadence was the actual bottleneck at every
+  // earlier step of speeding this up - this file's own POLL_MS always
+  // has to keep pace with whatever the poller side achieves, or none of
+  // that speedup is visible. 60Hz is right at (arguably past) the point
+  // where the pywebview/pythonnet IPC bridge's own per-call cost - not
+  // measured as precisely as the poller-side numbers documented in
+  // wreck_tracker.py - becomes the real unknown; drop this if it turns
+  // out the bridge can't actually keep up smoothly at this rate.
+  const POLL_MS = 17;
   // Visible bearing window on the strip - anything beyond this clamps to
   // the edge with an arrow rather than being hidden, so a target directly
   // behind you still shows SOME hint of which side to turn toward.
@@ -138,35 +142,74 @@
     };
   }
 
+  // Marker DOM nodes are REUSED across renders rather than torn down and
+  // recreated every call - at 60Hz that was measurably janky (confirmed
+  // by the user), and it's wasted work anyway: the underlying node LIST
+  // only changes every --interval seconds (3s default, see
+  // wreck_tracker.py's own slower node-scan cadence), while renderMarkers
+  // itself gets called on every fast ship-tick poll just to update
+  // bearing/distance for the SAME set of entries. Full rebuild only
+  // happens when the entry count actually changes (a wreck/crate
+  // appeared or disappeared) - the overwhelming majority of calls just
+  // update each existing element's style in place instead of touching
+  // the DOM tree structure at all.
+  let markerPool = []; // [{el, dotEl}, ...], parallel to the last-rendered entries array
+
+  // stripWidthPx: read ONCE per renderMarkers call, before any style
+  // writes in the loop below, never interleaved with them - reading a
+  // layout property (clientWidth) after a pending style write is what
+  // forces a *synchronous* layout flush ("layout thrashing"); reading it
+  // first, then only writing afterward, keeps every write in this
+  // function free to batch into the browser's normal next-frame layout
+  // pass instead.
+  function updateMarkerEl(pooled, e, stripWidthPx) {
+    const clampedBearing = Math.max(-BEARING_RANGE_DEG, Math.min(BEARING_RANGE_DEG, e.bearingDeg));
+    const atEdge = Math.abs(e.bearingDeg) > BEARING_RANGE_DEG;
+    const xPct = ((clampedBearing + BEARING_RANGE_DEG) / (2 * BEARING_RANGE_DEG)) * 100;
+    const xPx = (xPct / 100) * stripWidthPx;
+    const { size, opacity } = markerScale(e.distance);
+
+    pooled.el.className = `heading-strip-marker ${e.isHull ? "hull" : "crate"}${atEdge ? " edge" : ""}`;
+    // Horizontal position AND self-centering combined into one transform
+    // (left/top stay fixed at 0/50% in CSS - see that rule's own
+    // comment) - `calc(${xPx}px - 50%)`'s percentage is relative to the
+    // MARKER'S OWN width (how CSS `translate` percentages work), which
+    // is exactly the centering `translate(-50%, -50%)` used to do
+    // separately when this was expressed via `left` instead.
+    pooled.el.style.transform = `translate(calc(${xPx}px - 50%), -50%)`;
+    pooled.el.style.opacity = opacity;
+    pooled.el.title = `${e.label} - ${fmtDistance(e.distance)}u, bearing ${Math.round(e.bearingDeg)}°`;
+    // Dot is fixed at DOT_SIZE_MAX in CSS - scaled down for distance
+    // instead of resizing width/height directly.
+    pooled.dotEl.style.transform = `scale(${size / DOT_SIZE_MAX})`;
+    pooled.distEl.textContent = fmtDistance(e.distance);
+  }
+
+  function makeMarkerEl() {
+    const marker = document.createElement("div");
+
+    const dot = document.createElement("span");
+    dot.className = "heading-strip-marker-dot";
+    marker.appendChild(dot);
+
+    const dist = document.createElement("span");
+    dist.className = "heading-strip-marker-dist";
+    marker.appendChild(dist);
+
+    return { el: marker, dotEl: dot, distEl: dist };
+  }
+
   function renderMarkers(entries) {
-    stripMarkersEl.innerHTML = "";
-    for (const e of entries) {
-      const clampedBearing = Math.max(-BEARING_RANGE_DEG, Math.min(BEARING_RANGE_DEG, e.bearingDeg));
-      const atEdge = Math.abs(e.bearingDeg) > BEARING_RANGE_DEG;
-      const xPct = ((clampedBearing + BEARING_RANGE_DEG) / (2 * BEARING_RANGE_DEG)) * 100;
-      const { size, opacity } = markerScale(e.distance);
-
-      const marker = document.createElement("div");
-      marker.className = `heading-strip-marker ${e.isHull ? "hull" : "crate"}`;
-      marker.style.left = `${xPct}%`;
-      marker.style.top = "50%";
-      marker.style.opacity = opacity;
-      marker.title = `${e.label} - ${fmtDistance(e.distance)}u, bearing ${Math.round(e.bearingDeg)}°`;
-      if (atEdge) marker.classList.add("edge");
-
-      const dot = document.createElement("span");
-      dot.className = "heading-strip-marker-dot";
-      dot.style.width = `${size}px`;
-      dot.style.height = `${size}px`;
-      marker.appendChild(dot);
-
-      const dist = document.createElement("span");
-      dist.className = "heading-strip-marker-dist";
-      dist.textContent = fmtDistance(e.distance);
-      marker.appendChild(dist);
-
-      stripMarkersEl.appendChild(marker);
+    if (entries.length !== markerPool.length) {
+      // Count changed (rare) - full rebuild is simplest and correct;
+      // cheap relative to how infrequently this branch actually runs.
+      stripMarkersEl.innerHTML = "";
+      markerPool = entries.map(() => makeMarkerEl());
+      for (const pooled of markerPool) stripMarkersEl.appendChild(pooled.el);
     }
+    if (!entries.length) return;
+    const stripWidthPx = stripMarkersEl.clientWidth; // single read, see updateMarkerEl's own comment
+    entries.forEach((e, i) => updateMarkerEl(markerPool[i], e, stripWidthPx));
   }
 
   function render(snapshot) {
@@ -215,7 +258,24 @@
     return age < STALE_THRESHOLD_MS;
   }
 
-  async function poll() {
+  // get_wreck_tracking_status barely ever changes (only on Activate/Stop,
+  // maybe once every several minutes) - polling it on every fast
+  // POLL_MS tick alongside get_live_wreck_snapshot doubled the IPC
+  // round-trips for no benefit and was a real contributor to the 60Hz
+  // stutter the user reported (each pywebview/pythonnet Api call is a
+  // genuine cross-process hop - see CraftMap's own CLAUDE.md on why
+  // *call count*, not just payload size, matters over this bridge).
+  // Split into its own much slower poll instead; pollSnapshot reads the
+  // cached lastKnownRunning rather than awaiting a fresh status call
+  // every tick.
+  let lastKnownRunning = false;
+
+  async function pollStatus() {
+    const status = await CraftMapApi.call("get_wreck_tracking_status");
+    lastKnownRunning = status.running;
+  }
+
+  async function pollSnapshot() {
     let snapshot = null;
     try {
       snapshot = await CraftMapApi.call("get_live_wreck_snapshot");
@@ -223,8 +283,7 @@
       // CraftMapApi.call already surfaces this via the error banner
     }
     const fresh = isFresh(snapshot);
-    const status = await CraftMapApi.call("get_wreck_tracking_status");
-    if (status.running) {
+    if (lastKnownRunning) {
       statusEl.textContent = fresh
         ? `Running - updated ${new Date(snapshot.observed_at).toLocaleTimeString()}`
         : "Starting up, scanning game memory (can take 1-3 minutes the first time)...";
@@ -248,8 +307,10 @@
   function init() {
     buildTicks();
     initPin();
-    poll();
-    setInterval(poll, POLL_MS);
+    pollStatus();
+    pollSnapshot();
+    setInterval(pollSnapshot, POLL_MS);
+    setInterval(pollStatus, 1000);
   }
 
   init();
