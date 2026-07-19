@@ -359,6 +359,7 @@
   // onShow/onHide, distinct from the static-data render() above. ----
   const LiveTracking = (function () {
     const scriptPathInput = document.getElementById("wrecks-live-script-path");
+    const pythonPathInput = document.getElementById("wrecks-live-python-path");
     const saveSettingsBtn = document.getElementById("wrecks-live-save-settings-btn");
     const toggleBtn = document.getElementById("wrecks-live-toggle-btn");
     const statusEl = document.getElementById("wrecks-live-status");
@@ -513,12 +514,17 @@
     }
 
     async function saveSettings() {
-      await CraftMapApi.call("set_wreck_tracker_settings", scriptPathInput.value.trim(), "");
+      await CraftMapApi.call(
+        "set_wreck_tracker_settings",
+        scriptPathInput.value.trim(),
+        pythonPathInput.value.trim()
+      );
     }
 
     async function loadSettings() {
       const settings = await CraftMapApi.call("get_wreck_tracker_settings");
       scriptPathInput.value = settings.script_path || "";
+      pythonPathInput.value = settings.python_path || "";
     }
 
     async function onShow() {

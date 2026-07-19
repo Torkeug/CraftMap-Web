@@ -1562,6 +1562,29 @@
   border-color: var(--accent);
 }
 
+#wrecks-live-python-inputs {
+  display: flex;
+  gap: 6px;
+}
+
+#wrecks-live-python-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#wrecks-live-python-path:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 #wrecks-live-controls-row {
   display: flex;
   align-items: center;
