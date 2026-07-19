@@ -55,10 +55,13 @@ python -m pytest tests/
 backend/
   paths.py     # DB_PATH/CONFIG_PATH - resolves relative to this app's own install dir (frozen-vs-script split, see below)
   config.py    # load_config/save_config (config.json)
-  db.py        # all deposit/recipe/craft-queue SQLite CRUD + init_db()'s schema/migrations
+  db.py        # all deposit/recipe/craft-queue/galaxy/wreck-events SQLite CRUD + init_db()'s schema/migrations
   resolver.py  # resolve_recipe_tree + collect_totals/collect_basic_crafted (pure logic + one DB read)
   api.py       # Api class - the pywebview js_api bridge, thin wrappers over the above
   win32util.py # ctypes Win32 interop: hwnd resolution, click-through, focus-forcing, single-instance mutex
+  shipwreck_loot.py  # static shipwreck rare-loot-crate odds (Wrecks tab) - loads game_data_extract/shipwreck_loot.json
+  wreck_tracking.py  # subprocess launch/live-snapshot-read helpers for the sibling repo's wreck_tracker.py poller
+  wreck_import.py    # imports wreck_tracker.py's JSONL event log into db.wreck_events (see tools/import_wreck_events.py)
 frontend/
   index.html          # main window: deposit tracker + recipe panel
   queue.html          # Craft Queue window
@@ -76,6 +79,8 @@ frontend/
 main.py        # entrypoint: single-instance check, init_db, create both windows, App state machine, hotkey/tray
 tools/
   backfill_recipe_metadata.py  # one-off maintenance script enriching resources.db from game_data_extract/
+  backfill_galaxy_resources.py # repeatable import of the sibling repo's galaxy-wide dump into galaxy_resources/galaxy_systems/galaxy_poi_landmarks
+  import_wreck_events.py       # repeatable import of the sibling repo's wreck_tracker.py event log into wreck_events (also runnable from Api - see backend/wreck_import.py)
 game_data_extract/  # game-authoritative recipe/item data snapshots (see its own README.md)
 ```
 
@@ -123,6 +128,8 @@ Same shape as the retired tkinter app's, evolved with multi-output/multi-station
 - **`recipe_alt_prefs`**: `ingredient_name` (PK) → `recipe_id` - user's preferred alternate recipe per ingredient name.
 - **`recipe_station_prefs`**: `ingredient_name` (PK) → `station, mode` - user's preferred station/craft-mode per ingredient name.
 - **`craft_queue`**: `id, recipe_id, quantity, station, combine, station_mode` - `add_to_queue` merges into an existing same-recipe-and-station row rather than duplicating. `combine` gates whether a job counts toward the Totals view's combined aggregate.
+- **`galaxy_resources`** / **`galaxy_systems`** / **`galaxy_poi_landmarks`**: automated, no-travel galaxy-wide resource/system/POI data from the sibling `spacecraft-memory-research` repo's `dump_galaxy_resources.py`, imported via `tools/backfill_galaxy_resources.py` (`INSERT OR IGNORE`/`INSERT OR REPLACE`, safely re-runnable). Personal/per-Quadrant data, never committed - see that script's own docstring for the full field-by-field derivation.
+- **`wreck_events`**: an EVENT LOG (one row per sighting/loot/despawn, not a live-position table - see its own comment in `init_db()` for why), fed by the sibling repo's `wreck_tracker.py` poller via `tools/import_wreck_events.py`/`backend/wreck_import.py`. `id, system_name, planet, resource_id, event_type, x, y, z, observed_at`, `UNIQUE(system_name, planet, resource_id, event_type, observed_at, x, y, z)`. Only ever answers "what have I seen over time" (`db.get_wreck_stats`) - the actual live "what's on this planet right now" position comes from `wreck_tracker.py`'s own overwritten JSON snapshot file, read directly by `Api.get_live_wreck_snapshot` (see `backend/wreck_tracking.py`), never stored in this table.
 
 ## Testing this app
 

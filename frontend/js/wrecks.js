@@ -28,12 +28,15 @@
 (function () {
   const modeSectorBtn = document.getElementById("wrecks-mode-sector");
   const modeItemBtn = document.getElementById("wrecks-mode-item");
+  const modeLiveBtn = document.getElementById("wrecks-mode-live");
   const searchInput = document.getElementById("wrecks-search");
+  const searchRowEl = document.getElementById("wrecks-search-row");
   const treeEl = document.getElementById("wrecks-tree");
   const filterPatch = document.getElementById("wrecks-filter-patch");
   const filterBlueprint = document.getElementById("wrecks-filter-blueprint");
+  const liveViewEl = document.getElementById("wrecks-live-view");
 
-  let mode = "sector"; // "sector" | "item" - session-only, not persisted
+  let mode = "sector"; // "sector" | "item" | "live" - session-only, not persisted
   let sectorsData = null; // fetched once per mode, cached
   let itemsData = null;
   // Session-only, not persisted (unlike js/deposits.js's collapsed_nodes,
@@ -326,19 +329,235 @@
     mode = newMode;
     modeSectorBtn.classList.toggle("active", mode === "sector");
     modeItemBtn.classList.toggle("active", mode === "item");
+    modeLiveBtn.classList.toggle("active", mode === "live");
+    searchRowEl.classList.toggle("hidden", mode === "live");
+    treeEl.classList.toggle("hidden", mode === "live");
+    liveViewEl.classList.toggle("hidden", mode !== "live");
+    if (mode === "live") {
+      await LiveTracking.onShow();
+      return;
+    }
+    LiveTracking.onHide();
     searchInput.placeholder = mode === "sector" ? "Filter sectors..." : "Filter items...";
     await ensureDataLoaded();
     render();
   }
+
+  // ---- Live Tracking sub-tab: SETUP (script path) + HISTORICAL DATA
+  // (all-time sightings stats) only - the live, per-cycle current-planet
+  // view with bearing/distance lives in its own separate pinnable window
+  // (frontend/wreck-tracker.html/js/wreck-tracker-panel.js, opened by
+  // Activate below), not here, so it keeps working/visible even while
+  // this tab isn't the active screen. Still polls get_live_wreck_snapshot
+  // itself (status text only, snapshot body unused) - that call also
+  // piggybacks a wreck_events import as a side effect (see
+  // Api.get_live_wreck_snapshot's own docstring), which needs to keep
+  // happening for the stats below to stay current regardless of whether
+  // the separate HUD window is even open. Wrapped in its own object
+  // (rather than more top-level functions in this closure) since it owns
+  // a setInterval poll loop with clean start/stop lifecycle tied to
+  // onShow/onHide, distinct from the static-data render() above. ----
+  const LiveTracking = (function () {
+    const scriptPathInput = document.getElementById("wrecks-live-script-path");
+    const saveSettingsBtn = document.getElementById("wrecks-live-save-settings-btn");
+    const toggleBtn = document.getElementById("wrecks-live-toggle-btn");
+    const statusEl = document.getElementById("wrecks-live-status");
+    const statsEl = document.getElementById("wrecks-live-stats");
+    const statsGroupRadios = document.querySelectorAll('input[name="wrecks-stats-group"]');
+
+    const POLL_MS = 3000;
+    let pollTimer = null;
+    let tracking = false; // this tab's own belief that a start was requested
+    let sawFirstSnapshot = false;
+
+    function fmtTime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return isNaN(d) ? "" : d.toLocaleTimeString();
+    }
+
+    function setStatus(text, cls) {
+      statusEl.textContent = text;
+      statusEl.className = cls || "";
+    }
+
+    function makeRow(mainText, rightText) {
+      const row = document.createElement("div");
+      row.className = "source-row";
+      const nameEl = document.createElement("span");
+      nameEl.className = "source-row-name";
+      nameEl.textContent = mainText;
+      row.appendChild(nameEl);
+      if (rightText) {
+        const rightEl = document.createElement("span");
+        rightEl.className = "wrecks-live-row-right";
+        rightEl.textContent = rightText;
+        row.appendChild(rightEl);
+      }
+      return row;
+    }
+
+    function currentStatsGroup() {
+      for (const r of statsGroupRadios) if (r.checked) return r.value;
+      return "planet";
+    }
+
+    async function renderStats() {
+      const rows = await CraftMapApi.call("get_wreck_stats");
+      statsEl.innerHTML = "";
+      if (!rows.length) {
+        statsEl.appendChild(makeRow("No sightings logged yet."));
+        return;
+      }
+      const groupBy = currentStatsGroup();
+      const groups = new Map(); // groupLabel -> {display_name -> {seen, looted, despawned}}
+      for (const r of rows) {
+        const label =
+          groupBy === "sector"
+            ? r.sector || "(unknown sector)"
+            : groupBy === "system"
+              ? r.system_name
+              : `${r.system_name} - ${r.planet}`;
+        const byResource = groups.get(label) || new Map();
+        const key = `${r.display_name} L${r.level}`;
+        const agg = byResource.get(key) || { seen: 0, looted: 0, despawned: 0 };
+        agg.seen += r.seen_count;
+        agg.looted += r.looted_count;
+        agg.despawned += r.despawned_count;
+        byResource.set(key, agg);
+        groups.set(label, byResource);
+      }
+      for (const [label, byResource] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        const header = document.createElement("div");
+        header.className = "source-row source-row-header";
+        header.textContent = label;
+        statsEl.appendChild(header);
+        for (const [resLabel, agg] of [...byResource.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+          const parts = [`${agg.seen} seen`];
+          if (agg.looted) parts.push(`${agg.looted} looted`);
+          if (agg.despawned) parts.push(`${agg.despawned} despawned`);
+          statsEl.appendChild(makeRow(`  ${resLabel}`, parts.join(" · ")));
+        }
+      }
+    }
+
+    async function poll() {
+      let snapshot = null;
+      try {
+        snapshot = await CraftMapApi.call("get_live_wreck_snapshot");
+      } catch (e) {
+        // CraftMapApi.call already surfaces this via the error banner
+      }
+      if (snapshot) {
+        sawFirstSnapshot = true;
+        setStatus(`Running - updated ${fmtTime(snapshot.observed_at)}`, "running");
+      } else if (!sawFirstSnapshot) {
+        setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
+      }
+      const status = await CraftMapApi.call("get_wreck_tracking_status");
+      if (!status.running && tracking) {
+        // Subprocess died on its own (game not running, script path
+        // wrong, etc.) - reflect that rather than keep claiming "starting".
+        tracking = false;
+        sawFirstSnapshot = false;
+        setStatus("Tracker stopped unexpectedly - check the script path and that the game is running.", "");
+        toggleBtn.textContent = "Activate Live Tracking";
+        stopPolling();
+      }
+      await renderStats();
+    }
+
+    function startPolling() {
+      if (pollTimer) return;
+      poll();
+      pollTimer = setInterval(poll, POLL_MS);
+    }
+
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    async function toggleTracking() {
+      if (tracking) {
+        await CraftMapApi.call("stop_wreck_tracking");
+        tracking = false;
+        sawFirstSnapshot = false;
+        stopPolling();
+        setStatus("Not running.", "");
+        toggleBtn.textContent = "Activate Live Tracking";
+        // The Wreck Tracker window has no close button of its own (see
+        // wreck-tracker.html's own comment) - its lifecycle is tied
+        // 1:1 to tracking state, so stopping tracking is what closes it.
+        CraftMapApi.call("hide_wreck_tracker_window");
+        return;
+      }
+      try {
+        await CraftMapApi.call("start_wreck_tracking");
+      } catch (e) {
+        return; // error banner already shown by CraftMapApi.call
+      }
+      tracking = true;
+      sawFirstSnapshot = false;
+      toggleBtn.textContent = "Stop Live Tracking";
+      setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
+      startPolling();
+      // Opens (never hides) the separate Wreck Tracker HUD window - same
+      // "always shows" semantics as the recipe panel's own '+ Queue'
+      // button (see Api.show_wreck_tracker_window's own docstring). The
+      // window itself keeps polling independently once open, same as the
+      // queue window does while the main window is hidden.
+      CraftMapApi.call("show_wreck_tracker_window");
+    }
+
+    async function saveSettings() {
+      await CraftMapApi.call("set_wreck_tracker_settings", scriptPathInput.value.trim(), "");
+    }
+
+    async function loadSettings() {
+      const settings = await CraftMapApi.call("get_wreck_tracker_settings");
+      scriptPathInput.value = settings.script_path || "";
+    }
+
+    async function onShow() {
+      const status = await CraftMapApi.call("get_wreck_tracking_status");
+      tracking = status.running;
+      if (tracking) {
+        toggleBtn.textContent = "Stop Live Tracking";
+        startPolling();
+      } else {
+        toggleBtn.textContent = "Activate Live Tracking";
+        setStatus("Not running.", "");
+      }
+      await renderStats();
+    }
+
+    function onHide() {
+      stopPolling();
+    }
+
+    function init() {
+      loadSettings();
+      saveSettingsBtn.addEventListener("click", saveSettings);
+      toggleBtn.addEventListener("click", toggleTracking);
+      for (const r of statsGroupRadios) r.addEventListener("change", renderStats);
+    }
+
+    return { init, onShow, onHide };
+  })();
 
   async function init() {
     await ensureDataLoaded();
     render();
     modeSectorBtn.addEventListener("click", () => setMode("sector"));
     modeItemBtn.addEventListener("click", () => setMode("item"));
+    modeLiveBtn.addEventListener("click", () => setMode("live"));
     searchInput.addEventListener("input", render);
     filterPatch.addEventListener("change", render);
     filterBlueprint.addEventListener("change", render);
+    LiveTracking.init();
   }
 
   init();

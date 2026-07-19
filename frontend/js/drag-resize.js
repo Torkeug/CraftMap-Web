@@ -39,9 +39,14 @@ const DragResize = (function () {
   // anything not perfectly captured by the measuring-min-size overrides
   // (rounding, a row that's marginally taller than expected, etc.) could
   // still leave things feeling one row too tight right at the boundary.
-  const MEASURED_HEIGHT_MARGIN = 100;
+  // This default (tuned for the main window's multi-row forms) is WAY
+  // oversized for a small single-purpose window like wreck-tracker.html's
+  // tiny HUD (effectively doubled its real minimum height) - callers with
+  // simple, low-row-count layouts should pass a much smaller heightMargin
+  // to attach() rather than live with this default.
+  const DEFAULT_HEIGHT_MARGIN = 100;
 
-  function measureMinSize(fallbackW, fallbackH) {
+  function measureMinSize(fallbackW, fallbackH, heightMargin) {
     const app = document.getElementById("app");
     if (!app) return { width: fallbackW, height: fallbackH };
     app.classList.add("measuring-min-size");
@@ -51,7 +56,7 @@ const DragResize = (function () {
     void app.offsetHeight;
     const width = Math.ceil(Math.max(fallbackW, app.scrollWidth));
     const height = Math.ceil(
-      Math.max(fallbackH, app.scrollHeight + MEASURED_HEIGHT_MARGIN)
+      Math.max(fallbackH, app.scrollHeight + heightMargin)
     );
     app.classList.remove("measuring-min-size");
     return { width, height };
@@ -74,6 +79,7 @@ const DragResize = (function () {
     // at the boundary.
     minW = 360,
     minH = 240,
+    heightMargin = DEFAULT_HEIGHT_MARGIN,
   }) {
     let winX = 0;
     let winY = 0;
@@ -102,7 +108,7 @@ const DragResize = (function () {
       // layout existed/changed, or just the plain hardcoded default, can
       // easily undershoot it - so clamp once here too, and persist the
       // correction so next launch already starts right.
-      const measured = measureMinSize(minW, minH);
+      const measured = measureMinSize(minW, minH, heightMargin);
       if (winW < measured.width || winH < measured.height) {
         winW = Math.max(winW, measured.width);
         winH = Math.max(winH, measured.height);
@@ -166,7 +172,7 @@ const DragResize = (function () {
     let resizeState = null;
 
     gripEl.addEventListener("pointerdown", (e) => {
-      const measured = measureMinSize(minW, minH);
+      const measured = measureMinSize(minW, minH, heightMargin);
       resizeState = {
         startScreenX: e.screenX,
         startScreenY: e.screenY,

@@ -1422,6 +1422,11 @@
   gap: 8px;
 }
 
+#wrecks-search-row.hidden,
+#wrecks-tree.hidden {
+  display: none;
+}
+
 #wrecks-search {
   flex: 1 1 auto;
   min-width: 0;
@@ -1514,6 +1519,299 @@
 .wrecks-row-cat-blueprint {
   color: var(--warn);
   background: rgba(240, 136, 62, 0.14);
+}
+
+/* ---------- Live Tracking sub-tab (js/wrecks.js) - launches the sibling
+   spacecraft-memory-research repo's wreck_tracker.py poller as a
+   subprocess (see backend/wreck_tracking.py); reuses .scroll-rows/
+   .source-row/.recipe-subsection-label from the Sources screen for the
+   current-planet list and stats table, same "don't invent a new visual
+   language" call this file's own header comment makes elsewhere ---------- */
+#wrecks-live-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 6px;
+}
+
+#wrecks-live-view.hidden {
+  display: none;
+}
+
+#wrecks-live-settings-inputs {
+  display: flex;
+  gap: 6px;
+}
+
+#wrecks-live-script-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#wrecks-live-script-path:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#wrecks-live-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#wrecks-live-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#wrecks-live-status.running {
+  color: var(--good);
+}
+
+#wrecks-live-status.starting {
+  color: var(--warn);
+}
+
+#wrecks-live-stats.scroll-rows {
+  flex: 1 1 auto;
+  min-height: 50px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+#wrecks-live-stats-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#wrecks-live-stats-group-row {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+#wrecks-live-stats-group-row label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#wrecks-live-stats-group-row input[type="radio"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.wrecks-live-row-right {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  margin-left: 6px;
+}
+
+/* ---------- Wreck Tracker window (frontend/wreck-tracker.html,
+   js/wreck-tracker-panel.js) - a flat heading-strip HUD showing tracked
+   wreck/crate bearing relative to the ship's current facing, not just
+   raw distance. No titlebar (removed per user request) - the whole
+   window is draggable instead (see wreck-tracker.html's DragResize.attach
+   call, which passes #app itself as dragbarEl) and there's no close
+   button - closing is handled by js/wrecks.js's toggleTracking as part
+   of "Stop Live Tracking" instead of a manual per-window action. Only
+   #error-banner/#resize-grip come free from theme.css the way the queue
+   window's chrome does - #pin-btn needs its OWN styling below, since the
+   shared .icon-btn base rules in theme.css/components.css are scoped to
+   `#dragbar .icon-btn`, which doesn't exist in this window at all. ---------- */
+#app.wreck-tracker-app {
+  position: relative; /* anchors #pin-btn's absolute positioning below */
+}
+
+#app.wreck-tracker-app #pin-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.45;
+}
+
+#app.wreck-tracker-app #pin-btn:hover {
+  background: #21262d;
+  color: var(--text);
+}
+
+#app.wreck-tracker-app #pin-btn.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  opacity: 1;
+}
+
+#wreck-tracker-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px 8px;
+  gap: 6px;
+}
+
+#wreck-tracker-status {
+  font-size: 11px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  padding-right: 22px; /* clears the floating #pin-btn overlaid top-right */
+}
+
+#wreck-tracker-status.running {
+  color: var(--good);
+}
+
+#wreck-tracker-status.starting {
+  color: var(--warn);
+}
+
+#wreck-tracker-planet {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 600;
+  flex: 0 0 auto;
+  min-height: 14px;
+}
+
+#heading-strip {
+  position: relative;
+  flex: 0 0 auto;
+  height: 44px; /* no vertical spread since markers dropped the elevation axis - see js/wreck-tracker-panel.js */
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+#heading-strip-ticks {
+  position: absolute;
+  inset: 0;
+}
+
+.heading-strip-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+  transform: translateX(-0.5px);
+}
+
+.heading-strip-tick span {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-size: 9px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+#heading-strip-center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0.5;
+  transform: translateX(-1px);
+}
+
+#heading-strip-markers {
+  position: absolute;
+  inset: 0;
+}
+
+.heading-strip-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  cursor: default;
+}
+
+.heading-strip-marker-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+.heading-strip-marker.hull .heading-strip-marker-dot {
+  background: var(--accent);
+}
+
+.heading-strip-marker.crate .heading-strip-marker-dot {
+  background: var(--warn);
+}
+
+.heading-strip-marker.edge .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--danger);
+}
+
+#wreck-tracker-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 9px;
+  color: var(--faint);
+  flex: 0 0 auto;
+}
+
+.wreck-tracker-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.wreck-tracker-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.wreck-tracker-dot.hull {
+  background: var(--accent);
+}
+
+.wreck-tracker-dot.crate {
+  background: var(--warn);
+}
+
+.wreck-tracker-legend-hint {
+  margin-left: auto;
 }
 
 /* Queue tab in the main window's tab row - a toggle button for the
@@ -1712,6 +2010,10 @@
 }
 
 #app.measuring-min-size #queue-body {
+  flex: 0 0 auto;
+}
+
+#app.measuring-min-size #wreck-tracker-body {
   flex: 0 0 auto;
 }
 

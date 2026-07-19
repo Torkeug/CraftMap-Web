@@ -220,6 +220,9 @@
             <button class="tab-btn mode-btn" id="wrecks-mode-item" data-mode="item">
               By Item
             </button>
+            <button class="tab-btn mode-btn" id="wrecks-mode-live" data-mode="live">
+              Live Tracking
+            </button>
           </div>
           <div id="wrecks-search-row">
             <input
@@ -233,6 +236,41 @@
             </div>
           </div>
           <div id="wrecks-tree"></div>
+
+          <div id="wrecks-live-view" class="hidden">
+            <div id="wrecks-live-settings-row">
+              <label class="modal-field-label" for="wrecks-live-script-path">
+                Tracker script path (spacecraft-memory-research\wreck_tracker.py)
+              </label>
+              <div id="wrecks-live-settings-inputs">
+                <input
+                  id="wrecks-live-script-path"
+                  type="text"
+                  placeholder="D:\path\to\spacecraft-memory-research\wreck_tracker.py"
+                />
+                <button class="btn btn-neutral btn-small" id="wrecks-live-save-settings-btn">
+                  Save
+                </button>
+              </div>
+            </div>
+            <div id="wrecks-live-controls-row">
+              <button class="btn btn-accent" id="wrecks-live-toggle-btn">
+                Activate Live Tracking
+              </button>
+              <span id="wrecks-live-status">Not running.</span>
+            </div>
+            <div id="wrecks-live-stats-header-row">
+              <div class="recipe-subsection-label">Sightings (all-time)</div>
+              <div id="wrecks-live-stats-group-row">
+                <label>
+                  <input type="radio" name="wrecks-stats-group" value="planet" checked /> Planet
+                </label>
+                <label><input type="radio" name="wrecks-stats-group" value="system" /> System</label>
+                <label><input type="radio" name="wrecks-stats-group" value="sector" /> Sector</label>
+              </div>
+            </div>
+            <div id="wrecks-live-stats" class="scroll-rows"></div>
+          </div>
         </div>
       </div>
       <div id="error-banner"></div>

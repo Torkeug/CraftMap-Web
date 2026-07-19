@@ -39,8 +39,10 @@ consecutive calls (drifting by almost exactly the accumulated size delta).
 
 import datetime
 import os
+import subprocess
+from pathlib import Path
 
-from . import config, db, resolver, shipwreck_loot
+from . import config, db, resolver, shipwreck_loot, wreck_import, wreck_tracking
 
 
 class Api:
@@ -69,6 +71,16 @@ class Api:
         # _get_totals_job_specs.
         # {queue_id: ((recipe_id, qty, station, mode), specs, root_spec)}.
         self._totals_specs_cache = {}
+        # subprocess.Popen handle for the sibling spacecraft-memory-research
+        # repo's wreck_tracker.py poller, or None if not currently running -
+        # see start_wreck_tracking/stop_wreck_tracking. Underscore-prefixed
+        # for the same pywebview dir()-walk reason as every other Api
+        # internal-state attribute (see this module's own docstring).
+        self._wreck_tracker_proc = None
+        # Set by main.py's _create_wreck_tracker_window the first time the
+        # Wreck Tracker window is actually opened (lazy-created, like the
+        # queue window) - underscore-prefixed for the same reason.
+        self._wreck_tracker_window = None
 
     # ---- config ----
 
@@ -494,6 +506,162 @@ class Api:
 
     def get_wreck_items(self):
         return shipwreck_loot.get_all_items()
+
+    # ---- live wreck/crate tracking (frontend/js/wrecks.js) - see
+    # backend/wreck_tracking.py's own docstring for why this is a
+    # subprocess handoff to the sibling spacecraft-memory-research repo,
+    # not an in-process import ----
+
+    def get_wreck_tracker_settings(self):
+        cfg = config.load_config()
+        return {
+            "script_path": cfg.get("wreck_tracker_script_path", ""),
+            "python_path": cfg.get("wreck_tracker_python_path", ""),
+        }
+
+    def set_wreck_tracker_settings(self, script_path, python_path=""):
+        cfg = config.load_config()
+        cfg["wreck_tracker_script_path"] = script_path
+        cfg["wreck_tracker_python_path"] = python_path
+        config.save_config(cfg)
+        return True
+
+    def start_wreck_tracking(self):
+        """Launches wreck_tracker.py as a detached subprocess. Raises
+        ValueError (surfaced to the user via frontend/js/api.js's inline
+        error banner - see that module's own try/catch wrapper) rather
+        than failing silently if the script path isn't configured yet or
+        no usable Python interpreter is available (frozen builds need an
+        explicit python_path - see wreck_tracking.python_executable)."""
+        if self._wreck_tracker_proc is not None and self._wreck_tracker_proc.poll() is None:
+            return True  # already running
+        cfg = config.load_config()
+        script_path = cfg.get("wreck_tracker_script_path")
+        if not script_path or not os.path.exists(script_path):
+            raise ValueError(
+                "Set a valid wreck tracker script path first (Live Tracking settings)."
+            )
+        python_path = wreck_tracking.python_executable(cfg.get("wreck_tracker_python_path"))
+        if not python_path:
+            raise ValueError(
+                "No Python interpreter configured to run the tracker"
+                " (required for a built/frozen CraftMap.exe) - set one in Live Tracking settings."
+            )
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        self._wreck_tracker_proc = subprocess.Popen(
+            [python_path, script_path],
+            cwd=str(Path(script_path).resolve().parent),
+            creationflags=creationflags,
+        )
+        return True
+
+    def stop_wreck_tracking(self):
+        if self._wreck_tracker_proc is not None and self._wreck_tracker_proc.poll() is None:
+            self._wreck_tracker_proc.terminate()
+        self._wreck_tracker_proc = None
+        return True
+
+    def get_wreck_tracking_status(self):
+        running = self._wreck_tracker_proc is not None and self._wreck_tracker_proc.poll() is None
+        return {"running": running}
+
+    def get_live_wreck_snapshot(self):
+        """The poller's current-planet snapshot, read straight from its
+        overwritten-every-cycle JSON file - None if never run yet. Also
+        piggybacks a wreck_events import off the SAME call (rather than
+        running a separate polling loop in this process) so wreck_events
+        stays current for free as long as the frontend keeps calling this
+        while a panel is open - safe to do on every call, even at the
+        HUD window's 5Hz poll rate, since wreck_import.import_events_
+        from_file is cursor-based (only reads newly-appended bytes, not
+        the whole file - see that function's own docstring). Import
+        failures are swallowed here - a live-view hiccup should never be
+        surfaced as if the live tracking itself failed; the next
+        successful poll's import catches back up."""
+        script_path = config.load_config().get("wreck_tracker_script_path")
+        if not script_path:
+            return None
+        live_out, events_out, _state_path = wreck_tracking.resolve_paths(script_path)
+        try:
+            wreck_import.import_events_from_file(events_out)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+        return wreck_tracking.read_live_snapshot(live_out)
+
+    def get_wreck_stats(self):
+        return [
+            {
+                "system_name": system_name,
+                "planet": planet,
+                "sector": sector,
+                "resource_id": resource_id,
+                "display_name": db.WRECK_RESOURCE_INFO.get(resource_id, {}).get(
+                    "display_name", resource_id
+                ),
+                "kind": db.WRECK_RESOURCE_INFO.get(resource_id, {}).get("kind"),
+                "level": db.WRECK_RESOURCE_INFO.get(resource_id, {}).get("level"),
+                "seen_count": seen_count,
+                "looted_count": looted_count,
+                "despawned_count": despawned_count,
+            }
+            for (
+                system_name, planet, sector, resource_id,
+                seen_count, looted_count, despawned_count,
+            ) in db.get_wreck_stats()
+        ]
+
+    # ---- wreck tracker window (frontend/wreck-tracker.html) - show/hide/
+    # pin state lives on main.py's App (see self._app_ctrl above), same
+    # pattern as the queue window's own toggle_queue_window/
+    # show_queue_window/hide_queue_window/toggle_queue_pin ----
+
+    def show_wreck_tracker_window(self):
+        """Always shows (never hides) - called by frontend/js/wrecks.js's
+        Activate Live Tracking button right after start_wreck_tracking
+        succeeds, mirroring show_queue_window's own '+ Queue'-button
+        semantics."""
+        if self._app_ctrl is not None:
+            self._app_ctrl.show_wreck_tracker_window()
+        return True
+
+    def hide_wreck_tracker_window(self):
+        """X-button hide."""
+        if self._app_ctrl is not None:
+            self._app_ctrl.hide_wreck_tracker_window()
+        return True
+
+    def get_wreck_tracker_pinned(self):
+        return config.load_config().get("wreck_tracker_pinned", False)
+
+    def toggle_wreck_tracker_pin(self):
+        cfg = config.load_config()
+        pinned = not cfg.get("wreck_tracker_pinned", False)
+        cfg["wreck_tracker_pinned"] = pinned
+        config.save_config(cfg)
+        if self._app_ctrl is not None:
+            self._app_ctrl.on_wreck_tracker_pin_changed(pinned)
+        return pinned
+
+    def get_wreck_tracker_window_geometry(self):
+        w = self._wreck_tracker_window
+        return {"x": w.x, "y": w.y, "width": w.width, "height": w.height}
+
+    def move_wreck_tracker_window(self, x, y):
+        self._wreck_tracker_window.move(int(x), int(y))
+
+    def resize_wreck_tracker_window(self, x, y, width, height):
+        # Move-then-resize ordering matches resize_window/resize_queue_
+        # window's own fix for the WinForms AutoScaleMode.Dpi drift - see
+        # that method's docstring for the full explanation.
+        self._wreck_tracker_window.move(int(x), int(y))
+        self._wreck_tracker_window.resize(int(width), int(height))
+
+    def save_wreck_tracker_window_geometry(self, x, y, width, height):
+        cfg = config.load_config()
+        cfg["wreck_tracker_x"], cfg["wreck_tracker_y"] = int(x), int(y)
+        cfg["wreck_tracker_w"], cfg["wreck_tracker_h"] = int(width), int(height)
+        config.save_config(cfg)
+        return True
 
     # ---- window geometry (drag/resize - see frontend/js/drag-resize.js) ----
 
@@ -954,6 +1122,11 @@ class Api:
     # ---- lifecycle ----
 
     def quit_app(self):
+        # Don't leak the poller subprocess - it has no reason to keep
+        # running once CraftMap itself is gone (and, unlike CraftMap
+        # itself, it's read-only against a live game process, but still
+        # not something that should be left orphaned).
+        self.stop_wreck_tracking()
         if self._on_quit is not None:
             self._on_quit()
         # Close the WinForms window first so WebView2/WinForms run their
@@ -964,6 +1137,8 @@ class Api:
         # seconds until it notices the owning process is gone - .destroy()
         # blocks (via WinForms Invoke) until Close() actually completes, so
         # by the time we reach os._exit() there's nothing left to redraw.
+        if self._wreck_tracker_window is not None:
+            self._wreck_tracker_window.destroy()
         if self._queue_window is not None:
             self._queue_window.destroy()
         if self._overlay_window is not None:

@@ -243,6 +243,55 @@ def init_db():
     c.execute("PRAGMA table_info(galaxy_poi_landmarks)")
     if "area" not in [row[1] for row in c.fetchall()]:
         c.execute("ALTER TABLE galaxy_poi_landmarks ADD COLUMN area REAL")
+    # Live shipwreck-hull/crate sighting log - see the sibling
+    # spacecraft-memory-research repo's wreck_tracker.py (a long-running
+    # poller, not a one-shot dump like dump_galaxy_resources.py) and
+    # tools/import_wreck_events.py, which reads its JSONL event log into
+    # this table. Deliberately an EVENT LOG (one row per sighting/loot/
+    # despawn), not a live-position table: unlike galaxy_resources (exact
+    # counts that stay true once recorded), a wreck's exact position goes
+    # stale the moment it despawns or gets looted - CRAFTMAP_INTEGRATION.md
+    # covers why that's the wrong shape for a durable SQLite table (the
+    # LIVE, right-now position instead lives in wreck_tracker.py's own
+    # overwritten JSON snapshot file, read directly, never imported here).
+    # This table only ever answers "what have I seen over time" (counts/
+    # stats), not "what's there right now". resource_id is one of
+    # ShipWreck_Lvl0/1/2 (the wreck body/site) or
+    # ShipWreck_LootChestRare_lvl0/1/2 (crates) - see wreck_tracker.py's
+    # own scope note for why every other wreck-family resourceId (scrap/
+    # junk) is deliberately never logged here. sector is NOT stored here -
+    # resolved via a lookup against galaxy_resources at query time (see
+    # get_wreck_stats), since deriving it live would need the same
+    # full-galaxy voting pass dump_galaxy_resources.py runs, which the
+    # lightweight poller deliberately doesn't duplicate.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS wreck_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_name TEXT NOT NULL,
+            planet TEXT NOT NULL,
+            resource_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            x REAL,
+            y REAL,
+            z REAL,
+            observed_at TEXT NOT NULL,
+            UNIQUE (system_name, planet, resource_id, event_type, observed_at, x, y, z)
+        )
+    """)
+    # Byte-offset bookmark into wreck_tracker.py's own JSONL event log, so
+    # backend/wreck_import.py only ever re-parses NEWLY appended lines
+    # instead of the whole file - added after the live HUD window started
+    # polling get_live_wreck_snapshot (and thus this import) at 5Hz, at
+    # which point "just reread the whole file every time, it's small"
+    # stopped being a safe assumption for a long-running session. Keyed by
+    # source_path (not a fixed single row) in case a different events
+    # file path ever gets configured.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS wreck_event_import_cursor (
+            source_path TEXT PRIMARY KEY,
+            byte_offset INTEGER NOT NULL DEFAULT 0
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -1502,6 +1551,122 @@ def get_galaxy_hop_distances(from_system):
                 dist[neighbor] = dist[current] + 1
                 queue.append(neighbor)
     return dist
+
+
+# ---- Wreck events (tools/import_wreck_events.py, sibling repo's wreck_tracker.py) ----
+
+
+# Display names/tiers for the 6 resourceIds wreck_tracker.py ever logs -
+# static, data.cdb-derived, same "small hardcoded table" call
+# RESOURCE_SIZE_VARIANTS/DEPOSIT_TYPE_RESOURCE_NAMES above already make for
+# similarly tiny/unlikely-to-change lookups, rather than adding a runtime
+# dependency on the sibling repo's data.cdb loading. Both hull and crate
+# resourceIds share the SAME display name across all 3 "_lvl0/1/2" tiers
+# in data.cdb (id -> name: ShipWreck_Lvl0/1/2 -> "Shipwreck",
+# ShipWreck_LootChestRare_lvl0/1/2 -> "Precious Cargo") - the trailing
+# digit is a loot-level/progression tier, not a separate display identity,
+# so it's surfaced as its own `level` field rather than folded into the
+# name.
+WRECK_RESOURCE_INFO = {
+    "ShipWreck_Lvl0": {"display_name": "Shipwreck", "kind": "hull", "level": 0},
+    "ShipWreck_Lvl1": {"display_name": "Shipwreck", "kind": "hull", "level": 1},
+    "ShipWreck_Lvl2": {"display_name": "Shipwreck", "kind": "hull", "level": 2},
+    "ShipWreck_LootChestRare_lvl0": {"display_name": "Precious Cargo", "kind": "crate", "level": 0},
+    "ShipWreck_LootChestRare_lvl1": {"display_name": "Precious Cargo", "kind": "crate", "level": 1},
+    "ShipWreck_LootChestRare_lvl2": {"display_name": "Precious Cargo", "kind": "crate", "level": 2},
+}
+
+
+def import_wreck_events(rows):
+    """Bulk INSERT OR IGNORE wreck_events rows - `rows` is a list of
+    (system_name, planet, resource_id, event_type, x, y, z, observed_at)
+    tuples, straight from the sibling repo's wreck_tracker.py JSONL event
+    log (one line per event). `INSERT OR IGNORE` against
+    UNIQUE(system_name, planet, resource_id, event_type, observed_at, x, y,
+    z) - x/y/z are part of the key specifically because two DIFFERENT
+    wrecks/crates of the same resourceId are routinely 'seen' in the same
+    poll cycle (sharing the same observed_at timestamp) - without position
+    in the key, a genuinely real second sighting silently collided with
+    the first and got dropped (caught live: a 3-wreck test planet with 2
+    same-tier hulls + 2 same-tier crates imported as only 1 of each until
+    this was added). The whole log is safe to re-read and re-import from
+    scratch every time (small data, no separate cursor/offset bookkeeping
+    needed - see tools/import_wreck_events.py's own docstring) since a
+    real repeat event would need to share resourceId, event_type,
+    position, AND microsecond-precision timestamp with an already-imported
+    one to collide, which only happens for an actual re-import of the same
+    line. Returns the number of rows actually inserted."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.executemany(
+        "INSERT OR IGNORE INTO wreck_events"
+        " (system_name, planet, resource_id, event_type, x, y, z, observed_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    inserted = conn.total_changes
+    conn.close()
+    return inserted
+
+
+def get_wreck_stats():
+    """One row per (system_name, planet, resource_id) ever logged:
+    counts of each event_type - seen (every distinct sighting, including
+    ones later looted/despawned - a cumulative "how many have I ever
+    found here" count, not a current-count), looted, despawned. sector is
+    a best-effort lookup against galaxy_resources (None if that system
+    was never covered by a galaxy-wide dump import - see this table's own
+    docstring in init_db for why wreck_events doesn't store sector
+    itself). Caller (Api layer / frontend) rolls this up by planet/
+    system/sector as needed - already the finest useful grain per row, so
+    no separate pre-aggregated variant is needed for each rollup level.
+    Returns (system_name, planet, sector, resource_id, seen_count,
+    looted_count, despawned_count) tuples."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        SELECT system_name, planet, resource_id,
+               SUM(CASE WHEN event_type='seen' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN event_type='looted' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN event_type='despawned' THEN 1 ELSE 0 END)
+        FROM wreck_events
+        GROUP BY system_name, planet, resource_id
+        ORDER BY system_name COLLATE NOCASE, planet COLLATE NOCASE, resource_id
+    """)
+    rows = c.fetchall()
+    c.execute(
+        "SELECT DISTINCT system_name, sector FROM galaxy_resources WHERE sector IS NOT NULL"
+    )
+    sector_by_system = dict(c.fetchall())
+    conn.close()
+    return [
+        (system_name, planet, sector_by_system.get(system_name), resource_id, seen, looted, despawned)
+        for (system_name, planet, resource_id, seen, looted, despawned) in rows
+    ]
+
+
+def get_wreck_event_import_offset(source_path):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT byte_offset FROM wreck_event_import_cursor WHERE source_path=?",
+        (source_path,),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+
+def set_wreck_event_import_offset(source_path, byte_offset):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR REPLACE INTO wreck_event_import_cursor (source_path, byte_offset) VALUES (?, ?)",
+        (source_path, byte_offset),
+    )
+    conn.commit()
+    conn.close()
 
 
 def set_queue_checked_many(queue_id, path_keys, checked):

@@ -51,6 +51,7 @@ _BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 _FRONTEND_DIR = os.path.join(_BASE_DIR, "frontend")
 _INDEX_HTML = os.path.join(_FRONTEND_DIR, "index.html")
 _QUEUE_HTML = os.path.join(_FRONTEND_DIR, "queue.html")
+_WRECK_TRACKER_HTML = os.path.join(_FRONTEND_DIR, "wreck-tracker.html")
 
 WINDOW_ALPHA = 240  # ~0.94, matches the tkinter app's self.attributes("-alpha", 0.94)
 
@@ -242,6 +243,20 @@ class App:
         # bring it back with the main window rather than leaving it down
         # until the user explicitly reopens it.
         self.queue_was_visible = False
+        # Wreck Tracker window (frontend/wreck-tracker.html) - a live
+        # flight-HUD-style overlay for the sibling spacecraft-memory-
+        # research repo's wreck_tracker.py poller, opened on demand from
+        # the Wrecks tab's "Activate Live Tracking" button (see backend/
+        # api.py's start_wreck_tracking). Participates in the same hotkey
+        # show/hide cascade as the queue window (toggle()/hide() below) -
+        # same pin semantics too: hiding the main window hides this one
+        # unless pinned, and un-hiding brings it back if it was up and
+        # unpinned when the main window last hid.
+        self.wreck_tracker_window = None
+        self.wreck_tracker_visible = False
+        self.wreck_tracker_passthrough = False
+        self.wreck_tracker_pinned = bool(config.load_config().get("wreck_tracker_pinned", False))
+        self.wreck_tracker_was_visible = False
 
     # ----- main window -----
 
@@ -265,6 +280,20 @@ class App:
                 )
                 self.sync_input_passthrough()
                 return
+            if (
+                self.wreck_tracker_pinned
+                and self.wreck_tracker_visible
+                and not win32util.hwnd_is_foreground(
+                    win32util.pywebview_hwnd(self.wreck_tracker_window)
+                )
+            ):
+                # Same idea as the queue-pinned check above, for the
+                # wreck tracker window.
+                win32util.force_foreground_window(
+                    win32util.pywebview_hwnd(self.wreck_tracker_window)
+                )
+                self.sync_input_passthrough()
+                return
             self.window.show()
             self.visible = True
             win32util.force_foreground_window(hwnd)
@@ -272,12 +301,19 @@ class App:
             if not self.queue_pinned and self.queue_was_visible:
                 self._set_queue_visible(True)
                 self.queue_window.show()
+            if not self.wreck_tracker_pinned and self.wreck_tracker_was_visible:
+                self.wreck_tracker_visible = True
+                self.wreck_tracker_window.show()
             return
 
         focused = win32util.hwnd_is_foreground(hwnd)
         if not focused and self.queue_visible:
             focused = win32util.hwnd_is_foreground(
                 win32util.pywebview_hwnd(self.queue_window)
+            )
+        if not focused and self.wreck_tracker_visible:
+            focused = win32util.hwnd_is_foreground(
+                win32util.pywebview_hwnd(self.wreck_tracker_window)
             )
         if not focused:
             # Visible but click-through (unfocused) - the hotkey's job here
@@ -296,17 +332,26 @@ class App:
             if not self.queue_pinned:
                 self.queue_window.hide()
                 self._set_queue_visible(False)
+        if self.wreck_tracker_visible:
+            self.wreck_tracker_was_visible = True
+            if not self.wreck_tracker_pinned:
+                self.wreck_tracker_window.hide()
+                self.wreck_tracker_visible = False
         self.sync_input_passthrough()
 
     def sync_input_passthrough(self):
-        # Focusing either window counts as the whole app being focused, so
-        # both toggle click-through together - matches craftmap/overlay.py's
-        # Overlay._sync_all_input_passthrough.
+        # Focusing any tracked window counts as the whole app being
+        # focused, so all of them toggle click-through together - matches
+        # craftmap/overlay.py's Overlay._sync_all_input_passthrough.
         hwnd = win32util.pywebview_hwnd(self.window)
         focused = win32util.hwnd_is_foreground(hwnd)
         if not focused and self.queue_visible:
             focused = win32util.hwnd_is_foreground(
                 win32util.pywebview_hwnd(self.queue_window)
+            )
+        if not focused and self.wreck_tracker_visible:
+            focused = win32util.hwnd_is_foreground(
+                win32util.pywebview_hwnd(self.wreck_tracker_window)
             )
 
         if self.visible and self.passthrough != (not focused):
@@ -317,6 +362,12 @@ class App:
             self.queue_passthrough = not focused
             win32util.set_click_through(
                 win32util.pywebview_hwnd(self.queue_window), self.queue_passthrough
+            )
+
+        if self.wreck_tracker_visible and self.wreck_tracker_passthrough != (not focused):
+            self.wreck_tracker_passthrough = not focused
+            win32util.set_click_through(
+                win32util.pywebview_hwnd(self.wreck_tracker_window), self.wreck_tracker_passthrough
             )
 
     def poll_input_passthrough(self):
@@ -385,6 +436,38 @@ class App:
         self.queue_pinned = pinned
         if not pinned and not self.visible:
             self.hide_queue_window()
+
+    # ----- wreck tracker window (see backend/api.py's
+    # show_wreck_tracker_window/hide_wreck_tracker_window/
+    # toggle_wreck_tracker_pin, which delegate here via Api._app_ctrl) -----
+
+    def _ensure_wreck_tracker_window(self):
+        """Creates the Wreck Tracker window on first use - same lazy-
+        creation rationale as _ensure_queue_window (thread-safety notes
+        there apply here unchanged: this can be called from a js_api
+        call's own throwaway thread)."""
+        if self.wreck_tracker_window is not None:
+            return
+        _create_wreck_tracker_window(self)
+
+    def show_wreck_tracker_window(self):
+        if not self.wreck_tracker_visible:
+            self._ensure_wreck_tracker_window()
+            self.wreck_tracker_window.show()
+            self.wreck_tracker_visible = True
+            self.sync_input_passthrough()
+
+    def hide_wreck_tracker_window(self):
+        """X-button hide."""
+        if self.wreck_tracker_visible:
+            self.wreck_tracker_window.hide()
+            self.wreck_tracker_visible = False
+            self.sync_input_passthrough()
+
+    def on_wreck_tracker_pin_changed(self, pinned):
+        self.wreck_tracker_pinned = pinned
+        if not pinned and not self.visible:
+            self.hide_wreck_tracker_window()
 
     # ----- global hotkey / settings dialog (see backend/api.py's
     # start_hotkey_capture/cancel_hotkey_capture/get_toggle_key, which
@@ -581,6 +664,41 @@ def _create_queue_window(app):
 
     queue_window.events.loaded += on_queue_loaded
     return queue_window
+
+
+def _create_wreck_tracker_window(app):
+    """Creates the Wreck Tracker window - always on first actual use (see
+    App._ensure_wreck_tracker_window), never restored at startup the way
+    a persisted queue_open can (this window's open state isn't currently
+    persisted across app restarts - see App.quit_app, which only
+    persists queue_open)."""
+    cfg = config.load_config()
+    wx, wy = cfg.get("wreck_tracker_x", 460), cfg.get("wreck_tracker_y", 60)
+    ww, wh = cfg.get("wreck_tracker_w", 340), cfg.get("wreck_tracker_h", 86)
+    wreck_tracker_window = webview.create_window(
+        "Wreck Tracker",
+        url=_WRECK_TRACKER_HTML,
+        js_api=app.api,
+        x=wx,
+        y=wy,
+        width=ww,
+        height=wh,
+        min_size=(260, 70),
+        frameless=True,
+        on_top=True,
+        resizable=True,
+        background_color="#0d1117",
+        easy_drag=False,
+    )
+    app.wreck_tracker_window = wreck_tracker_window
+    # Underscore-prefixed: see backend/api.py's module docstring.
+    app.api._wreck_tracker_window = wreck_tracker_window  # pylint: disable=protected-access
+
+    def on_wreck_tracker_loaded():
+        win32util.set_window_alpha(win32util.pywebview_hwnd(wreck_tracker_window), WINDOW_ALPHA)
+
+    wreck_tracker_window.events.loaded += on_wreck_tracker_loaded
+    return wreck_tracker_window
 
 
 def main():
