@@ -123,6 +123,54 @@
     return d >= 1000 ? `${(d / 1000).toFixed(1)}k` : `${Math.round(d)}`;
   }
 
+  // A wreck's hull is frequently reported as several sibling nodes (its
+  // BigPiece1/BigPiece2/SmallPiece1/SmallPiece2 pieces - see HULL_IDS'
+  // own comment), and its loot crates cluster at the same spot too -
+  // confirmed live, one wreck showed as 5 separate "Wreck" nodes within
+  // ~50 units of each other. Rendering each raw node as its own marker
+  // stacks several translucent circles on the same screen position;
+  // alpha-compositing N same-color layers inflates the visible opacity
+  // toward fully solid (a wreck that's actually far away, with several
+  // co-located pieces, ends up looking closer/more vivid than a genuinely
+  // CLOSER single-piece wreck), while a hull+crate stack instead blends
+  // the two hues into a muddy grey - both are artifacts of how many raw
+  // nodes happen to share a spot, not real distance. Clustering by
+  // position (separately per hull/crate, since those are meaningfully
+  // different things to call out even when co-located) before computing
+  // bearing/distance means a marker's opacity/size always reflects ONE
+  // real-world position. Threshold is a heuristic: generous relative to
+  // the ~50-unit sibling-piece spread actually observed, tiny relative to
+  // the thousands-to-hundreds-of-thousands-unit range distinct wrecks/
+  // crates are normally spaced at.
+  const CLUSTER_DIST = 250;
+
+  function positionDist(a, b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const dz = a.z - b.z;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  // Simple greedy clustering (compare against each cluster's first/
+  // representative member, not a running centroid) - node counts per
+  // planet are small and the threshold is generous, so this doesn't need
+  // to be more precise than that.
+  function clusterNodes(nodes) {
+    const clusters = [];
+    for (const n of nodes) {
+      const isHull = HULL_IDS.has(n.resourceId);
+      const target = clusters.find(
+        (c) => c.isHull === isHull && positionDist(c.representative.position, n.position) <= CLUSTER_DIST
+      );
+      if (target) {
+        target.members.push(n);
+      } else {
+        clusters.push({ isHull, representative: n, members: [n] });
+      }
+    }
+    return clusters;
+  }
+
   function buildTicks() {
     stripTicksEl.innerHTML = "";
     for (let deg = -90; deg <= 90; deg += 30) {
@@ -247,11 +295,12 @@
       renderMarkers([]);
       return;
     }
-    const entries = nodes.map((n) => {
+    const entries = clusterNodes(nodes).map((c) => {
+      const n = c.representative;
       const rel = relativeDirection(snapshot.ship_position, snapshot.ship_forward, snapshot.ship_up, n.position);
       return {
         label: RESOURCE_DISPLAY[n.resourceId] || n.resourceId,
-        isHull: HULL_IDS.has(n.resourceId),
+        isHull: c.isHull,
         ...rel,
       };
     });
