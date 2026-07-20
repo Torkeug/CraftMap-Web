@@ -1591,6 +1591,10 @@ WRECK_RESOURCE_INFO = {
     "ShipWreck_LootChestRare_lvl0": {"display_name": "Precious Cargo", "kind": "crate", "level": 0},
     "ShipWreck_LootChestRare_lvl1": {"display_name": "Precious Cargo", "kind": "crate", "level": 1},
     "ShipWreck_LootChestRare_lvl2": {"display_name": "Precious Cargo", "kind": "crate", "level": 2},
+    # Added alongside wreck_tracker.py's BLACKBOX_IDS - a rare, untiered
+    # walk-up pickup (data.cdb type=8, no _lvl variants), tracked by the
+    # live overlay as its own on-foot-only red marker.
+    "ShipWreck_BlackBox": {"display_name": "Black Box", "kind": "blackbox", "level": None},
 }
 
 

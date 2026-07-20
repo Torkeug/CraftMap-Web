@@ -1,7 +1,7 @@
 /* Wreck Tracker window: a flat heading-strip HUD (like a flight-sim compass
- * ribbon) showing where currently-tracked wreck hulls/crates are relative to
- * the player ship's own facing - not just distance, since "how far" alone
- * doesn't tell you which way to turn. Polls backend/api.py's
+ * ribbon) showing where currently-tracked wreck hulls/crates/black boxes are
+ * relative to the player ship's own facing - not just distance, since "how
+ * far" alone doesn't tell you which way to turn. Polls backend/api.py's
  * get_live_wreck_snapshot (the sibling spacecraft-memory-research repo's
  * wreck_tracker.py poller's own overwritten-every-cycle JSON snapshot,
  * passed through as-is) independently of whatever the main window's Wrecks
@@ -78,7 +78,27 @@
     ShipWreck_LootChestRare_lvl0: "Crate",
     ShipWreck_LootChestRare_lvl1: "Crate",
     ShipWreck_LootChestRare_lvl2: "Crate",
+    ShipWreck_BlackBox: "Black Box",
   };
+
+  // A rare, untiered, walk-up-only pickup (data.cdb type=8, no _lvl
+  // variants) - kept in wreck_tracker.py's WRECK_HULL_IDS-sibling
+  // BLACKBOX_IDS set. Rendered as its own red marker (matching the game's
+  // own data.cdb color for this resourceId, -65536 = ARGB red) rather than
+  // folded into "crate" - see classifyNode/render's own on_foot filtering.
+  const BLACKBOX_IDS = new Set(["ShipWreck_BlackBox"]);
+
+  // Single source of truth for "what kind of marker is this node" - hull
+  // pieces cluster/render distinctly from crates, and black boxes now
+  // distinctly again from both (see classifyNode's callers). Anything not
+  // explicitly hull or blackbox falls back to "crate" - matches the prior
+  // implicit contract (wreck_tracker.py's TRACKED_IDS has only ever held
+  // hull/crate/blackbox ids, so this fallback is safe, not just convenient).
+  function classifyNode(resourceId) {
+    if (HULL_IDS.has(resourceId)) return "hull";
+    if (BLACKBOX_IDS.has(resourceId)) return "blackbox";
+    return "crate";
+  }
 
   function sub(a, b) {
     return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
@@ -156,31 +176,34 @@
   // planet are small and the threshold is generous, so this doesn't need
   // to be more precise than that.
   //
-  // Crates are deliberately never merged while onFoot is true (see
-  // render's own use of snapshot.on_foot, sourced from wreck_tracker.py's
-  // read_player_is_on_foot) - raised directly by the user after this
-  // clustering shipped: walking up to collect crates needs each one's own
-  // precise bearing/distance, and a single merged marker standing in for
-  // several real crates made them harder to actually find on foot. Hull
-  // markers stay merged regardless (a wreck's multiple hull pieces are
-  // still one destination to walk to, on foot or not); crates stay merged
-  // from a ship too, where the alpha-stacking problem this function exists
-  // to fix (see CLUSTER_DIST's own comment) still applies and individual
-  // crate precision doesn't matter at that range.
+  // Crates and black boxes are deliberately never merged while onFoot is
+  // true (see render's own use of snapshot.on_foot, sourced from
+  // wreck_tracker.py's read_player_is_on_foot) - raised directly by the
+  // user after this clustering shipped: walking up to collect them needs
+  // each one's own precise bearing/distance, and a single merged marker
+  // standing in for several real pickups made them harder to actually
+  // find on foot. Hull markers stay merged regardless (a wreck's multiple
+  // hull pieces are still one destination to walk to, on foot or not);
+  // crates stay merged from a ship too, where the alpha-stacking problem
+  // this function exists to fix (see CLUSTER_DIST's own comment) still
+  // applies and individual precision doesn't matter at that range (black
+  // boxes never reach this function while not on foot at all - see
+  // render's own filter, so there's no "merge from a ship" case for them
+  // to preserve).
   function clusterNodes(nodes, onFoot) {
     const clusters = [];
     for (const n of nodes) {
-      const isHull = HULL_IDS.has(n.resourceId);
-      const mergeable = isHull || !onFoot;
+      const kind = classifyNode(n.resourceId);
+      const mergeable = kind === "hull" || !onFoot;
       const target = mergeable
         ? clusters.find(
-            (c) => c.isHull === isHull && positionDist(c.representative.position, n.position) <= CLUSTER_DIST
+            (c) => c.kind === kind && positionDist(c.representative.position, n.position) <= CLUSTER_DIST
           )
         : null;
       if (target) {
         target.members.push(n);
       } else {
-        clusters.push({ isHull, representative: n, members: [n] });
+        clusters.push({ kind, representative: n, members: [n] });
       }
     }
     return clusters;
@@ -252,7 +275,7 @@
     const xPx = (xPct / 100) * stripWidthPx;
     const { size, opacity } = markerScale(e.distance);
 
-    pooled.el.className = `heading-strip-marker ${e.isHull ? "hull" : "crate"}${atEdge ? " edge" : ""}`;
+    pooled.el.className = `heading-strip-marker ${e.kind}${atEdge ? " edge" : ""}`;
     // Horizontal position AND self-centering combined into one transform
     // (left/top stay fixed at 0/50% in CSS - see that rule's own
     // comment) - `calc(${xPx}px - 50%)`'s percentage is relative to the
@@ -310,12 +333,20 @@
       renderMarkers([]);
       return;
     }
-    const entries = clusterNodes(nodes, snapshot.on_foot).map((c) => {
+    // Black boxes are on-foot-only: a rare walk-up pickup with no reason
+    // to clutter the strip while flying (unlike wrecks/crates, which are
+    // worth spotting from orbit for planning where to land) - filtered out
+    // here, before clustering, rather than merely skipped from merging
+    // like crates are.
+    const relevantNodes = nodes.filter(
+      (n) => classifyNode(n.resourceId) !== "blackbox" || snapshot.on_foot
+    );
+    const entries = clusterNodes(relevantNodes, snapshot.on_foot).map((c) => {
       const n = c.representative;
       const rel = relativeDirection(snapshot.ship_position, snapshot.ship_forward, snapshot.ship_up, n.position);
       return {
         label: RESOURCE_DISPLAY[n.resourceId] || n.resourceId,
-        isHull: c.isHull,
+        kind: c.kind,
         ...rel,
       };
     });

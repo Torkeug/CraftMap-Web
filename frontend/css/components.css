@@ -1821,12 +1821,18 @@
   z-index: 1;
 }
 
-/* Wreck (hull) markers stack above crate markers when they overlap -
-   explicit z-index rather than relying on DOM append order, since
+/* Wreck (hull) markers stack above crate markers when they overlap, and
+   black boxes (rare, on-foot-only, worth never losing behind another
+   marker - see js/wreck-tracker-panel.js's on_foot filtering) stack above
+   both - explicit z-index rather than relying on DOM append order, since
    js/wreck-tracker-panel.js's renderMarkers just iterates the snapshot's
    node list in whatever order it came back in. */
 .heading-strip-marker.hull {
   z-index: 2;
+}
+
+.heading-strip-marker.blackbox {
+  z-index: 3;
 }
 
 .heading-strip-marker-dot {
@@ -1851,6 +1857,12 @@
 
 .heading-strip-marker.crate .heading-strip-marker-dot {
   background: var(--warn);
+}
+
+.heading-strip-marker.blackbox .heading-strip-marker-dot {
+  /* Matches the game's own data.cdb color for ShipWreck_BlackBox
+     (-65536 = ARGB red). */
+  background: var(--danger);
 }
 
 .heading-strip-marker.edge .heading-strip-marker-dot {
@@ -1891,6 +1903,10 @@
 
 .wreck-tracker-dot.crate {
   background: var(--warn);
+}
+
+.wreck-tracker-dot.blackbox {
+  background: var(--danger);
 }
 
 
