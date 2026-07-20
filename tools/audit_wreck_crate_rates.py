@@ -14,12 +14,15 @@ generation pass (a wreck hull piece's own resGroupSpawn, confirmed live
 to fire unconditionally at world-gen - see extract_shipwreck_loot.py's
 secondary_spawn_group_id), closing Big's gap to within 1.3%. Finding 12
 found that closing Small's MEAN gap the same way was coincidental - its
-full crate-count distribution shape (heavily concentrated at 1-2, sharp
-cutoff by 4-5) doesn't match any tested model, and every hypothesis tried
-so far (tier, linkedResource, min-value floors, flags bits, stale
-baseline, pre-existing depletion, terrain-placement retries) has been
-ruled out with evidence, not just deprioritized. Small wrecks' true
-crate-generation mechanism is still not understood.
+full crate-count distribution has a hard cliff between 3 and 4 crates
+(model treats them as near-equally likely; observed is ~7x rarer at 4)
+with zero true-zero sites, and every hypothesis tried so far (tier,
+linkedResource, min-value floors, flags bits, stale baseline,
+pre-existing depletion, terrain-placement retries, and - as of this
+script's last update - the whole-group terrain-slope gate in
+generateGroup, decompiled in full and found to predict the wrong
+direction) has been ruled out with evidence, not just deprioritized.
+Small wrecks' true crate-generation mechanism is still not understood.
 
 Why size, not sector: shipwreck_loot.json's sectors[*].crate_spawn_* is a
 BLENDED average across every wreck-size variant in that sector's own
