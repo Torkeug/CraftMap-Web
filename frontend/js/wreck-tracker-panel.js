@@ -155,13 +155,28 @@
   // representative member, not a running centroid) - node counts per
   // planet are small and the threshold is generous, so this doesn't need
   // to be more precise than that.
-  function clusterNodes(nodes) {
+  //
+  // Crates are deliberately never merged while onFoot is true (see
+  // render's own use of snapshot.on_foot, sourced from wreck_tracker.py's
+  // read_player_is_on_foot) - raised directly by the user after this
+  // clustering shipped: walking up to collect crates needs each one's own
+  // precise bearing/distance, and a single merged marker standing in for
+  // several real crates made them harder to actually find on foot. Hull
+  // markers stay merged regardless (a wreck's multiple hull pieces are
+  // still one destination to walk to, on foot or not); crates stay merged
+  // from a ship too, where the alpha-stacking problem this function exists
+  // to fix (see CLUSTER_DIST's own comment) still applies and individual
+  // crate precision doesn't matter at that range.
+  function clusterNodes(nodes, onFoot) {
     const clusters = [];
     for (const n of nodes) {
       const isHull = HULL_IDS.has(n.resourceId);
-      const target = clusters.find(
-        (c) => c.isHull === isHull && positionDist(c.representative.position, n.position) <= CLUSTER_DIST
-      );
+      const mergeable = isHull || !onFoot;
+      const target = mergeable
+        ? clusters.find(
+            (c) => c.isHull === isHull && positionDist(c.representative.position, n.position) <= CLUSTER_DIST
+          )
+        : null;
       if (target) {
         target.members.push(n);
       } else {
@@ -295,7 +310,7 @@
       renderMarkers([]);
       return;
     }
-    const entries = clusterNodes(nodes).map((c) => {
+    const entries = clusterNodes(nodes, snapshot.on_foot).map((c) => {
       const n = c.representative;
       const rel = relativeDirection(snapshot.ship_position, snapshot.ship_forward, snapshot.ship_up, n.position);
       return {
