@@ -105,6 +105,39 @@ def get_all_sectors():
     hold more than one crate, so this is a count distribution, not a single
     spawn-or-not %).
 
+    crate_spawn_at_least_one/expected_count/count_distribution are BLENDED
+    across every wreck-size variant in this sector's own generation table
+    (weighted by how often each appears there) - that's a sector-wide
+    average, not what a specific wreck you're standing at will produce: a
+    Big wreck (recognizable in-game by its BigPiece1/2 + SmallPiece1/2
+    debris hull, vs a Small wreck's single plain hull piece) runs ~4x a
+    Small wreck's own expected crate count (see extract_shipwreck_loot.py's
+    compute_crate_spawn_stats docstring - confirmed against live-tracked
+    CraftMap wreck_events data, tools/audit_wreck_crate_rates.py). Once you
+    know which size wreck you're looking at, crate_spawn_by_size["Big"/
+    "Small"] is the number that actually applies - missing a key if this
+    sector's generation table has no variant of that size at all.
+
+    crate_spawn_by_size[size] itself only covers the debris field scattered
+    around a wreck at creation - each size's own secondary_spawn/total
+    siblings are a SECOND, independent generation pass a wreck's marked
+    hull piece (a Small wreck's own single hull piece, or a Big wreck's
+    BigPiece1 specifically) ALWAYS triggers via its own props.resGroupSpawn
+    - see extract_shipwreck_loot.py's secondary_spawn_group_id. Confirmed
+    (game_logic_notes.md Finding 12, including a live before/after test:
+    dismantling a hull piece adds zero new resources) that this fires
+    unconditionally at world-generation, NOT when the player mines/
+    dismantles the piece - despite the underlying resGroup's own
+    "DismantledJunkGroup" name, which has no connection to the player's
+    actual dismantle action (a wholly separate mechanism - see that same
+    Finding). total is debris + secondary_spawn combined (a convolution of
+    the two independent count distributions, not just the two means
+    added) - the real total for that wreck, not an alternate scenario.
+    Confirmed within ~1-3% of live-tracked Big-wreck crate counts; Small's
+    own total lands close on the MEAN but its full count-distribution
+    shape does not match this or any other tested model - see Finding 12,
+    still an open question.
+
     Each item row's own pct is itemDropOdds's (conditional on a crate
     already being open); expected_per_wreck/at_least_one_pct alongside it
     are wreckSiteItemOdds's (fold in the sector's own crate-count mix too -
@@ -147,6 +180,24 @@ def get_all_sectors():
                 "crate_spawn_at_least_one": crate_spawn["atLeastOne"],
                 "crate_spawn_expected_count": crate_spawn["expectedCount"],
                 "crate_spawn_count_distribution": crate_spawn["countDistribution"],
+                "crate_spawn_by_size": {
+                    size: {
+                        "at_least_one": stats["atLeastOne"],
+                        "expected_count": stats["expectedCount"],
+                        "count_distribution": stats["countDistribution"],
+                        "secondary_spawn": {
+                            "at_least_one": stats["secondarySpawn"]["atLeastOne"],
+                            "expected_count": stats["secondarySpawn"]["expectedCount"],
+                            "count_distribution": stats["secondarySpawn"]["countDistribution"],
+                        },
+                        "total": {
+                            "at_least_one": stats["total"]["atLeastOne"],
+                            "expected_count": stats["total"]["expectedCount"],
+                            "count_distribution": stats["total"]["countDistribution"],
+                        },
+                    }
+                    for size, stats in crate_spawn.get("bySize", {}).items()
+                },
                 "items": items,
             }
         )

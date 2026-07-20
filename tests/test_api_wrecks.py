@@ -62,6 +62,30 @@ def test_get_wreck_sectors_crate_spawn_odds():
     assert abs(sum(dist.values()) - 1) < 1e-3
 
 
+def test_get_wreck_sectors_crate_spawn_by_size_includes_secondary_spawn():
+    """Each size's secondary_spawn (the second, unconditional generation
+    pass a wreck's marked hull piece always triggers via its own
+    props.resGroupSpawn - NOT tied to the player's actual dismantle
+    action, see game_logic_notes.md Finding 12) and total (debris +
+    secondary_spawn, a convolution of the two independent count
+    distributions) should always be >= the debris-field-only figure -
+    see backend/shipwreck_loot.py's get_all_sectors docstring and
+    extract_shipwreck_loot.py's secondary_spawn_group_id."""
+    api = Api()
+    sectors = api.get_wreck_sectors()
+    json.dumps(sectors)
+    vestige = next(s for s in sectors if s["name"] == "Vestige")
+    by_size = vestige["crate_spawn_by_size"]
+    assert set(by_size.keys()) >= {"Big", "Small"}
+    for size, stats in by_size.items():
+        bonus = stats["secondary_spawn"]
+        total = stats["total"]
+        assert bonus["expected_count"] > 0
+        assert total["expected_count"] > stats["expected_count"]
+        assert abs(total["expected_count"] - (stats["expected_count"] + bonus["expected_count"])) < 1e-2
+        assert abs(sum(total["count_distribution"].values()) - 1) < 1e-3
+
+
 def test_get_wreck_items_returns_every_item_sorted():
     api = Api()
     items = api.get_wreck_items()

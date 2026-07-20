@@ -81,6 +81,7 @@ tools/
   backfill_recipe_metadata.py  # one-off maintenance script enriching resources.db from game_data_extract/
   backfill_galaxy_resources.py # repeatable import of the sibling repo's galaxy-wide dump into galaxy_resources/galaxy_systems/galaxy_poi_landmarks
   import_wreck_events.py       # repeatable import of the sibling repo's wreck_tracker.py event log into wreck_events (also runnable from Api - see backend/wreck_import.py)
+  audit_wreck_crate_rates.py   # position-clusters wreck_events into real wreck sites (Big/Small, by hull tag) and compares observed crate counts against shipwreck_loot.json's theoretical prediction - see the sibling shipbuilder repo's game_logic_notes.md Findings 11-12 for what this analysis found (a real second loot-generation pass on wreck hull pieces, now modeled) and what's still open (Small wrecks' crate-count distribution shape still doesn't match any tested model)
 game_data_extract/  # game-authoritative recipe/item data snapshots (see its own README.md)
 ```
 

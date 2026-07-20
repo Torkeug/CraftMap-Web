@@ -38,9 +38,19 @@ def _parse_lines(text):
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
+        # planet is NOT NULL in wreck_events (db.init_db) - wreck_tracker.py's
+        # own planet-name resolution can transiently fail (returns null in
+        # the JSONL, e.g. mid-travel/loading) and DOES still log the event
+        # when that happens, but `INSERT OR IGNORE` against a NOT NULL
+        # column silently swallows the constraint violation instead of
+        # raising - a real event just vanishes with no error anywhere.
+        # Confirmed live: one whole system's worth of sightings (82 rows)
+        # went missing this way before this fallback existed. A sentinel
+        # keeps the row (same pattern as frontend/js/wrecks.js's own
+        # "(unknown sector)" fallback) rather than losing it outright.
         rows.append((
             ev.get("system_name"),
-            ev.get("planet_name"),
+            ev.get("planet_name") or "(unknown planet)",
             ev.get("resource_id"),
             ev.get("event_type"),
             ev.get("x"),

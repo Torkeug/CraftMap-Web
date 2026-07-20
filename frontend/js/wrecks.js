@@ -68,6 +68,24 @@
     return !q || text.toLowerCase().includes(q);
   }
 
+  // "avg Y/Big wreck, Z/Small wreck" - see the crate_spawn_by_size docstring
+  // in backend/shipwreck_loot.py for why this is shown per size rather than
+  // as one sector-blended figure. Uses "total" (debris field + the hull
+  // piece's own secondary generation pass - always present, not tied to
+  // any player action, see that same docstring) since that's the real
+  // total for the wreck, not just what's scattered loose around it -
+  // falls back to "n/a" for a sector whose generation table has no
+  // variant of a given size at all (rare, but crate_spawn_by_size only
+  // ever has keys for sizes present).
+  function formatAvgBySize(bySize) {
+    const parts = [];
+    for (const size of ["Big", "Small"]) {
+      const stats = bySize && bySize[size];
+      if (stats) parts.push(`${stats.total.expected_count.toFixed(2)}/${size} wreck`);
+    }
+    return parts.length ? `avg ${parts.join(", ")}` : "";
+  }
+
   // ---- node builders ----
   function makeGroupNode(key, label, tagClass, rightText) {
     return { kind: "group", key, label, tagClass, rightText, children: [] };
@@ -176,8 +194,14 @@
           : `L${Math.min(...itemLevels)}-L${Math.max(...itemLevels)}`
         : "";
       // avg crates/wreck on the row itself (not just the expanded "Rare
-      // crate odds" summary below) so it's visible without expanding.
-      const avgCrateText = `avg ${sector.crate_spawn_expected_count.toFixed(2)}/wreck`;
+      // crate odds" summary below) so it's visible without expanding. Shown
+      // per SIZE, not the blended sector average: a Big wreck (BigPiece1/2
+      // + SmallPiece1/2 debris hull) runs ~4x a Small wreck's own crate
+      // count (backend/shipwreck_loot.py's get_all_sectors docstring), so
+      // quoting one blended number understates Big and overstates Small -
+      // whichever wreck you're actually standing at, the size-specific
+      // number is the one that applies.
+      const avgCrateText = formatAvgBySize(sector.crate_spawn_by_size);
       const rowRightText = [levelRangeText, avgCrateText].filter(Boolean).join(" · ");
 
       const sectorNode = makeGroupNode(
@@ -199,15 +223,35 @@
       // Whether a wreck HAS a rare loot crate at all, not what's in one
       // given it exists (that's crateTargets/the items below) - a single
       // wreck can hold more than one, hence "avg X/wreck" alongside the
-      // at-least-one %. See backend.shipwreck_loot.get_all_sectors's own
-      // docstring for the derivation.
-      sectorNode.children.push(
-        makeSummaryNode(
-          `Rare crate odds: ${fmtPct(sector.crate_spawn_at_least_one * 100)} chance of ≥1 per wreck` +
-            ` (avg ${sector.crate_spawn_expected_count.toFixed(2)}/wreck)`,
-          "loc_sum"
-        )
-      );
+      // at-least-one %. Broken out per SIZE (Big vs Small), not the
+      // sector-blended average - see backend.shipwreck_loot.get_all_sectors's
+      // own docstring for why the blend understates/overstates depending on
+      // which size wreck you're actually at. Each size also splits the
+      // scattered debris field out from the FULL wreck total (its marked
+      // hull piece always triggers a SECOND, independent generation pass
+      // too - unconditional, not tied to any player action - same
+      // docstring) - shown as two lines since "just the loose debris" and
+      // "everything this wreck has" are both meaningful numbers on their
+      // own, not two player-behavior scenarios to pick between.
+      for (const size of ["Big", "Small"]) {
+        const stats = sector.crate_spawn_by_size && sector.crate_spawn_by_size[size];
+        if (!stats) continue;
+        sectorNode.children.push(
+          makeSummaryNode(
+            `Rare crate odds (${size} wreck, debris field only): ` +
+              `${fmtPct(stats.at_least_one * 100)} chance of ≥1 (avg ${stats.expected_count.toFixed(2)}/wreck)`,
+            "loc_sum"
+          )
+        );
+        const total = stats.total;
+        sectorNode.children.push(
+          makeSummaryNode(
+            `Rare crate odds (${size} wreck, full site): ` +
+              `${fmtPct(total.at_least_one * 100)} chance of ≥1 (avg ${total.expected_count.toFixed(2)}/wreck)`,
+            "loc_sum"
+          )
+        );
+      }
       sectorNode.children.push(
         makeSummaryNode(
           `Secondary materials: ${sector.secondary_material_pool.join(", ")}`,
