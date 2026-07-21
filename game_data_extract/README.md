@@ -22,7 +22,18 @@ for review before you decide how to merge.
     `Workshop_Recycle`, `Workshop_Science`, `Workshop_Uncraftable`, or absent)
   - `category` — one of 26 values (`Craft_RawResource`, `Craft_Modules`,
     `Craft_Parts`, `Craft_Dismantle`, `BaseBuilding`, etc.)
-  - `unlockType`, `lootLevel` — progression gating
+  - `unlockType` — how the recipe is learned; the `craft` sheet's own enum
+    column (`typeStr: "5:Permit,Unique_Blueprint,Random_Blueprint,
+    Cannot_Unlock,Study,Dismantle,Custo"`): `0`=Permit (always known),
+    `1`=Unique_Blueprint (a fixed, non-random source — quest/vendor/
+    location), `2`=Random_Blueprint (the only value the shipwreck rare-crate
+    system ever draws from — see `shipwreck_loot.json`'s notes and
+    `shipbuilder/tools/game_logic_notes.md` Finding 15), `3`=Cannot_Unlock,
+    `4`=Study, `5`=Dismantle, `6`=Custom. A recipe can have a `lootLevel` set
+    while still being `unlockType != 2` — it will never actually drop from a
+    crate in that case.
+  - `lootLevel` — progression gating (crate-drop tier; see above for the
+    additional `unlockType` gate specific to blueprints)
   - `props` — free-form dict, e.g. `autoPowerCost`, `craftTimeFactor`,
     `manualTime`, `autoTime`
   - `note` — occasional dev comments (e.g. `"replace silicium by chromium at
@@ -85,10 +96,16 @@ for review before you decide how to merge.
   - `itemDropOdds.patches` / `itemDropOdds.blueprints`: per-item drop
     probability by sector, sectors pre-grouped wherever the odds land on the
     same number. The concrete Patch pool is `item.type=Patch` rows with their
-    own `lootLevel`; the Blueprint pool is `craft.lootLevel` rows, named
-    `"Blueprint: <output item name>"` per the game's own convention. This is
-    conditional on a crate already being open — it does not account for how
-    many crates a wreck actually has.
+    own `lootLevel`; the Blueprint pool is `craft.lootLevel` rows that ALSO
+    have `craft.unlockType == 2` (Random_Blueprint) — a recipe with a
+    `lootLevel` but a different `unlockType` (e.g. `Unique_Blueprint`, a
+    fixed quest/vendor/location source) is never actually reachable from
+    this crate system, confirmed via the dedicated Blueprint-candidate
+    closure in `src/logic/Loot.hx` (see `shipbuilder/tools/
+    game_logic_notes.md` Finding 15) — named `"Blueprint: <output item
+    name>"` per the game's own convention. This is conditional on a crate
+    already being open — it does not account for how many crates a wreck
+    actually has.
   - `wreckSiteItemOdds.patches` / `wreckSiteItemOdds.blueprints`: same
     per-item/per-sector shape as `itemDropOdds`, but composed against
     `crateSpawn`'s own crate-count distribution too — `expectedPerWreck`
@@ -104,7 +121,18 @@ for review before you decide how to merge.
   targeting level `L` is every item with `lootLevel` in the 2-level window
   `{L-1, L}`, not just `L` (confirmed against raw HashLink opcodes in
   `src/logic/Loot.hx`, both cross-checked against an actual reported drop).
-  See the file's own `_meta` block for the full derivation notes, and
+  Which category (Patch vs Blueprint) wins when both have an eligible
+  candidate is a real weighted pick (not a flat 50/50, an earlier
+  approximation) — `weight = max(0, 10 - |L - itl| - 2*(L - candidate's own
+  lootLevel))`, where `itl` is a per-category constant from `data.cdb`'s
+  `constant` sheet (Patch=5, Blueprint=7). This is the complete model for
+  `ShipWreck_LootChestRare_lvl{0,1,2}` — the Tool/Module/ShipDecorative
+  categories are real, separate branches in the underlying code, but the
+  `loot` sheet rows these crates actually reference have
+  `primaryItemTypes==12` (Patch|Blueprint bits only), so those other
+  categories never compete for this crate type's primary-item slot at all —
+  see `game_logic_notes.md` Finding 15 for the full derivation. See the file's
+  own `_meta` block for the full derivation notes, and
   [`shipwreck_loot_integration.md`](shipwreck_loot_integration.md) for how
   this is surfaced in CraftMap's "Wrecks" tab and
   [`shipwreck_loot.html`](shipwreck_loot.html) for a standalone browsable view

@@ -3849,6 +3849,13 @@
     "price": null,
     "type": "ShipEngine"
   },
+  "ThrusterDebug": {
+    "desc": null,
+    "guid": "#d5n-yAyH-5U7",
+    "name": "\"Shark\" Thruster",
+    "price": null,
+    "type": "ShipEngine"
+  },
   "ThrusterMK1": {
     "desc": "Meitner & Karls have designed this powerful thruster to deal with the dry heat of the most instense mining trip.",
     "guid": "#SOJ-8MYP-0kX",
