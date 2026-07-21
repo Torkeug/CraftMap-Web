@@ -24,6 +24,7 @@
   const cropTabRockwood = document.getElementById("farming-crop-rockwood");
   const cropTabSpacekorn = document.getElementById("farming-crop-spacekorn");
   const infoRowEl = document.getElementById("farming-info-row");
+  const mechanicsNoteEl = document.getElementById("farming-mechanics-note");
   const variantsEl = document.getElementById("farming-variants");
 
   let cropsData = null; // {rockwood: crop, spacekorn: crop}, fetched once
@@ -389,10 +390,17 @@
 
   async function ensureDataLoaded() {
     if (cropsData !== null) return;
-    const crops = await CraftMapApi.call("get_farming_crops");
+    const [crops, mechanicsNote] = await Promise.all([
+      CraftMapApi.call("get_farming_crops"),
+      CraftMapApi.call("get_farming_mechanics_note"),
+    ]);
     cropsData = {};
     for (const crop of crops) cropsData[crop.id] = crop;
     buildGoalIndex();
+    // Crop-independent (same Xenic Farm building/mechanic either way) -
+    // rendered once here rather than in render(), which only ever redraws
+    // the parts that actually change on a crop switch.
+    mechanicsNoteEl.textContent = mechanicsNote;
   }
 
   async function init() {

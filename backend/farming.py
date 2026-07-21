@@ -24,9 +24,22 @@ _FARMING_PATH = os.path.join(_BASE_DIR, "game_data_extract", "farming.json")
 _cache = None
 
 
-def get_crops():
+def _load():
     global _cache
     if _cache is None:
         with open(_FARMING_PATH, "r", encoding="utf-8") as f:
-            _cache = json.load(f)["crops"]
+            _cache = json.load(f)
     return _cache
+
+
+def get_crops():
+    return _load()["crops"]
+
+
+def get_growth_death_mechanism():
+    """The tick-based gate-checking/death-timer/Invasive-spread mechanic
+    (game_logic_notes.md Finding 16) - applies identically to every variant
+    of both crops (same Xenic Farm building), so it's a single shared note
+    rather than data repeated on each variant - see farming.json's own
+    _meta.growth_death_mechanism for the full text."""
+    return _load()["_meta"]["growth_death_mechanism"]

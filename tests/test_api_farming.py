@@ -117,6 +117,32 @@ def test_neighbor_restriction_tag_is_a_valid_bio_tag_or_none():
             assert tag is None or tag in valid_tags
 
 
+def test_get_farming_mechanics_note_returns_nonempty_text():
+    api = Api()
+    note = api.get_farming_mechanics_note()
+    json.dumps(note)
+    assert isinstance(note, str) and len(note) > 100
+
+
+def test_only_invasive_tagged_variants_get_the_spread_adjacency_line():
+    """game_logic_notes.md Finding 16's Invasive-spread mechanic only
+    applies to Invasive-tagged variants - Rockwood Dream and Spacekorn
+    Plain per Finding 13/14 - so they're the only ones whose adjacency
+    list should mention it."""
+    api = Api()
+    crops = api.get_farming_crops()
+    spread_variants = {
+        v["id"]
+        for crop in crops
+        for v in crop["variants"]
+        if any("Invasive spread" in line for line in v["adjacency"])
+    }
+    invasive_variants = {
+        v["id"] for crop in crops for v in crop["variants"] if v["bio_tag"] == "Invasive"
+    }
+    assert spread_variants == invasive_variants == {"Dreamwood", "Plainkorn"}
+
+
 def test_only_rockwood_glow_forbids_any_fertilizer():
     """"fertilizer_forbidden_any" marks a genuinely different case from a
     merely empty fertilizer_required (see farming.json's own
