@@ -2058,6 +2058,24 @@
   color: var(--faint);
 }
 
+/* Sum of the three rows above (js/farming.js's makeTimingBox) - separated
+   by a rule and accent-colored so it reads as a derived total, not a
+   fourth peer stat. */
+.farming-timing-total {
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.farming-timing-total .farming-timing-stat {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.farming-timing-total .farming-timing-value {
+  color: var(--accent);
+}
+
 /* ---------- Wreck Tracker window (frontend/wreck-tracker.html,
    js/wreck-tracker-panel.js) - a flat heading-strip HUD showing tracked
    wreck/crate bearing relative to the ship's current facing, not just

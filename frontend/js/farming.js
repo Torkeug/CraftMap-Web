@@ -232,6 +232,15 @@
     ["byproduct", "Byproduct cycle", "byproduct_cycle_hours"],
   ];
 
+  // Growth is a one-time duration (until the plant matures); Fruit/
+  // Byproduct cycles are how often each repeats AFTER that. Summing all
+  // three isn't just decoration - it's "time from a mature farm plot to
+  // having gone through growth plus one full round of each output",
+  // i.e. planting to first-fruit-and-first-byproduct-in-hand.
+  function sumRanges(ranges) {
+    return [ranges.reduce((s, r) => s + r[0], 0), ranges.reduce((s, r) => s + r[1], 0)];
+  }
+
   function updateTiming(card, variant, timingEls) {
     const stats = {
       growth: { add: 0, mult: 1 },
@@ -246,12 +255,18 @@
         else stats[e.stat].mult *= e.value;
       }
     }
+    const adjustedByKey = {};
     for (const [key, , field] of TIMING_STATS) {
       const baseRange = variant[field];
       const adjusted = adjustRange(baseRange, stats[key]);
+      adjustedByKey[key] = adjusted;
       timingEls[key].valueEl.textContent = fmtAdjustedRange(adjusted);
       timingEls[key].baseEl.textContent = anyChecked ? `base ${fmtRange(baseRange)}` : "";
     }
+    const totalAdjusted = sumRanges(TIMING_STATS.map(([key]) => adjustedByKey[key]));
+    const totalBase = sumRanges(TIMING_STATS.map(([, , field]) => variant[field]));
+    timingEls.total.valueEl.textContent = fmtAdjustedRange(totalAdjusted);
+    timingEls.total.baseEl.textContent = anyChecked ? `base ${fmtRange(totalBase)}` : "";
   }
 
   function makeTimingBox(variant) {
@@ -280,6 +295,26 @@
       box.appendChild(row);
       timingEls[key] = { valueEl, baseEl };
     }
+
+    const totalRow = document.createElement("div");
+    totalRow.className = "farming-timing-row farming-timing-total";
+    totalRow.title = "Growth + one Fruit cycle + one Byproduct cycle - planting to first fruit and first byproduct in hand";
+    const totalStatEl = document.createElement("span");
+    totalStatEl.className = "farming-timing-stat";
+    totalStatEl.textContent = "Total";
+    totalRow.appendChild(totalStatEl);
+    const totalValueEl = document.createElement("span");
+    totalValueEl.className = "farming-timing-value";
+    totalValueEl.textContent = fmtAdjustedRange(
+      sumRanges(TIMING_STATS.map(([, , field]) => variant[field]))
+    );
+    totalRow.appendChild(totalValueEl);
+    const totalBaseEl = document.createElement("span");
+    totalBaseEl.className = "farming-timing-base";
+    totalRow.appendChild(totalBaseEl);
+    box.appendChild(totalRow);
+    timingEls.total = { valueEl: totalValueEl, baseEl: totalBaseEl };
+
     return { box, timingEls };
   }
 
