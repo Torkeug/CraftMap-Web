@@ -221,7 +221,6 @@
             "Acidic Fertilizer",
             "Metallic Fertilizer"
           ],
-          "fertilizer_required_mode": "any",
           "fertilizer_forbidden": [
             "Carbonic Fertilizer"
           ],

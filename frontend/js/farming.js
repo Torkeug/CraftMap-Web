@@ -166,13 +166,18 @@
     return wrap;
   }
 
+  // A multi-item fertilizer_required list is AND (every listed item must be
+  // present simultaneously - a plot/slot can hold up to 3 at once) per
+  // game_logic_notes.md Finding 13's own disassembly-verified correction
+  // (an earlier pass through that data had mistakenly called it OR).
+  // fertilizer_forbidden stays OR-to-fail (any one present blocks) either
+  // way, which is just what "forbidden" means for a deny-list.
   function fmtFertilizerRequirement(variant) {
     const req = variant.fertilizer_required || [];
     const forbid = variant.fertilizer_forbidden || [];
     const parts = [];
     if (req.length) {
-      const joiner = variant.fertilizer_required_mode === "any" ? " or " : " and ";
-      parts.push(req.join(joiner));
+      parts.push(req.join(" and "));
     } else {
       parts.push("none required");
     }
