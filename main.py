@@ -694,9 +694,34 @@ def _create_wreck_tracker_window(app):
     # Underscore-prefixed: see backend/api.py's module docstring.
     app.api._wreck_tracker_window = wreck_tracker_window  # pylint: disable=protected-access
 
+    def on_wreck_tracker_shown():
+        # pywebview's winforms backend sets FormBorderStyle = None (to make
+        # the window frameless) *after* it already applied our requested
+        # Size (platforms/winforms.py's BrowserForm.__init__) - switching
+        # from a bordered/captioned form to borderless recomputes the
+        # window's outer bounds against the old non-client metrics, clipping
+        # a fixed amount off both dimensions (confirmed by logging: width
+        # consistently arrived ~16px short of what was requested, height got
+        # clamped down to min_size). Only happens at actual native window
+        # creation (a full app restart) - the show/hide toggle reuses this
+        # same live window and never hits this path again. Re-asserting the
+        # real size here fixes it up before wreck-tracker.html's own
+        # syncGeometry() (frontend/js/drag-resize.js) reads the clipped
+        # size - since that logic only ever *grows* a too-small dimension,
+        # left uncorrected it would re-save the clipped size back into
+        # config.json, turning this into a cumulative ~16px-per-restart
+        # shrink. move()/resize() marshal onto the WinForms UI thread via
+        # Invoke() (this handler itself runs on a worker thread spawned by
+        # webview's Event.set() - see webview/event.py), which blocks until
+        # done, so this is reliably applied before the JS bridge's first
+        # get_wreck_tracker_window_geometry call can land.
+        wreck_tracker_window.move(wx, wy)
+        wreck_tracker_window.resize(ww, wh)
+
     def on_wreck_tracker_loaded():
         win32util.set_window_alpha(win32util.pywebview_hwnd(wreck_tracker_window), WINDOW_ALPHA)
 
+    wreck_tracker_window.events.shown += on_wreck_tracker_shown
     wreck_tracker_window.events.loaded += on_wreck_tracker_loaded
     return wreck_tracker_window
 
