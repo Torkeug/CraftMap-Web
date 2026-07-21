@@ -42,7 +42,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from . import config, db, resolver, shipwreck_loot, wreck_import, wreck_tracking
+from . import config, db, farming, resolver, shipwreck_loot, wreck_import, wreck_tracking
 
 
 class Api:
@@ -506,6 +506,11 @@ class Api:
 
     def get_wreck_items(self):
         return shipwreck_loot.get_all_items()
+
+    # ---- farming (frontend/js/farming.js) ----
+
+    def get_farming_crops(self):
+        return farming.get_crops()
 
     # ---- live wreck/crate tracking (frontend/js/wrecks.js) - see
     # backend/wreck_tracking.py's own docstring for why this is a

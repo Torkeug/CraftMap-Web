@@ -44,6 +44,30 @@
   --chip-day: #c98500;
   --chip-twilight: #d55181;
   --chip-night: #9085e9;
+  --chip-cold: #38bdf8;
+  --chip-temperate: #3fb950;
+  --chip-uv: #29c5c5;
+  /* Farming tab card-background tint (frontend/js/farming.js's
+     SPECIES_CLASS) - one per grown variant ("species"), a thematic color
+     nodding at its own name/flavor (Rockwood Green -> green, Rockwood
+     Dream -> violet, Woolly Spacekorn's Cold-only gate -> the same icy
+     blue as the Cold dial chip, etc.) - the whole point is telling
+     same-crop cards apart individually, and a category-grouped color
+     would still leave same-tag variants (e.g. Rockwood Green/White/Glow,
+     all Reclusive) looking alike. Paired with --biotag-* below for the
+     card's own left-border + the bio-tag badge - two independent signals
+     on the same card (this crop, and what it does to neighbors). */
+  --species-rockwood: #3fb950;
+  --species-whitewood: #9aa4ae;
+  --species-dreamwood: #a06cd5;
+  --species-glowwood: #e3b341;
+  --species-sulfwood: #d9622b;
+  --species-plainkorn: #d9a441;
+  --species-soureinkorn: #8bc34a;
+  --species-chillyeinkorn: #7ec8f5;
+  --biotag-reclusive: #3987e5;
+  --biotag-invasive: #d95926;
+  --biotag-putrescent: #a06cd5;
   --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
   --ui: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
 }

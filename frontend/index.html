@@ -19,6 +19,7 @@
         <button class="tab-btn" id="tab-location" data-mode="location">Location</button>
         <button class="tab-btn" id="tab-sources" data-mode="sources">Sources</button>
         <button class="tab-btn" id="tab-wrecks" data-mode="wrecks">Wrecks</button>
+        <button class="tab-btn" id="tab-farming" data-mode="farming">Farming</button>
         <span class="tab-group-divider"></span>
         <button class="tab-btn" id="tab-recipe" data-mode="recipe">Recipe</button>
         <button class="tab-btn" id="tab-queue" title="Show/hide the Craft Queue window">Queue</button>
@@ -283,6 +284,29 @@
             <div id="wrecks-live-stats" class="scroll-rows"></div>
           </div>
         </div>
+
+        <div id="farming-view">
+          <div id="farming-goal-row">
+            <label>What do you want to grow?</label>
+            <div id="farming-goal-wrap" class="dropdown-anchor">
+              <input
+                id="farming-goal-search"
+                type="text"
+                placeholder="Search a fruit, byproduct, or variant name..."
+              />
+            </div>
+          </div>
+          <div id="farming-crop-tabs">
+            <button class="tab-btn mode-btn active" id="farming-crop-spacekorn" data-crop="spacekorn">
+              Spacekorn
+            </button>
+            <button class="tab-btn mode-btn" id="farming-crop-rockwood" data-crop="rockwood">
+              Rockwood Nut
+            </button>
+          </div>
+          <div id="farming-info-row"></div>
+          <div id="farming-variants" class="scroll-rows"></div>
+        </div>
       </div>
       <div id="error-banner"></div>
       <div id="resize-grip">&#9698;</div>
@@ -334,6 +358,7 @@
     <script src="js/sources.js"></script>
     <script src="js/galaxy.js"></script>
     <script src="js/wrecks.js"></script>
+    <script src="js/farming.js"></script>
     <script src="js/screens.js"></script>
     <script src="js/settings.js"></script>
     <script>

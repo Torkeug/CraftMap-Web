@@ -11,11 +11,13 @@
   const recipeView = document.getElementById("recipe-view");
   const sourcesView = document.getElementById("sources-view");
   const wrecksView = document.getElementById("wrecks-view");
+  const farmingView = document.getElementById("farming-view");
   const tabResource = document.getElementById("tab-resource");
   const tabLocation = document.getElementById("tab-location");
   const tabRecipe = document.getElementById("tab-recipe");
   const tabSources = document.getElementById("tab-sources");
   const tabWrecks = document.getElementById("tab-wrecks");
+  const tabFarming = document.getElementById("tab-farming");
   const tabQueue = document.getElementById("tab-queue");
 
   function hideAll() {
@@ -23,11 +25,13 @@
     recipeView.style.display = "none";
     sourcesView.style.display = "none";
     wrecksView.style.display = "none";
+    farmingView.style.display = "none";
     tabResource.classList.remove("active");
     tabLocation.classList.remove("active");
     tabRecipe.classList.remove("active");
     tabSources.classList.remove("active");
     tabWrecks.classList.remove("active");
+    tabFarming.classList.remove("active");
   }
 
   function showDeposits() {
@@ -57,6 +61,12 @@
     tabWrecks.classList.add("active");
   }
 
+  function showFarming() {
+    hideAll();
+    farmingView.style.display = "flex";
+    tabFarming.classList.add("active");
+  }
+
   tabResource.addEventListener("click", showDeposits);
   tabLocation.addEventListener("click", showDeposits);
   tabRecipe.addEventListener("click", async () => {
@@ -70,6 +80,10 @@
   tabWrecks.addEventListener("click", async () => {
     showWrecks();
     await CraftMapApi.call("set_view_mode", "wrecks");
+  });
+  tabFarming.addEventListener("click", async () => {
+    showFarming();
+    await CraftMapApi.call("set_view_mode", "farming");
   });
 
   // The Queue tab isn't a screen switch like the other three - it toggles
@@ -110,6 +124,8 @@
       showSources();
     } else if (mode === "wrecks") {
       showWrecks();
+    } else if (mode === "farming") {
+      showFarming();
     } else {
       showDeposits();
     }

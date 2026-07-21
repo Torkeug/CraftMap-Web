@@ -1101,6 +1101,55 @@
   color: var(--chip-night);
 }
 
+/* Farming tab's own Temperature/Light dial chips (js/farming.js) - same
+   filled-vs-outlined split as climate/water vs lighting above, reused for
+   the exact same reason: Temperature reads like a climate attribute
+   (filled pill, color+text label only), Light reads like a lighting
+   attribute (outlined + glyph). Deliberately separate classes from the
+   chip-sun-day/twilight/night, chip-hot, and chip-frozen ones above even
+   where the color is shared (chip-warm/chip-scorching alias
+   --chip-hot/--chip-veryhot) rather than reusing those classes directly -
+   a farm's Temperature dial and a planet's climate are different concepts
+   that happen to share a hue ramp, and giving farming its own class names
+   keeps that from reading as "this planet chip" if the two ever appear
+   near each other. */
+.chip-cold {
+  background: rgba(56, 189, 248, 0.22);
+  color: var(--chip-cold);
+}
+
+.chip-temperate {
+  background: rgba(63, 185, 80, 0.16);
+  color: var(--chip-temperate);
+}
+
+.chip-warm {
+  background: rgba(217, 89, 38, 0.16);
+  color: var(--chip-hot);
+}
+
+.chip-scorching {
+  background: rgba(230, 103, 103, 0.16);
+  color: var(--chip-veryhot);
+}
+
+.chip-any {
+  background: rgba(139, 148, 158, 0.14);
+  color: var(--muted);
+}
+
+.chip-light-uv {
+  color: var(--chip-uv);
+}
+
+.chip-light-natural {
+  color: var(--chip-day);
+}
+
+.chip-light-dark {
+  color: var(--chip-night);
+}
+
 .poi-landmark-badge {
   display: inline-flex;
   align-items: center;
@@ -1647,6 +1696,286 @@
   margin-left: 6px;
 }
 
+/* ---------- Farming tab (js/farming.js) - reuses #sources-selector-row's
+   own label+combo shape for the goal search, #resource-mode-tabs' flex/
+   .mode-btn shape for the crop switch, and .source-row's font scale for
+   info text, so this reads as the same app rather than a bolted-on
+   screen. Goal-first, not state-first (see farming.js's own module
+   docstring): the search box exists to jump straight to "how do I grow
+   X", not to pick a farm state and see what it happens to produce - there
+   is deliberately no dial-state picker/eligibility filter here. ---------- */
+#farming-view {
+  display: none; /* toggled by js/screens.js */
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+  gap: 6px;
+}
+
+#farming-goal-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#farming-goal-row label {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+#farming-goal-wrap {
+  flex: 1 1 auto;
+}
+
+#farming-goal-search {
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#farming-goal-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#farming-crop-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+
+#farming-info-row {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.farming-crop-note {
+  color: var(--faint);
+  margin-top: 2px;
+}
+
+#farming-variants.scroll-rows {
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.farming-variant-card {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: 4px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+}
+
+/* Two independent color signals on the same card (frontend/js/farming.js
+   applies both classes at once): a faint whole-card background tint per
+   grown variant/"species" (its own name/flavor - see theme.css's
+   --species-* comment for why this is per-variant, not grouped), and a
+   left-border accent by bio-tag (below) - the tag itself already matters
+   gameplay-wise (it's what OTHER variants' own neighbor restrictions
+   check against, see farming.js's tooltip on .farming-bio-tag), so it's
+   worth keeping visible even though it groups several variants together
+   (species already tells those apart). The tint is a flat rgba layer
+   stacked (via background-image, NOT background-color) over the card's
+   own --panel-2 base rather than a plain rgba background-color, so the
+   base panel color still shows through underneath and text contrast
+   doesn't shift card to card - background-image wins the cascade over
+   .farming-variant-card's own `background: var(--panel-2)` shorthand
+   without touching the background-color it also sets. rgba values here
+   are the same RGB as their --species-* var, just repeated as a literal
+   triplet since rgba() can't consume a hex custom property directly -
+   keep the two in sync if either changes. */
+.farming-variant-card.species-rockwood {
+  background-image: linear-gradient(rgba(63, 185, 80, 0.22), rgba(63, 185, 80, 0.22));
+}
+
+.farming-variant-card.species-whitewood {
+  background-image: linear-gradient(rgba(154, 164, 174, 0.22), rgba(154, 164, 174, 0.22));
+}
+
+.farming-variant-card.species-dreamwood {
+  background-image: linear-gradient(rgba(160, 108, 213, 0.22), rgba(160, 108, 213, 0.22));
+}
+
+.farming-variant-card.species-glowwood {
+  background-image: linear-gradient(rgba(227, 179, 65, 0.22), rgba(227, 179, 65, 0.22));
+}
+
+.farming-variant-card.species-sulfwood {
+  background-image: linear-gradient(rgba(217, 98, 43, 0.22), rgba(217, 98, 43, 0.22));
+}
+
+.farming-variant-card.species-plainkorn {
+  background-image: linear-gradient(rgba(217, 164, 65, 0.22), rgba(217, 164, 65, 0.22));
+}
+
+.farming-variant-card.species-soureinkorn {
+  background-image: linear-gradient(rgba(139, 195, 74, 0.22), rgba(139, 195, 74, 0.22));
+}
+
+.farming-variant-card.species-chillyeinkorn {
+  background-image: linear-gradient(rgba(126, 200, 245, 0.22), rgba(126, 200, 245, 0.22));
+}
+
+.farming-variant-card.tag-reclusive {
+  border-left-color: var(--biotag-reclusive);
+}
+
+.farming-variant-card.tag-invasive {
+  border-left-color: var(--biotag-invasive);
+}
+
+.farming-variant-card.tag-putrescent {
+  border-left-color: var(--biotag-putrescent);
+}
+
+@keyframes farming-card-flash {
+  0% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: var(--panel-2);
+  }
+}
+
+.farming-variant-card.flash {
+  animation: farming-card-flash 1.4s ease-out;
+}
+
+.farming-variant-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.farming-variant-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.farming-bio-tag {
+  font-size: 9px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 6px;
+}
+
+.farming-bio-tag.tag-reclusive {
+  color: var(--biotag-reclusive);
+  border-color: var(--biotag-reclusive);
+}
+
+.farming-bio-tag.tag-invasive {
+  color: var(--biotag-invasive);
+  border-color: var(--biotag-invasive);
+}
+
+.farming-bio-tag.tag-putrescent {
+  color: var(--biotag-putrescent);
+  border-color: var(--biotag-putrescent);
+}
+
+.farming-variant-produces {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.farming-req-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.farming-req-label {
+  flex: 0 0 auto;
+  width: 76px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.farming-req-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.farming-req-text {
+  font-size: 11px;
+  color: var(--text);
+}
+
+.farming-variant-section {
+  margin-top: 4px;
+}
+
+.farming-variant-section-label {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.farming-variant-section ul {
+  margin: 2px 0 0 0;
+  padding-left: 16px;
+}
+
+.farming-variant-section li {
+  font-size: 11px;
+  color: var(--text);
+  padding: 1px 0;
+}
+
+/* Enrichment lines (js/farming.js's renderEnrichmentItem) reuse the exact
+   same dial chips as the Requirements section for any bonus gated by the
+   variant's own Temperature/Light dial (via each entry's optional
+   farming.json "trigger" field) - a dial position should look identical
+   everywhere it appears on the card, not just in Requirements. */
+.farming-variant-section li.farming-bonus-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 2px 0;
+}
+
+.farming-bonus-arrow {
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.farming-bonus-effect {
+  color: var(--text);
+}
+
+.farming-variant-timing {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--faint);
+}
+
 /* ---------- Wreck Tracker window (frontend/wreck-tracker.html,
    js/wreck-tracker-panel.js) - a flat heading-strip HUD showing tracked
    wreck/crate bearing relative to the ship's current facing, not just
@@ -2092,7 +2421,8 @@
 #app.measuring-min-size #deposits-galaxy-view,
 #app.measuring-min-size #recipe-view,
 #app.measuring-min-size #sources-view,
-#app.measuring-min-size #wrecks-view {
+#app.measuring-min-size #wrecks-view,
+#app.measuring-min-size #farming-view {
   flex: 0 0 auto;
 }
 
@@ -2100,7 +2430,8 @@
 #app.measuring-min-size #recipe-breakdown-tree,
 #app.measuring-min-size #sources-rows,
 #app.measuring-min-size #wrecks-tree,
-#app.measuring-min-size #galaxy-rows {
+#app.measuring-min-size #galaxy-rows,
+#app.measuring-min-size #farming-variants {
   flex: 0 0 auto;
   height: 60px; /* matches their own permanent min-height floor */
 }
