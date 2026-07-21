@@ -159,3 +159,72 @@ def test_only_rockwood_glow_forbids_any_fertilizer():
         if v.get("fertilizer_forbidden_any")
     ]
     assert flagged == ["Glowwood"]
+
+
+def test_speed_effect_entries_have_valid_stat_type_and_value():
+    """frontend/js/farming.js's timing calculator trusts every speed_effect
+    entry's shape completely (see farming.json's own _meta.speed_effect) -
+    a bad stat/type name would silently no-op instead of erroring, and a
+    non-positive value would produce a nonsensical (zero/negative/infinite)
+    adjusted duration, so this guards the hand-transcription."""
+    api = Api()
+    crops = api.get_farming_crops()
+    valid_stats = {"growth", "fruit", "byproduct"}
+    valid_types = {"additive", "multiplicative"}
+    seen_any = False
+    for crop in crops:
+        for variant in crop["variants"]:
+            sources = list(variant["enrichments"]) + variant.get("neighbor_effects", [])
+            for entry in sources:
+                for eff in entry.get("speed_effect", []):
+                    seen_any = True
+                    assert eff["stat"] in valid_stats
+                    assert eff["type"] in valid_types
+                    assert eff["value"] > 0
+    assert seen_any
+
+
+def test_dial_group_entries_reference_a_valid_group():
+    api = Api()
+    crops = api.get_farming_crops()
+    for crop in crops:
+        for variant in crop["variants"]:
+            sources = list(variant["enrichments"]) + variant.get("neighbor_effects", [])
+            for entry in sources:
+                if "dial_group" in entry:
+                    assert entry["dial_group"] in ("temp", "light")
+
+
+def test_quantity_only_enrichments_carry_no_speed_effect():
+    """An enrichment whose effect text says "quantity" (not "speed") boosts
+    output, not timing - this app tracks no yield/quantity field at all, so
+    those entries must NOT carry a speed_effect (frontend/js/farming.js
+    would otherwise render a checkbox that claims to change a cycle time
+    it actually has no effect on)."""
+    api = Api()
+    crops = api.get_farming_crops()
+    checked_any = False
+    for crop in crops:
+        for variant in crop["variants"]:
+            for e in variant["enrichments"]:
+                if "quantity" in e["effect"].lower() and "speed" not in e["effect"].lower():
+                    checked_any = True
+                    assert "speed_effect" not in e, e
+    assert checked_any
+
+
+def test_neighbor_effects_only_on_variants_with_a_real_source():
+    """Only two real cross-variant cases exist per game_logic_notes.md
+    Finding 13/16: Spacekorn Plain's self-buff from a neighboring Plain,
+    and Rockwood Glow's UV-lit effect mirrored onto whichever variants
+    have their own Light=UV enrichment (Rockwood Bitter and all three
+    Spacekorn variants)."""
+    api = Api()
+    crops = api.get_farming_crops()
+    with_neighbor_effects = {
+        v["id"]
+        for crop in crops
+        for v in crop["variants"]
+        if v.get("neighbor_effects")
+    }
+    assert with_neighbor_effects == {"Plainkorn", "SourEinkorn", "ChillyEinkorn", "Sulfwood"}

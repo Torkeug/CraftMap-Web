@@ -1976,6 +1976,12 @@
   padding: 2px 0;
 }
 
+.farming-bonus-condition {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .farming-bonus-arrow {
   color: var(--faint);
   font-size: 10px;
@@ -1985,8 +1991,69 @@
   color: var(--text);
 }
 
-.farming-variant-timing {
-  margin-top: 4px;
+/* Checkbox + its condition content (js/farming.js's makeEnrichmentSection/
+   makeNeighborEffectsSection) - a plain inline-flex wrapper so the native
+   checkbox lines up with a dial chip or bio-tag pill the same way it would
+   with plain text. */
+.farming-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.farming-toggle-input {
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+/* ---------- Timing box (js/farming.js's makeTimingBox) - deliberately
+   NOT the same muted footer-text treatment as the rest of the card
+   (--faint, 10px): this is the number a player actually came here for,
+   and it needs to update visibly the instant a Speed modifier checkbox
+   above/below it is toggled, so it gets its own bordered/tinted panel,
+   a bold high-contrast value, and lives right under Requirements instead
+   of buried at the bottom of the card. */
+.farming-timing-box {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent-soft);
+}
+
+.farming-timing-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.farming-timing-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.farming-timing-stat {
+  flex: 0 0 auto;
+  width: 92px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.farming-timing-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.farming-timing-base {
   font-size: 10px;
   color: var(--faint);
 }

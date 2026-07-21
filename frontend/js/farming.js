@@ -196,6 +196,124 @@
     return parts.join(" · ");
   }
 
+  function fmtHours(v) {
+    // 2dp is enough precision for anything derived from these ranges (the
+    // fastest base cycle, Rockwood Glow's, is already sub-hour at 2dp) -
+    // more would just be display noise from float division.
+    return String(Math.round(v * 100) / 100);
+  }
+
+  function fmtAdjustedRange(range) {
+    const [lo, hi] = range;
+    return lo === hi ? `${fmtHours(lo)}h` : `${fmtHours(lo)}-${fmtHours(hi)}h`;
+  }
+
+  // additive stacks by summing (two +50%s make +100%, matching how the
+  // enrichment bonuses' own ARatio is described - Finding 13's own
+  // semantics), multiplicative stacks by multiplying (two ×0.8s make
+  // ×0.64) - independent accumulators since they're different operations
+  // on the base duration (divide by (1+sum) vs divide by product).
+  function adjustRange(baseRange, stat) {
+    const factor = (1 + stat.add) * stat.mult;
+    return baseRange.map((v) => v / factor);
+  }
+
+  // Reads every currently-checked toggle inside this card (both the
+  // variant's own speed-affecting enrichments and any neighbor_effects -
+  // see farming.json's _meta.speed_effect) and recomputes/repaints the
+  // timing box from them. The DOM's own checked state IS the source of
+  // truth here (no parallel JS state to keep in sync) - INPUT_EFFECTS maps
+  // each input straight to the speed_effect array it was built from.
+  const INPUT_EFFECTS = new WeakMap();
+
+  const TIMING_STATS = [
+    ["growth", "Growth", "growth_hours"],
+    ["fruit", "Fruit cycle", "fruit_cycle_hours"],
+    ["byproduct", "Byproduct cycle", "byproduct_cycle_hours"],
+  ];
+
+  function updateTiming(card, variant, timingEls) {
+    const stats = {
+      growth: { add: 0, mult: 1 },
+      fruit: { add: 0, mult: 1 },
+      byproduct: { add: 0, mult: 1 },
+    };
+    let anyChecked = false;
+    for (const input of card.querySelectorAll(".farming-toggle-input:checked")) {
+      anyChecked = true;
+      for (const e of INPUT_EFFECTS.get(input) || []) {
+        if (e.type === "additive") stats[e.stat].add += e.value;
+        else stats[e.stat].mult *= e.value;
+      }
+    }
+    for (const [key, , field] of TIMING_STATS) {
+      const baseRange = variant[field];
+      const adjusted = adjustRange(baseRange, stats[key]);
+      timingEls[key].valueEl.textContent = fmtAdjustedRange(adjusted);
+      timingEls[key].baseEl.textContent = anyChecked ? `base ${fmtRange(baseRange)}` : "";
+    }
+  }
+
+  function makeTimingBox(variant) {
+    const box = document.createElement("div");
+    box.className = "farming-timing-box";
+    const labelEl = document.createElement("div");
+    labelEl.className = "farming-timing-label";
+    labelEl.textContent = "Timing";
+    box.appendChild(labelEl);
+
+    const timingEls = {};
+    for (const [key, label, field] of TIMING_STATS) {
+      const row = document.createElement("div");
+      row.className = "farming-timing-row";
+      const statEl = document.createElement("span");
+      statEl.className = "farming-timing-stat";
+      statEl.textContent = label;
+      row.appendChild(statEl);
+      const valueEl = document.createElement("span");
+      valueEl.className = "farming-timing-value";
+      valueEl.textContent = fmtRange(variant[field]);
+      row.appendChild(valueEl);
+      const baseEl = document.createElement("span");
+      baseEl.className = "farming-timing-base";
+      row.appendChild(baseEl);
+      box.appendChild(row);
+      timingEls[key] = { valueEl, baseEl };
+    }
+    return { box, timingEls };
+  }
+
+  // Toggle inputs that share a dial_group are mutually exclusive (checking
+  // one unchecks any other sibling in the same group before recomputing) -
+  // the farm only has one Temperature and one Light position at a time,
+  // so e.g. a variant's own "Light dial = UV" enrichment and a "Neighboring
+  // Rockwood Glow" neighbor_effect (which mirrors being UV-lit) can't both
+  // apply at once even though they're rendered in different sections. See
+  // farming.json's _meta.speed_effect for the full rationale.
+  function makeToggleInput(variantKey, entry) {
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "farming-toggle-input";
+    INPUT_EFFECTS.set(input, entry.speed_effect);
+    if (entry.dial_group) {
+      input.dataset.dialGroup = `${variantKey}|${entry.dial_group}`;
+    }
+    return input;
+  }
+
+  function wireToggleInput(input, card, variant, timingEls) {
+    input.addEventListener("change", () => {
+      if (input.checked && input.dataset.dialGroup) {
+        for (const sibling of card.querySelectorAll(
+          `.farming-toggle-input[data-dial-group="${input.dataset.dialGroup}"]`
+        )) {
+          if (sibling !== input) sibling.checked = false;
+        }
+      }
+      updateTiming(card, variant, timingEls);
+    });
+  }
+
   function makeSection(label, lines) {
     const section = document.createElement("div");
     section.className = "farming-variant-section";
@@ -219,7 +337,14 @@
   // everything else (fertilizer/neighbor-tag conditions have no
   // "trigger") falls back to plain text, since there's no established
   // chip style for those.
-  function makeEnrichmentSection(label, enrichments) {
+  //
+  // An entry with a "speed_effect" (see farming.json's _meta.speed_effect)
+  // gets a checkbox that feeds the Timing box above - toggling it live-
+  // recomputes Growth/Fruit/Byproduct. An entry without one (a pure
+  // output-quantity bonus, which this app doesn't track at all) stays
+  // plain, non-interactive text, same as before - there's nothing for a
+  // checkbox to do there.
+  function makeEnrichmentSection(label, enrichments, variantKey, card, variant, timingEls) {
     const section = document.createElement("div");
     section.className = "farming-variant-section";
     const labelEl = document.createElement("div");
@@ -230,14 +355,31 @@
     for (const e of enrichments) {
       const li = document.createElement("li");
       li.className = "farming-bonus-line";
+
+      const conditionEl = document.createElement("span");
+      conditionEl.className = "farming-bonus-condition";
       if (e.trigger && (e.trigger.kind === "temp" || e.trigger.kind === "light")) {
-        li.appendChild(makeDialChips(e.trigger.values, e.trigger.kind));
+        conditionEl.appendChild(makeDialChips(e.trigger.values, e.trigger.kind));
       } else if (e.trigger && e.trigger.kind === "neighbor_tag") {
-        li.appendChild(makeReqText("Neighbor tagged"));
-        li.appendChild(makeBioTagChip(e.trigger.values[0]));
+        conditionEl.appendChild(makeReqText("Neighbor tagged"));
+        conditionEl.appendChild(makeBioTagChip(e.trigger.values[0]));
       } else {
-        li.appendChild(makeReqText(e.condition));
+        conditionEl.appendChild(makeReqText(e.condition));
       }
+
+      if (e.speed_effect) {
+        const inputEntry = { speed_effect: e.speed_effect, dial_group: e.dial_group };
+        const input = makeToggleInput(variantKey, inputEntry);
+        const toggleLabel = document.createElement("label");
+        toggleLabel.className = "farming-toggle-label";
+        toggleLabel.appendChild(input);
+        toggleLabel.appendChild(conditionEl);
+        li.appendChild(toggleLabel);
+        wireToggleInput(input, card, variant, timingEls);
+      } else {
+        li.appendChild(conditionEl);
+      }
+
       const arrowEl = document.createElement("span");
       arrowEl.className = "farming-bonus-arrow";
       arrowEl.textContent = "→";
@@ -252,6 +394,37 @@
     return section;
   }
 
+  // Cross-variant bonuses (farming.json's own "neighbor_effects" -
+  // currently just Spacekorn Plain's self-buff from a neighboring Plain,
+  // and Rockwood Glow's "neighbor treated as UV-lit" mirrored onto
+  // whichever variants have their own Light=UV enrichment) - same toggle
+  // shape as makeEnrichmentSection's interactive rows, but there's no
+  // "effect" prose string to show (the label already says what it is), so
+  // just the checkbox + label, no arrow/effect pair.
+  function makeNeighborEffectsSection(neighborEffects, variantKey, card, variant, timingEls) {
+    const section = document.createElement("div");
+    section.className = "farming-variant-section";
+    const labelEl = document.createElement("div");
+    labelEl.className = "farming-variant-section-label";
+    labelEl.textContent = "Neighbor conditions that also affect timing:";
+    section.appendChild(labelEl);
+    const list = document.createElement("ul");
+    for (const ne of neighborEffects) {
+      const li = document.createElement("li");
+      li.className = "farming-bonus-line";
+      const input = makeToggleInput(variantKey, ne);
+      const toggleLabel = document.createElement("label");
+      toggleLabel.className = "farming-toggle-label";
+      toggleLabel.appendChild(input);
+      toggleLabel.appendChild(makeReqText(ne.label));
+      li.appendChild(toggleLabel);
+      wireToggleInput(input, card, variant, timingEls);
+      list.appendChild(li);
+    }
+    section.appendChild(list);
+    return section;
+  }
+
   function renderVariantCard(cropId, variant) {
     const card = document.createElement("div");
     const speciesClass = SPECIES_CLASS[variant.id];
@@ -260,7 +433,8 @@
       "farming-variant-card" +
       (speciesClass ? ` ${speciesClass}` : "") +
       (tagClass ? ` ${tagClass}` : "");
-    card.dataset.variantKey = `${cropId}:${variant.id}`;
+    const variantKey = `${cropId}:${variant.id}`;
+    card.dataset.variantKey = variantKey;
 
     const header = document.createElement("div");
     header.className = "farming-variant-header";
@@ -294,20 +468,33 @@
     reqSection.appendChild(makeReqLine("Neighbor", makeNeighborRestriction(variant.neighbor_restriction_tag)));
     card.appendChild(reqSection);
 
+    // Built before the toggle sections below (which need timingEls to wire
+    // their change handlers into) but appended here, right under
+    // Requirements, so the numbers it live-updates stay prominent and
+    // above-the-fold rather than buried under every modifier.
+    const { box: timingBox, timingEls } = makeTimingBox(variant);
+    card.appendChild(timingBox);
+
     if (variant.enrichments && variant.enrichments.length) {
-      card.appendChild(makeEnrichmentSection("To speed it up / boost yield:", variant.enrichments));
+      card.appendChild(
+        makeEnrichmentSection(
+          "Speed & yield modifiers:",
+          variant.enrichments,
+          variantKey,
+          card,
+          variant,
+          timingEls
+        )
+      );
+    }
+    if (variant.neighbor_effects && variant.neighbor_effects.length) {
+      card.appendChild(
+        makeNeighborEffectsSection(variant.neighbor_effects, variantKey, card, variant, timingEls)
+      );
     }
     if (variant.adjacency && variant.adjacency.length) {
       card.appendChild(makeSection("Effect on neighboring plants:", variant.adjacency));
     }
-
-    const timingEl = document.createElement("div");
-    timingEl.className = "farming-variant-timing";
-    timingEl.textContent =
-      `Growth ${fmtRange(variant.growth_hours)}  ·  ` +
-      `Fruit cycle ${fmtRange(variant.fruit_cycle_hours)}  ·  ` +
-      `Byproduct cycle ${fmtRange(variant.byproduct_cycle_hours)}`;
-    card.appendChild(timingEl);
 
     return card;
   }

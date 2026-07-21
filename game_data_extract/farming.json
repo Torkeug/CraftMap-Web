@@ -4,7 +4,8 @@
     "mechanism": "The Xenic Farm building has one shared Temperature dial (Cold/Temperate/Warm/Hot) and one shared Light dial (UV/Natural/Dark) - a single farm is never in two temperature or light states at once. Each grown variant's gate is a set of acceptable dial positions (OR-across-allowed-states); a variant with an empty temperature/light list is unconstrained (any dial position satisfies it). After germination, ALL variants whose gates currently pass become candidates and the game picks uniformly at random among them (not priority order) - if none pass, the plant dies instead of stalling.",
     "growth_death_mechanism": "Requirements are checked continuously, not just once - letting fertilizer, dial position, or a neighbor restriction go unmet stalls growth and starts a 5-hour death countdown. Restoring it in time is fully recoverable. Once a plant reaches its final harvest stage, requirements stop mattering entirely.",
     "enrichment_trigger": "An enrichment entry's optional 'trigger' field ({kind: 'temp'|'light'|'neighbor_tag', values: [...]}) marks the ones frontend/js/farming.js can render as a pill instead of plain text: 'temp'/'light' are gated by the SAME shared Temperature/Light dial as the variant's own grow-gate, rendered as the same dial chips used in Requirements; 'neighbor_tag' names a bio-tag (see each variant's own 'bio_tag' and 'neighbor_restriction_tag') a neighbor plant must carry, rendered as the same pill used for the bio-tag badge and the Requirements Neighbor line. Fertilizer conditions carry no trigger - there's no established pill style for those.",
-    "fertilizer_forbidden_any": "A variant's optional 'fertilizer_forbidden_any: true' means NO fertilizer/supplement of any kind may be present - genuinely different from an empty 'fertilizer_required' (which just means no SPECIFIC fertilizer is required, any or none is fine). Only Rockwood Glow (Glowwood) is marked this way, per live in-game observation - Finding 13's own table wrote its Fertilizer-required cell as the distinct word 'none' (vs the dash '-' every unconstrained variant elsewhere in Findings 13/14 uses), consistent with this, but unlike the Finding's disassembly-verified AND/OR correction this specific reading has NOT been re-checked against raw disassembly - flag for follow-up if that's ever done."
+    "fertilizer_forbidden_any": "A variant's optional 'fertilizer_forbidden_any: true' means NO fertilizer/supplement of any kind may be present - genuinely different from an empty 'fertilizer_required' (which just means no SPECIFIC fertilizer is required, any or none is fine). Only Rockwood Glow (Glowwood) is marked this way, per live in-game observation - Finding 13's own table wrote its Fertilizer-required cell as the distinct word 'none' (vs the dash '-' every unconstrained variant elsewhere in Findings 13/14 uses), consistent with this, but unlike the Finding's disassembly-verified AND/OR correction this specific reading has NOT been re-checked against raw disassembly - flag for follow-up if that's ever done.",
+    "speed_effect": "An enrichment's optional 'speed_effect' ([{stat: 'growth'|'fruit'|'byproduct', type: 'additive'|'multiplicative', value}]) is ONLY present when that enrichment actually changes a cycle TIME (growth_hours/fruit_cycle_hours/byproduct_cycle_hours) - several enrichments instead boost output QUANTITY (e.g. 'Byproduct quantity +100%'), which this app doesn't track at all (no yield/quantity field exists anywhere in this data), so those carry no speed_effect and stay plain, non-interactive text in frontend/js/farming.js. 'additive' value 0.5 means +50% speed (duration divided by 1.5); 'multiplicative' value 0.6 means the speed itself is multiplied by 0.6 (duration divided by 0.6, i.e. SLOWER despite being an enrichment 'bonus' - Finding 13's own ARatio/MRatio semantics, applied literally). A variant's own 'neighbor_effects' ([{label, speed_effect, dial_group?}]) are the same shape, sourced from a DIFFERENT variant's adjacency entry rather than this variant's own enrichments - currently just two real cases: Spacekorn Plain's self-buff from a neighboring Spacekorn Plain, and Rockwood Glow's 'neighbor treated as UV-lit' effect (mirrors the receiving variant's own Light=UV enrichment numbers, so it's grouped into that variant's own 'light' dial_group - being UV-lit via a Glow neighbor and via the farm's actual Light dial are the same state, not two stacking bonuses). Entries (both enrichments and neighbor_effects) that share a 'dial_group' (temp/light) are mutually exclusive in the UI (radio-button-style) since the farm only has one Temperature and one Light position at a time - entries with no dial_group (fertilizer- or neighbor-tag-gated, or Plain's own neighbor buff) toggle independently, since a plot can hold multiple simultaneous supplements/conditions."
   },
   "crops": [
     {
@@ -12,10 +13,7 @@
       "seed_name": "Rockwood Nut",
       "seed_item": "RockwoodSeed",
       "building": "Xenic Farm",
-      "germination_hours": [
-        4.5,
-        5
-      ],
+      "germination_hours": [4.5, 5],
       "germination_needs": "Water",
       "variants": [
         {
@@ -24,30 +22,21 @@
           "bio_tag": "Reclusive",
           "fruit": "Rockwood Nut",
           "byproduct": "Lime",
-          "fertilizer_required": [
-            "Neutral Fertilizer"
-          ],
-          "fertilizer_forbidden": [
-            "Metallic Fertilizer"
-          ],
+          "fertilizer_required": ["Neutral Fertilizer"],
+          "fertilizer_forbidden": ["Metallic Fertilizer"],
           "temperature": [],
           "light": [],
-          "growth_hours": [
-            57.6,
-            64
-          ],
-          "fruit_cycle_hours": [
-            20,
-            28
-          ],
-          "byproduct_cycle_hours": [
-            0.14,
-            0.18
-          ],
+          "growth_hours": [57.6, 64],
+          "fruit_cycle_hours": [20, 28],
+          "byproduct_cycle_hours": [0.14, 0.18],
           "enrichments": [
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +50%, Byproduct speed +50%"
+              "effect": "Fruit speed +50%, Byproduct speed +50%",
+              "speed_effect": [
+                { "stat": "fruit", "type": "additive", "value": 0.5 },
+                { "stat": "byproduct", "type": "additive", "value": 0.5 }
+              ]
             }
           ],
           "adjacency": [
@@ -61,47 +50,35 @@
           "bio_tag": "Reclusive",
           "fruit": "Rockwood Nut",
           "byproduct": "Kaolinite",
-          "fertilizer_required": [
-            "Metallic Fertilizer"
-          ],
+          "fertilizer_required": ["Metallic Fertilizer"],
           "fertilizer_forbidden": [],
           "temperature": [],
           "light": [],
-          "growth_hours": [
-            57.6,
-            64
-          ],
-          "fruit_cycle_hours": [
-            60,
-            80
-          ],
-          "byproduct_cycle_hours": [
-            1.3,
-            1.7
-          ],
+          "growth_hours": [57.6, 64],
+          "fruit_cycle_hours": [60, 80],
+          "byproduct_cycle_hours": [1.3, 1.7],
           "enrichments": [
             {
               "condition": "Neutral Fertilizer present",
-              "effect": "Byproduct speed +75%"
+              "effect": "Byproduct speed +75%",
+              "speed_effect": [{ "stat": "byproduct", "type": "additive", "value": 0.75 }]
             },
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +50%, Byproduct speed +50%"
+              "effect": "Fruit speed +50%, Byproduct speed +50%",
+              "speed_effect": [
+                { "stat": "fruit", "type": "additive", "value": 0.5 },
+                { "stat": "byproduct", "type": "additive", "value": 0.5 }
+              ]
             },
             {
               "condition": "Neighbor tagged Putrescent",
               "effect": "Growth speed / Liquid consumption / Supplement consumption all ×0.6 (-40% each)",
-              "trigger": {
-                "kind": "neighbor_tag",
-                "values": [
-                  "Putrescent"
-                ]
-              }
+              "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
+              "speed_effect": [{ "stat": "growth", "type": "multiplicative", "value": 0.6 }]
             }
           ],
-          "adjacency": [
-            "Neighbor supplement consumption -50%"
-          ],
+          "adjacency": ["Neighbor supplement consumption -50%"],
           "neighbor_restriction_tag": "Reclusive"
         },
         {
@@ -110,49 +87,33 @@
           "bio_tag": "Invasive",
           "fruit": "Dreamwood Fruit",
           "byproduct": "Elmerium Nugget",
-          "fertilizer_required": [
-            "Elmerium Dust"
-          ],
+          "fertilizer_required": ["Elmerium Dust"],
           "fertilizer_forbidden": [],
-          "temperature": [
-            "Cold",
-            "Temperate",
-            "Warm"
-          ],
-          "light": [
-            "Dark"
-          ],
-          "growth_hours": [
-            81,
-            89
-          ],
-          "fruit_cycle_hours": [
-            16,
-            24
-          ],
-          "byproduct_cycle_hours": [
-            3,
-            4.6
-          ],
+          "temperature": ["Cold", "Temperate", "Warm"],
+          "light": ["Dark"],
+          "growth_hours": [81, 89],
+          "fruit_cycle_hours": [16, 24],
+          "byproduct_cycle_hours": [3, 4.6],
           "enrichments": [
             {
               "condition": "Temperature dial = Cold or Temperate",
               "effect": "Growth+Production speed +100%",
-              "trigger": {
-                "kind": "temp",
-                "values": [
-                  "Cold",
-                  "Temperate"
-                ]
-              }
+              "trigger": { "kind": "temp", "values": ["Cold", "Temperate"] },
+              "dial_group": "temp",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.0 },
+                { "stat": "fruit", "type": "additive", "value": 1.0 }
+              ]
             },
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +350%"
+              "effect": "Fruit speed +350%",
+              "speed_effect": [{ "stat": "fruit", "type": "additive", "value": 3.5 }]
             },
             {
               "condition": "Acidic Fertilizer present",
-              "effect": "Byproduct speed +120%"
+              "effect": "Byproduct speed +120%",
+              "speed_effect": [{ "stat": "byproduct", "type": "additive", "value": 1.2 }]
             }
           ],
           "adjacency": [
@@ -172,42 +133,34 @@
           "fertilizer_forbidden_any": true,
           "temperature": [],
           "light": [],
-          "growth_hours": [
-            50,
-            60
-          ],
-          "fruit_cycle_hours": [
-            0.01,
-            0.02
-          ],
-          "byproduct_cycle_hours": [
-            0.01,
-            0.02
-          ],
+          "growth_hours": [50, 60],
+          "fruit_cycle_hours": [0.01, 0.02],
+          "byproduct_cycle_hours": [0.01, 0.02],
           "enrichments": [
             {
               "condition": "Light dial = Dark",
               "effect": "Fruit speed +30%",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "Dark"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["Dark"] },
+              "dial_group": "light",
+              "speed_effect": [{ "stat": "fruit", "type": "additive", "value": 0.3 }]
             },
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +20%, Byproduct speed +20%"
+              "effect": "Fruit speed +20%, Byproduct speed +20%",
+              "speed_effect": [
+                { "stat": "fruit", "type": "additive", "value": 0.2 },
+                { "stat": "byproduct", "type": "additive", "value": 0.2 }
+              ]
             },
             {
               "condition": "Neighbor tagged Putrescent",
               "effect": "Growth+Production speed +25%, Byproduct speed +25%",
-              "trigger": {
-                "kind": "neighbor_tag",
-                "values": [
-                  "Putrescent"
-                ]
-              }
+              "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 0.25 },
+                { "stat": "fruit", "type": "additive", "value": 0.25 },
+                { "stat": "byproduct", "type": "additive", "value": 0.25 }
+              ]
             }
           ],
           "adjacency": [
@@ -221,66 +174,53 @@
           "bio_tag": "Putrescent",
           "fruit": "Rockwood Nut",
           "byproduct": "Pyrite",
-          "fertilizer_required": [
-            "Acidic Fertilizer",
-            "Metallic Fertilizer"
-          ],
-          "fertilizer_forbidden": [
-            "Carbonic Fertilizer"
-          ],
-          "temperature": [
-            "Warm",
-            "Hot"
-          ],
+          "fertilizer_required": ["Acidic Fertilizer", "Metallic Fertilizer"],
+          "fertilizer_forbidden": ["Carbonic Fertilizer"],
+          "temperature": ["Warm", "Hot"],
           "light": [],
-          "growth_hours": [
-            57.6,
-            64
-          ],
-          "fruit_cycle_hours": [
-            28,
-            34
-          ],
-          "byproduct_cycle_hours": [
-            1.1,
-            1.35
-          ],
+          "growth_hours": [57.6, 64],
+          "fruit_cycle_hours": [28, 34],
+          "byproduct_cycle_hours": [1.1, 1.35],
           "enrichments": [
             {
               "condition": "Light dial = Dark",
               "effect": "Growth speed / Liquid consumption / Supplement consumption all ×0.8 (-20% each)",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "Dark"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["Dark"] },
+              "dial_group": "light",
+              "speed_effect": [{ "stat": "growth", "type": "multiplicative", "value": 0.8 }]
             },
             {
               "condition": "Light dial = UV",
               "effect": "Growth+Production speed +30%",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "UV"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["UV"] },
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 0.3 },
+                { "stat": "fruit", "type": "additive", "value": 0.3 }
+              ]
             },
             {
               "condition": "Temperature dial = Hot",
               "effect": "Byproduct speed +40%",
-              "trigger": {
-                "kind": "temp",
-                "values": [
-                  "Hot"
-                ]
-              }
+              "trigger": { "kind": "temp", "values": ["Hot"] },
+              "dial_group": "temp",
+              "speed_effect": [{ "stat": "byproduct", "type": "additive", "value": 0.4 }]
             }
           ],
           "adjacency": [
             "Neighbor's decay speed if its own requirements go unmet ×0.05 (dies far slower while starved)"
           ],
-          "neighbor_restriction_tag": null
+          "neighbor_restriction_tag": null,
+          "neighbor_effects": [
+            {
+              "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 0.3 },
+                { "stat": "fruit", "type": "additive", "value": 0.3 }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -289,10 +229,7 @@
       "seed_name": "Spacekorn",
       "seed_item": "SpaceWheat_Seed",
       "building": "Xenic Farm",
-      "germination_hours": [
-        2.7,
-        3
-      ],
+      "germination_hours": [2.7, 3],
       "germination_needs": "Water",
       "note": "Woolly Spacekorn fruits into an intermediate shell item (Wooly Korn - 'contains a few spacekorn seed, a grinder is required to extract them') rather than directly back into Spacekorn Seed, unlike the other variants here and unlike any Rockwood Nut variant.",
       "variants": [
@@ -303,46 +240,32 @@
           "fruit": "Spacekorn Seed",
           "byproduct": "Plain Pulp",
           "fertilizer_required": [],
-          "fertilizer_forbidden": [
-            "Metallic Fertilizer"
-          ],
-          "temperature": [
-            "Temperate",
-            "Warm"
-          ],
+          "fertilizer_forbidden": ["Metallic Fertilizer"],
+          "temperature": ["Temperate", "Warm"],
           "light": [],
-          "growth_hours": [
-            36,
-            40
-          ],
-          "fruit_cycle_hours": [
-            9,
-            12
-          ],
-          "byproduct_cycle_hours": [
-            4,
-            6
-          ],
+          "growth_hours": [36, 40],
+          "fruit_cycle_hours": [9, 12],
+          "byproduct_cycle_hours": [4, 6],
           "enrichments": [
             {
               "condition": "Light dial = Natural",
               "effect": "Growth+Production speed +100%",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "Natural"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["Natural"] },
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.0 },
+                { "stat": "fruit", "type": "additive", "value": 1.0 }
+              ]
             },
             {
               "condition": "Light dial = UV",
               "effect": "Growth+Production speed +150%, but Byproduct quantity ×0.8 (-20%)",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "UV"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["UV"] },
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.5 },
+                { "stat": "fruit", "type": "additive", "value": 1.5 }
+              ]
             },
             {
               "condition": "Neutral Fertilizer present",
@@ -351,29 +274,41 @@
             {
               "condition": "Temperature dial = Temperate",
               "effect": "Growth+Production speed +100%",
-              "trigger": {
-                "kind": "temp",
-                "values": [
-                  "Temperate"
-                ]
-              }
+              "trigger": { "kind": "temp", "values": ["Temperate"] },
+              "dial_group": "temp",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.0 },
+                { "stat": "fruit", "type": "additive", "value": 1.0 }
+              ]
             },
             {
               "condition": "Neighbor tagged Putrescent",
               "effect": "Germ quantity +40%, Byproduct quantity +40%",
-              "trigger": {
-                "kind": "neighbor_tag",
-                "values": [
-                  "Putrescent"
-                ]
-              }
+              "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] }
             }
           ],
           "adjacency": [
             "+15% Growth/Production speed to neighboring Spacekorn Plain plants specifically (not any neighbor); not consumed on use",
             "Invasive spread on maturing: 50% chance to claim an adjacent empty plot, 25% chance to overwrite an adjacent germinating seed or dead plant (never an already-grown live neighbor) with a copy of itself"
           ],
-          "neighbor_restriction_tag": null
+          "neighbor_restriction_tag": null,
+          "neighbor_effects": [
+            {
+              "label": "Neighboring Spacekorn Plain plant",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 0.15 },
+                { "stat": "fruit", "type": "additive", "value": 0.15 }
+              ]
+            },
+            {
+              "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.5 },
+                { "stat": "fruit", "type": "additive", "value": 1.5 }
+              ]
+            }
+          ]
         },
         {
           "id": "SourEinkorn",
@@ -381,49 +316,33 @@
           "bio_tag": "Putrescent",
           "fruit": "Spacekorn Seed",
           "byproduct": "Sour Pulp",
-          "fertilizer_required": [
-            "Carbonic Fertilizer"
-          ],
-          "fertilizer_forbidden": [
-            "Acidic Fertilizer"
-          ],
-          "temperature": [
-            "Warm",
-            "Hot"
-          ],
+          "fertilizer_required": ["Carbonic Fertilizer"],
+          "fertilizer_forbidden": ["Acidic Fertilizer"],
+          "temperature": ["Warm", "Hot"],
           "light": [],
-          "growth_hours": [
-            36,
-            40
-          ],
-          "fruit_cycle_hours": [
-            20,
-            27
-          ],
-          "byproduct_cycle_hours": [
-            3.2,
-            4.4
-          ],
+          "growth_hours": [36, 40],
+          "fruit_cycle_hours": [20, 27],
+          "byproduct_cycle_hours": [3.2, 4.4],
           "enrichments": [
             {
               "condition": "Light dial = Natural",
               "effect": "Growth+Production speed +100%",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "Natural"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["Natural"] },
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.0 },
+                { "stat": "fruit", "type": "additive", "value": 1.0 }
+              ]
             },
             {
               "condition": "Light dial = UV",
               "effect": "Growth+Production speed +150%, but Byproduct quantity ×0.8 (-20%)",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "UV"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["UV"] },
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.5 },
+                { "stat": "fruit", "type": "additive", "value": 1.5 }
+              ]
             },
             {
               "condition": "Neutral Fertilizer present",
@@ -433,7 +352,17 @@
           "adjacency": [
             "Neighbor's dead plants auto-dissolve instead of lingering (boolean toggle, any neighbor)"
           ],
-          "neighbor_restriction_tag": null
+          "neighbor_restriction_tag": null,
+          "neighbor_effects": [
+            {
+              "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.5 },
+                { "stat": "fruit", "type": "additive", "value": 1.5 }
+              ]
+            }
+          ]
         },
         {
           "id": "ChillyEinkorn",
@@ -443,42 +372,31 @@
           "byproduct": "Frost Pulp",
           "fertilizer_required": [],
           "fertilizer_forbidden": [],
-          "temperature": [
-            "Cold"
-          ],
+          "temperature": ["Cold"],
           "light": [],
-          "growth_hours": [
-            36,
-            40
-          ],
-          "fruit_cycle_hours": [
-            20,
-            27
-          ],
-          "byproduct_cycle_hours": [
-            4,
-            6
-          ],
+          "growth_hours": [36, 40],
+          "fruit_cycle_hours": [20, 27],
+          "byproduct_cycle_hours": [4, 6],
           "enrichments": [
             {
               "condition": "Light dial = Natural",
               "effect": "Growth+Production speed +100%",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "Natural"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["Natural"] },
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.0 },
+                { "stat": "fruit", "type": "additive", "value": 1.0 }
+              ]
             },
             {
               "condition": "Light dial = UV",
               "effect": "Growth+Production speed +150%, but Byproduct quantity ×0.8 (-20%)",
-              "trigger": {
-                "kind": "light",
-                "values": [
-                  "UV"
-                ]
-              }
+              "trigger": { "kind": "light", "values": ["UV"] },
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.5 },
+                { "stat": "fruit", "type": "additive", "value": 1.5 }
+              ]
             },
             {
               "condition": "Neutral Fertilizer present",
@@ -489,10 +407,18 @@
               "effect": "Byproduct quantity +100% (stacks with the Neutral Fertilizer entry above if somehow both present)"
             }
           ],
-          "adjacency": [
-            "+20% Byproduct quantity to any neighbor; repeatable, not consumed on use"
-          ],
-          "neighbor_restriction_tag": "Putrescent"
+          "adjacency": ["+20% Byproduct quantity to any neighbor; repeatable, not consumed on use"],
+          "neighbor_restriction_tag": "Putrescent",
+          "neighbor_effects": [
+            {
+              "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "dial_group": "light",
+              "speed_effect": [
+                { "stat": "growth", "type": "additive", "value": 1.5 },
+                { "stat": "fruit", "type": "additive", "value": 1.5 }
+              ]
+            }
+          ]
         }
       ]
     }
