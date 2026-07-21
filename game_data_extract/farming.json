@@ -2,7 +2,8 @@
   "_meta": {
     "source": "shipbuilder/tools/game_logic_notes.md, Finding 13 (Rockwood Nut) and Finding 14 (Spacekorn) - decompiled from data.cdb sheet 'farm' and ent.b.PlotZone.pickVariant/hasMinRequirement (src/ent/b/Farm.hx). Hand-transcribed, not script-regenerated - if game_logic_notes.md gets a new/corrected finding for these crops, update this file to match.",
     "mechanism": "The Xenic Farm building has one shared Temperature dial (Cold/Temperate/Warm/Hot) and one shared Light dial (UV/Natural/Dark) - a single farm is never in two temperature or light states at once. Each grown variant's gate is a set of acceptable dial positions (OR-across-allowed-states); a variant with an empty temperature/light list is unconstrained (any dial position satisfies it). After germination, ALL variants whose gates currently pass become candidates and the game picks uniformly at random among them (not priority order) - if none pass, the plant dies instead of stalling.",
-    "enrichment_trigger": "An enrichment entry's optional 'trigger' field ({kind: 'temp'|'light'|'neighbor_tag', values: [...]}) marks the ones frontend/js/farming.js can render as a pill instead of plain text: 'temp'/'light' are gated by the SAME shared Temperature/Light dial as the variant's own grow-gate, rendered as the same dial chips used in Requirements; 'neighbor_tag' names a bio-tag (see each variant's own 'bio_tag' and 'neighbor_restriction_tag') a neighbor plant must carry, rendered as the same pill used for the bio-tag badge and the Requirements Neighbor line. Fertilizer conditions carry no trigger - there's no established pill style for those."
+    "enrichment_trigger": "An enrichment entry's optional 'trigger' field ({kind: 'temp'|'light'|'neighbor_tag', values: [...]}) marks the ones frontend/js/farming.js can render as a pill instead of plain text: 'temp'/'light' are gated by the SAME shared Temperature/Light dial as the variant's own grow-gate, rendered as the same dial chips used in Requirements; 'neighbor_tag' names a bio-tag (see each variant's own 'bio_tag' and 'neighbor_restriction_tag') a neighbor plant must carry, rendered as the same pill used for the bio-tag badge and the Requirements Neighbor line. Fertilizer conditions carry no trigger - there's no established pill style for those.",
+    "fertilizer_forbidden_any": "A variant's optional 'fertilizer_forbidden_any: true' means NO fertilizer/supplement of any kind may be present - genuinely different from an empty 'fertilizer_required' (which just means no SPECIFIC fertilizer is required, any or none is fine). Only Rockwood Glow (Glowwood) is marked this way, per live in-game observation - Finding 13's own table wrote its Fertilizer-required cell as the distinct word 'none' (vs the dash '-' every unconstrained variant elsewhere in Findings 13/14 uses), consistent with this, but unlike the Finding's disassembly-verified AND/OR correction this specific reading has NOT been re-checked against raw disassembly - flag for follow-up if that's ever done."
   },
   "crops": [
     {
@@ -166,6 +167,7 @@
           "byproduct": "Rockwood Bark",
           "fertilizer_required": [],
           "fertilizer_forbidden": [],
+          "fertilizer_forbidden_any": true,
           "temperature": [],
           "light": [],
           "growth_hours": [

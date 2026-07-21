@@ -115,3 +115,21 @@ def test_neighbor_restriction_tag_is_a_valid_bio_tag_or_none():
         for variant in crop["variants"]:
             tag = variant["neighbor_restriction_tag"]
             assert tag is None or tag in valid_tags
+
+
+def test_only_rockwood_glow_forbids_any_fertilizer():
+    """"fertilizer_forbidden_any" marks a genuinely different case from a
+    merely empty fertilizer_required (see farming.json's own
+    _meta.fertilizer_forbidden_any) - Finding 13/14's own tables write
+    Rockwood Glow's Fertilizer-required cell as the distinct word "none"
+    while every other unconstrained variant (Spacekorn Plain, Woolly
+    Spacekorn) uses "-", so only Glowwood should carry this flag."""
+    api = Api()
+    crops = api.get_farming_crops()
+    flagged = [
+        v["id"]
+        for crop in crops
+        for v in crop["variants"]
+        if v.get("fertilizer_forbidden_any")
+    ]
+    assert flagged == ["Glowwood"]

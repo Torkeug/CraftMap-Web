@@ -173,6 +173,14 @@
   // fertilizer_forbidden stays OR-to-fail (any one present blocks) either
   // way, which is just what "forbidden" means for a deny-list.
   function fmtFertilizerRequirement(variant) {
+    // Distinct from an empty fertilizer_required (= no SPECIFIC fertilizer
+    // needed, any or none is fine) - this means no fertilizer of ANY kind
+    // may be present at all. See farming.json's own _meta.fertilizer_forbidden_any
+    // for why these two "none" cases are genuinely different, not just two
+    // ways of writing the same thing.
+    if (variant.fertilizer_forbidden_any) {
+      return "must be empty - no fertilizer of any kind";
+    }
     const req = variant.fertilizer_required || [];
     const forbid = variant.fertilizer_forbidden || [];
     const parts = [];
