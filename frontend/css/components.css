@@ -1138,6 +1138,16 @@
   color: var(--muted);
 }
 
+/* A gate that can never pass at all (js/farming.js's makeDialChips
+   "impossible" case, currently only Rockwood Glow - see farming.json's
+   own _meta.unreachable) - deliberately NOT the same neutral gray as
+   .chip-any, which means the opposite ("any position already satisfies
+   this"). */
+.chip-impossible {
+  background: rgba(218, 54, 51, 0.16);
+  color: var(--danger);
+}
+
 .chip-light-uv {
   color: var(--chip-uv);
 }
@@ -1915,6 +1925,21 @@
   font-size: 11px;
   color: var(--muted);
   margin-bottom: 2px;
+}
+
+/* Rockwood Glow's own unreachable_note (js/farming.js) - a variant whose
+   grow-gate can never actually pass (see farming.json's own
+   _meta.unreachable), so this needs to be impossible to miss even though
+   the rest of the card still shows its stats/enrichments for reference. */
+.farming-unreachable-warning {
+  margin: 2px 0 4px;
+  padding: 5px 7px;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  background: rgba(218, 54, 51, 0.12);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .farming-req-line {

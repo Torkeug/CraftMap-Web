@@ -228,3 +228,27 @@ def test_neighbor_effects_only_on_variants_with_a_real_source():
         if v.get("neighbor_effects")
     }
     assert with_neighbor_effects == {"Plainkorn", "SourEinkorn", "ChillyEinkorn", "Sulfwood"}
+
+
+def test_only_rockwood_glow_is_marked_unreachable():
+    """game_logic_notes.md Finding 13's correction: Glowwood's temperature/
+    light fields are a literal 0 in the source data (not absent), and
+    hasMinRequirement never skips a present field - so its gate can NEVER
+    pass, confirmed by both disassembly and a direct in-game test. No
+    other variant in Findings 13/14 has this bug - every other
+    "unconstrained" gate uses a genuinely absent key."""
+    api = Api()
+    crops = api.get_farming_crops()
+    unreachable = [
+        v["id"] for crop in crops for v in crop["variants"] if v.get("unreachable")
+    ]
+    assert unreachable == ["Glowwood"]
+    glow = next(v for crop in crops for v in crop["variants"] if v["id"] == "Glowwood")
+    assert isinstance(glow["unreachable_note"], str) and len(glow["unreachable_note"]) > 20
+    # Empty temperature/light on an unreachable variant means "can never
+    # pass," the opposite of what an empty list means everywhere else -
+    # frontend/js/farming.js relies on the unreachable flag itself (not
+    # the list contents) to tell the two cases apart, so both must stay
+    # empty for that disambiguation to mean anything.
+    assert glow["temperature"] == []
+    assert glow["light"] == []

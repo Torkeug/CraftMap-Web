@@ -139,15 +139,23 @@
     return chip;
   }
 
-  // A gate's own list IS the set of dial positions that satisfy it (empty
-  // = unconstrained, matching farming.json's encoding of both Rockwood
-  // Glow's literal-0 and Spacekorn's absent-key cases - see
-  // game_logic_notes.md Finding 14's own note on that) - an unconstrained
-  // gate gets one neutral "Any" chip rather than one chip per possible
-  // dial position, since every position already satisfies it.
-  function makeDialChips(values, kind) {
+  // A gate's own list IS the set of dial positions that satisfy it - empty
+  // normally means unconstrained (Spacekorn's absent-key encoding, per
+  // game_logic_notes.md Finding 14's own note), rendered as one neutral
+  // "Any" chip rather than one per possible dial position, since every
+  // position already satisfies it. Rockwood Glow's temperature/light are
+  // the one exception: empty there means the OPPOSITE (a present literal
+  // 0, which can never pass the check - see farming.json's own
+  // _meta.unreachable) - callers pass impossible=true for that case, which
+  // renders a "Never" chip instead of silently claiming "Any" for a gate
+  // that actually can't ever be satisfied.
+  function makeDialChips(values, kind, impossible) {
     const wrap = document.createElement("span");
     wrap.className = "farming-req-chips";
+    if (impossible) {
+      wrap.appendChild(makeChip("✗ Never", "chip-impossible"));
+      return wrap;
+    }
     if (!values || !values.length) {
       wrap.appendChild(makeChip("Any", "chip-any"));
       return wrap;
@@ -499,6 +507,13 @@
     }
     card.appendChild(header);
 
+    if (variant.unreachable) {
+      const warningEl = document.createElement("div");
+      warningEl.className = "farming-unreachable-warning";
+      warningEl.textContent = variant.unreachable_note;
+      card.appendChild(warningEl);
+    }
+
     const producesEl = document.createElement("div");
     producesEl.className = "farming-variant-produces";
     producesEl.textContent = `Produces: ${variant.fruit} (fruit) · ${variant.byproduct} (byproduct)`;
@@ -510,8 +525,12 @@
     reqLabelEl.className = "farming-variant-section-label";
     reqLabelEl.textContent = "Requirements to grow it:";
     reqSection.appendChild(reqLabelEl);
-    reqSection.appendChild(makeReqLine("Temperature", makeDialChips(variant.temperature, "temp")));
-    reqSection.appendChild(makeReqLine("Light", makeDialChips(variant.light, "light")));
+    reqSection.appendChild(
+      makeReqLine("Temperature", makeDialChips(variant.temperature, "temp", variant.unreachable))
+    );
+    reqSection.appendChild(
+      makeReqLine("Light", makeDialChips(variant.light, "light", variant.unreachable))
+    );
     reqSection.appendChild(makeReqLine("Fertilizer", makeReqText(fmtFertilizerRequirement(variant))));
     reqSection.appendChild(makeReqLine("Neighbor", makeNeighborRestriction(variant.neighbor_restriction_tag)));
     card.appendChild(reqSection);
