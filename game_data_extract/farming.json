@@ -133,7 +133,7 @@
           "fertilizer_forbidden": [],
           "fertilizer_forbidden_any": true,
           "unreachable": true,
-          "unreachable_note": "Not obtainable through normal play. Its Temperature/Light requirements can never actually be satisfied on a real farm, no matter how it's set up - confirmed by direct in-game testing, not just theory.",
+          "unreachable_note": "Not obtainable through normal play. Its Temperature/Light requirements can never actually be satisfied on a real farm, no matter how it's set up.",
           "temperature": [],
           "light": [],
           "growth_hours": [50, 60],
