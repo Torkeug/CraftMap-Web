@@ -38,10 +38,24 @@
   let goalIndex = null;
   let goalLabels = null;
 
+  // "44h 19m" instead of a raw decimal-hour fraction like "44.31h" - reads
+  // as an actual duration rather than a number needing conversion in your
+  // head. Rounding to whole minutes also sidesteps float noise from
+  // summing/dividing base ranges (e.g. 57.6 + 28 + 1.1 landing on
+  // 86.69999999999999 instead of 86.7).
+  function fmtDuration(hours) {
+    const totalMinutes = Math.round(hours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  }
+
   function fmtRange(range) {
     if (!range) return "";
     const [lo, hi] = range;
-    return lo === hi ? `${lo}h` : `${lo}-${hi}h`;
+    return lo === hi ? fmtDuration(lo) : `${fmtDuration(lo)} - ${fmtDuration(hi)}`;
   }
 
   // Temperature dial chips read like js/galaxy.js's climate chips (filled
@@ -211,18 +225,6 @@
     return parts.join(" · ");
   }
 
-  function fmtHours(v) {
-    // 2dp is enough precision for anything derived from these ranges (the
-    // fastest base cycle, Rockwood Glow's, is already sub-hour at 2dp) -
-    // more would just be display noise from float division.
-    return String(Math.round(v * 100) / 100);
-  }
-
-  function fmtAdjustedRange(range) {
-    const [lo, hi] = range;
-    return lo === hi ? `${fmtHours(lo)}h` : `${fmtHours(lo)}-${fmtHours(hi)}h`;
-  }
-
   // additive stacks by summing (two +50%s make +100%, matching how the
   // enrichment bonuses' own ARatio is described - Finding 13's own
   // semantics), multiplicative stacks by multiplying (two ×0.8s make
@@ -275,12 +277,12 @@
       const baseRange = variant[field];
       const adjusted = adjustRange(baseRange, stats[key]);
       adjustedByKey[key] = adjusted;
-      timingEls[key].valueEl.textContent = fmtAdjustedRange(adjusted);
+      timingEls[key].valueEl.textContent = fmtRange(adjusted);
       timingEls[key].baseEl.textContent = anyChecked ? `base ${fmtRange(baseRange)}` : "";
     }
     const totalAdjusted = sumRanges(TIMING_STATS.map(([key]) => adjustedByKey[key]));
     const totalBase = sumRanges(TIMING_STATS.map(([, , field]) => variant[field]));
-    timingEls.total.valueEl.textContent = fmtAdjustedRange(totalAdjusted);
+    timingEls.total.valueEl.textContent = fmtRange(totalAdjusted);
     timingEls.total.baseEl.textContent = anyChecked ? `base ${fmtRange(totalBase)}` : "";
   }
 
@@ -320,7 +322,7 @@
     totalRow.appendChild(totalStatEl);
     const totalValueEl = document.createElement("span");
     totalValueEl.className = "farming-timing-value";
-    totalValueEl.textContent = fmtAdjustedRange(
+    totalValueEl.textContent = fmtRange(
       sumRanges(TIMING_STATS.map(([, , field]) => variant[field]))
     );
     totalRow.appendChild(totalValueEl);
