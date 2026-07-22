@@ -91,6 +91,19 @@
     Putrescent: "tag-putrescent",
   };
 
+  // Shown as a tooltip on every bio-tag pill (the header badge, a
+  // Requirements Neighbor line, an enrichment's "Neighbor tagged X" chip -
+  // see makeBioTagChip below) - what the tag itself actually does, not
+  // just "this matters to neighbors" (the old, vaguer header-only tooltip).
+  const BIO_TAG_DESCRIPTION = {
+    Reclusive:
+      "Reclusive: can't grow if a Reclusive-tagged plant is in an adjacent plot.",
+    Invasive:
+      "Invasive: on maturing, may spread a copy of itself onto an adjacent plot - 50% chance if it's empty, 25% if it holds a germinating seed or dead plant, never onto an already-grown neighbor.",
+    Putrescent:
+      "Putrescent: several other variants gain a bonus (or, for Woolly Spacekorn, can't grow at all) when a Putrescent-tagged plant is in an adjacent plot.",
+  };
+
   function makeChip(label, cls) {
     const chip = document.createElement("span");
     chip.className = `chip ${cls}`;
@@ -102,11 +115,13 @@
   // renderVariantCard) - reused here wherever a bio-tag name appears in
   // generated text (a neighbor restriction, an enrichment condition)
   // instead of the plain tag name as a text string, so "Putrescent"/
-  // "Reclusive"/"Invasive" reads identically everywhere on a card.
+  // "Reclusive"/"Invasive" reads (and hovers) identically everywhere on a
+  // card.
   function makeBioTagChip(tag) {
     const chip = document.createElement("span");
     chip.className = "farming-bio-tag" + (BIO_TAG_CLASS[tag] ? ` ${BIO_TAG_CLASS[tag]}` : "");
     chip.textContent = tag;
+    chip.title = BIO_TAG_DESCRIPTION[tag] || "";
     return chip;
   }
 
@@ -478,11 +493,7 @@
     nameEl.textContent = variant.name;
     header.appendChild(nameEl);
     if (variant.bio_tag) {
-      const tagEl = document.createElement("span");
-      tagEl.className = "farming-bio-tag" + (tagClass ? ` ${tagClass}` : "");
-      tagEl.title = "Relevant to nearby plants' own neighbor restrictions";
-      tagEl.textContent = variant.bio_tag;
-      header.appendChild(tagEl);
+      header.appendChild(makeBioTagChip(variant.bio_tag));
     }
     card.appendChild(header);
 
