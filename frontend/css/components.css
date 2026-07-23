@@ -2327,8 +2327,9 @@
 }
 
 /* Wreck (hull) marker size/tier/edge encoding - see theme.css's own
-   comment on --wreck-size-*/--wreck-tier-*/--wreck-edge for why this is a
-   dedicated 6-color set (fill=size, ring=tier, edge=off-screen indicator)
+   comment on the --wreck-size, --wreck-tier, and --wreck-edge custom
+   properties for why this is a dedicated 6-color set (fill=size, ring=tier,
+   edge=off-screen indicator)
    chosen and validated together, not reusing --accent/--danger. Scoped to
    `.hull` only, per user request that crates don't need this -
    js/wreck-tracker-panel.js's updateMarkerEl only ever attaches size-N/
