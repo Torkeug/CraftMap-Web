@@ -453,6 +453,10 @@
     lastKnownRunning = status.running;
   }
 
+  // Holds the last snapshot that actually came back non-null, independent
+  // of this tick's own result - see pollSnapshot's own comment on why.
+  let lastGoodSnapshot = null;
+
   async function pollSnapshot() {
     let snapshot = null;
     try {
@@ -460,17 +464,31 @@
     } catch (e) {
       // CraftMapApi.call already surfaces this via the error banner
     }
-    const fresh = isFresh(snapshot);
+    if (snapshot) lastGoodSnapshot = snapshot;
+    // A single tick coming back null/failed doesn't necessarily mean the
+    // poller stopped writing - a 17ms poll rate (see POLL_MS's own
+    // comment on why it's this fast) means a single transient hiccup
+    // (one slow IPC round-trip, or reading current_planet_wrecks.json
+    // the instant the poller's atomic rename lands) shows up as exactly
+    // one empty tick - user-reported as a split-second flash to the
+    // "Starting up..." message that then immediately clears again.
+    // Falling back to the last snapshot that DID come back, and judging
+    // freshness from THAT instead of this tick's own result, absorbs a
+    // one-tick blip silently; the fallback only stops masking it, and
+    // "starting"/stale correctly takes over, once no good read has come
+    // in for a full STALE_THRESHOLD_MS.
+    const effective = snapshot || lastGoodSnapshot;
+    const fresh = isFresh(effective);
     if (lastKnownRunning) {
       statusEl.textContent = fresh
-        ? `Running - updated ${new Date(snapshot.observed_at).toLocaleTimeString()}`
+        ? `Running - updated ${new Date(effective.observed_at).toLocaleTimeString()}`
         : "Starting up, scanning game memory (can take 1-3 minutes the first time)...";
       statusEl.className = fresh ? "running" : "starting";
     } else {
       statusEl.textContent = "Not running (start it from the Wrecks tab).";
       statusEl.className = "";
     }
-    render(fresh ? snapshot : null);
+    render(fresh ? effective : null);
   }
 
   async function initPin() {
