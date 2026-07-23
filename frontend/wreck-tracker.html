@@ -26,16 +26,41 @@
         </div>
         <div id="wreck-tracker-footer-row">
           <div id="wreck-tracker-status">Not running.</div>
-          <div id="wreck-tracker-legend" title="Bigger dot = closer · number = distance">
-            <span class="wreck-tracker-legend-item"
-              ><span class="wreck-tracker-dot hull"></span>Wreck</span
-            >
-            <span class="wreck-tracker-legend-item"
-              ><span class="wreck-tracker-dot crate"></span>Crate</span
-            >
-            <span class="wreck-tracker-legend-item"
-              ><span class="wreck-tracker-dot blackbox"></span>Black Box (on foot)</span
-            >
+          <div
+            id="wreck-tracker-legend"
+            title="Bigger dot = closer · number = distance"
+          >
+            <!-- Mutually exclusive with #wreck-tracker-legend-onfoot below,
+                 toggled by js/wreck-tracker-panel.js's render (via
+                 `display: contents`/`.hidden` - see components.css) to
+                 match on_foot exactly: in ship, only wreck markers show
+                 (see render's own per-mode filtering), so this size/tier
+                 key is what's relevant; on foot the wreck legend is
+                 dropped in favor of the crate/black-box one instead of
+                 showing both at once. -->
+            <span id="wreck-tracker-legend-ship">
+              <span class="wreck-tracker-legend-item"
+                ><span class="wreck-tracker-dot wreck-size-small"></span>Small</span
+              >
+              <span class="wreck-tracker-legend-item"
+                ><span class="wreck-tracker-dot wreck-size-big"></span>Big</span
+              >
+              <span
+                class="wreck-tracker-legend-item"
+                title="Wreck ring color = tier (crate item-level floor - 0 lowest, 2 highest)"
+                >Tier<span class="wreck-tracker-ring tier-0"></span
+                ><span class="wreck-tracker-ring tier-1"></span
+                ><span class="wreck-tracker-ring tier-2"></span
+              ></span>
+            </span>
+            <span id="wreck-tracker-legend-onfoot" class="hidden">
+              <span class="wreck-tracker-legend-item"
+                ><span class="wreck-tracker-dot crate"></span>Crate</span
+              >
+              <span class="wreck-tracker-legend-item"
+                ><span class="wreck-tracker-dot blackbox"></span>Black Box</span
+              >
+            </span>
           </div>
         </div>
       </div>

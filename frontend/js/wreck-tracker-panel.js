@@ -31,6 +31,8 @@
   const stripMarkersEl = document.getElementById("heading-strip-markers");
   const stripTicksEl = document.getElementById("heading-strip-ticks");
   const pinBtn = document.getElementById("pin-btn");
+  const legendShipEl = document.getElementById("wreck-tracker-legend-ship");
+  const legendOnFootEl = document.getElementById("wreck-tracker-legend-onfoot");
 
   // Matches wreck_tracker.py's own --ship-interval default (1/60s, NOT
   // --interval - that one's just the slower wreck/crate node-scan
@@ -49,6 +51,11 @@
   // the edge with an arrow rather than being hidden, so a target directly
   // behind you still shows SOME hint of which side to turn toward.
   const BEARING_RANGE_DEG = 100;
+  // On-foot marker range cap (see render's own per-mode filtering
+  // comment) - a round number in the same neighborhood as CLUSTER_DIST
+  // below but serving a completely different purpose (which nodes are
+  // shown at all, not which ones get merged into one marker).
+  const ON_FOOT_MAX_DISTANCE = 1000;
 
   // Kept in sync with wreck_tracker.py's WRECK_HULL_IDS (spacecraft-memory-
   // research repo) - a wreck's hull isn't always a single ShipWreck_Lvl0/1/2
@@ -244,7 +251,23 @@
     const t = Math.max(0, Math.min(1, (distance - NEAR_DISTANCE) / (FAR_DISTANCE - NEAR_DISTANCE)));
     return {
       size: DOT_SIZE_MAX - t * (DOT_SIZE_MAX - DOT_SIZE_MIN),
-      opacity: 1 - t * 0.65,
+      // Floor raised from 0.35 to 0.7 - the wreck-marker size/tier/edge
+      // color encoding (see theme.css's --wreck-size-*/--wreck-tier-*/
+      // --wreck-edge comment - a jointly-chosen 6-color set with real
+      // margin, ΔE 11.9 CVD / 24.2 normal-vision at full brightness) was
+      // re-validated at the actual ALPHA-COMPOSITED result at each
+      // candidate floor, not just at full opacity: 0.65 is the minimum
+      // where every pair still clears the CVD TARGET post-fade - 0.7 used
+      // here for a small margin above that. Confirmed earlier, weaker
+      // candidate palettes (smaller full-brightness margins) needed a much
+      // higher floor (0.9) to survive the same fade, or failed outright at
+      // the OLD 0.35 floor (ΔE 6-10 normal-vision once composited,
+      // regardless of hue choice) - no hue pick fixes that on its own,
+      // only fading less does; a stronger base palette just needs LESS
+      // fade-floor compensation to begin with. `size` above still carries
+      // the bulk of the near/far signal on its own (16px -> 6px,
+      // independent of this).
+      opacity: 1 - t * 0.3,
     };
   }
 
@@ -275,7 +298,22 @@
     const xPx = (xPct / 100) * stripWidthPx;
     const { size, opacity } = markerScale(e.distance);
 
-    pooled.el.className = `heading-strip-marker ${e.kind}${atEdge ? " edge" : ""}`;
+    // wreckSize/wreckTier (from the sibling spacecraft-memory-research
+    // repo's wreck_tracker.py annotate_wreck_size_tier - Big/Small and
+    // 0/1/2, resolved per-wreck via shared parentId) drive their own CSS
+    // classes, independent of `size` above (that's the distance-based dot
+    // SCALE, an unrelated thing that happens to share the name in the
+    // source data - kept separate here as sizeClass/tierClass to avoid
+    // colliding with it). Wreck (hull) markers only, per user request -
+    // crates don't need this, so the classes are simply never attached for
+    // any other kind rather than attached-but-unstyled (keeps the DOM
+    // reflecting what's actually shown, not just what CSS happens to
+    // ignore). Null for anything not yet resolvable - omitted rather than
+    // defaulted, so an unclassified hull node just renders plain instead
+    // of falsely claiming small/tier-0.
+    const sizeClass = e.kind === "hull" && e.wreckSize ? ` size-${e.wreckSize}` : "";
+    const tierClass = e.kind === "hull" && e.wreckTier != null ? ` tier-${e.wreckTier}` : "";
+    pooled.el.className = `heading-strip-marker ${e.kind}${sizeClass}${tierClass}${atEdge ? " edge" : ""}`;
     // Horizontal position AND self-centering combined into one transform
     // (left/top stay fixed at 0/50% in CSS - see that rule's own
     // comment) - `calc(${xPx}px - 50%)`'s percentage is relative to the
@@ -284,7 +322,11 @@
     // separately when this was expressed via `left` instead.
     pooled.el.style.transform = `translate(calc(${xPx}px - 50%), -50%)`;
     pooled.el.style.opacity = opacity;
-    pooled.el.title = `${e.label} - ${fmtDistance(e.distance)}u, bearing ${Math.round(e.bearingDeg)}°`;
+    const metaBits = [];
+    if (e.kind === "hull" && e.wreckSize) metaBits.push(e.wreckSize === "big" ? "Big" : "Small");
+    if (e.kind === "hull" && e.wreckTier != null) metaBits.push(`T${e.wreckTier}`);
+    const meta = metaBits.length ? ` (${metaBits.join(" ")})` : "";
+    pooled.el.title = `${e.label}${meta} - ${fmtDistance(e.distance)}u, bearing ${Math.round(e.bearingDeg)}°`;
     // Dot is fixed at DOT_SIZE_MAX in CSS - scaled down for distance
     // instead of resizing width/height directly.
     pooled.dotEl.style.transform = `scale(${size / DOT_SIZE_MAX})`;
@@ -318,7 +360,20 @@
     entries.forEach((e, i) => updateMarkerEl(markerPool[i], e, stripWidthPx));
   }
 
+  // Mirrors render's own per-mode marker filtering exactly (in ship: hull
+  // only; on foot: everything) - called from every branch of render,
+  // including its early returns, so the legend never lags a cycle behind
+  // or gets stuck showing the wrong group when snapshot/position data is
+  // briefly missing. Defaults to the ship group (onFoot=false) when
+  // on_foot itself isn't knowable yet, matching relevantNodes' own
+  // `snapshot.on_foot` (falsy/undefined) fallback to the in-ship filter.
+  function updateLegendMode(onFoot) {
+    legendShipEl.classList.toggle("hidden", !!onFoot);
+    legendOnFootEl.classList.toggle("hidden", !onFoot);
+  }
+
   function render(snapshot) {
+    updateLegendMode(snapshot && snapshot.on_foot);
     if (!snapshot || !snapshot.in_planet) {
       planetEl.textContent = snapshot ? "Not near/in a planet." : "";
       renderMarkers([]);
@@ -333,20 +388,28 @@
       renderMarkers([]);
       return;
     }
-    // Black boxes are on-foot-only: a rare walk-up pickup with no reason
-    // to clutter the strip while flying (unlike wrecks/crates, which are
-    // worth spotting from orbit for planning where to land) - filtered out
-    // here, before clustering, rather than merely skipped from merging
-    // like crates are.
-    const relevantNodes = nodes.filter(
-      (n) => classifyNode(n.resourceId) !== "blackbox" || snapshot.on_foot
-    );
+    // Per-mode filtering, raised directly by the user:
+    // - In ship: ONLY wreck hull markers, at any distance. Hull markers
+    //   are the "where to land" signal, worth seeing from orbit; crates/
+    //   black boxes aren't collectible without landing anyway, so showing
+    //   them from a ship is just noise.
+    // - On foot: ALL marker kinds (hull, crate, black box), but capped to
+    //   ON_FOOT_MAX_DISTANCE - once you're standing at a site, anything
+    //   farther than a short walk belongs to some other site and only
+    //   clutters the strip.
+    const relevantNodes = snapshot.on_foot
+      ? nodes.filter(
+          (n) => positionDist(snapshot.ship_position, n.position) <= ON_FOOT_MAX_DISTANCE
+        )
+      : nodes.filter((n) => classifyNode(n.resourceId) === "hull");
     const entries = clusterNodes(relevantNodes, snapshot.on_foot).map((c) => {
       const n = c.representative;
       const rel = relativeDirection(snapshot.ship_position, snapshot.ship_forward, snapshot.ship_up, n.position);
       return {
         label: RESOURCE_DISPLAY[n.resourceId] || n.resourceId,
         kind: c.kind,
+        wreckSize: n.wreckSize || null,
+        wreckTier: n.wreckTier != null ? n.wreckTier : null,
         ...rel,
       };
     });

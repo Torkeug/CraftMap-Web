@@ -2306,7 +2306,10 @@
 }
 
 .heading-strip-marker.hull .heading-strip-marker-dot {
-  background: var(--accent);
+  /* --wreck-size-small, not --accent - this whole set (fill/tier/edge) was
+     validated together as its own dedicated palette (see theme.css), not
+     against the app's separate --accent token. */
+  background: var(--wreck-size-small);
 }
 
 .heading-strip-marker.crate .heading-strip-marker-dot {
@@ -2321,6 +2324,57 @@
 
 .heading-strip-marker.edge .heading-strip-marker-dot {
   box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--danger);
+}
+
+/* Wreck (hull) marker size/tier/edge encoding - see theme.css's own
+   comment on --wreck-size-*/--wreck-tier-*/--wreck-edge for why this is a
+   dedicated 6-color set (fill=size, ring=tier, edge=off-screen indicator)
+   chosen and validated together, not reusing --accent/--danger. Scoped to
+   `.hull` only, per user request that crates don't need this -
+   js/wreck-tracker-panel.js's updateMarkerEl only ever attaches size-N/
+   tier-N classes when e.kind === "hull" in the first place, so this
+   scoping is belt-and-suspenders with that, not the only thing enforcing
+   it.
+
+   Ring layering, innermost to outermost: base separator ring (panel,
+   always present) -> tier ring (this block) -> edge ring (--wreck-edge,
+   only when off the visible bearing window) - each is its own box-shadow
+   layer so they nest concentrically instead of fighting over the same
+   layer. The plain (non-hull) `.edge` rule above still applies as-is to
+   crate/black-box markers (still --danger, untouched), which never match
+   `.hull.tier-N`/`.hull.edge` below. */
+.heading-strip-marker.hull.size-big .heading-strip-marker-dot {
+  background: var(--wreck-size-big);
+}
+
+.heading-strip-marker.hull.tier-0 .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--wreck-tier-0);
+}
+.heading-strip-marker.hull.tier-1 .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--wreck-tier-1);
+}
+.heading-strip-marker.hull.tier-2 .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--wreck-tier-2);
+}
+
+/* Hull markers with NO resolved tier still need their own edge override
+   (plain --danger red would collide/blend with --wreck-size-small blue
+   less than the tier-ring case, but this keeps ALL hull off-screen
+   indication on one consistent --wreck-edge color rather than switching
+   between --danger and --wreck-edge depending on whether tier happened to
+   resolve). */
+.heading-strip-marker.hull.edge .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--wreck-edge);
+}
+
+.heading-strip-marker.hull.edge.tier-0 .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--wreck-tier-0), 0 0 0 6px var(--wreck-edge);
+}
+.heading-strip-marker.hull.edge.tier-1 .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--wreck-tier-1), 0 0 0 6px var(--wreck-edge);
+}
+.heading-strip-marker.hull.edge.tier-2 .heading-strip-marker-dot {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--wreck-tier-2), 0 0 0 6px var(--wreck-edge);
 }
 
 .heading-strip-marker-dist {
@@ -2338,6 +2392,23 @@
   flex: 0 0 auto;
 }
 
+/* #wreck-tracker-legend-ship/#wreck-tracker-legend-onfoot: `display:
+   contents` makes the wrapper itself invisible to layout - its
+   .wreck-tracker-legend-item children become direct flex items of
+   #wreck-tracker-legend above, at the same gap, as if the wrapper span
+   weren't there at all. `.hidden` (toggled by js/wreck-tracker-panel.js's
+   render, mirroring the same on_foot check that gates which marker kinds
+   render at all) drops it from layout entirely instead. */
+#wreck-tracker-legend-ship,
+#wreck-tracker-legend-onfoot {
+  display: contents;
+}
+
+#wreck-tracker-legend-ship.hidden,
+#wreck-tracker-legend-onfoot.hidden {
+  display: none;
+}
+
 .wreck-tracker-legend-item {
   display: flex;
   align-items: center;
@@ -2351,8 +2422,12 @@
   display: inline-block;
 }
 
-.wreck-tracker-dot.hull {
-  background: var(--accent);
+.wreck-tracker-dot.wreck-size-small {
+  background: var(--wreck-size-small);
+}
+
+.wreck-tracker-dot.wreck-size-big {
+  background: var(--wreck-size-big);
 }
 
 .wreck-tracker-dot.crate {
@@ -2361,6 +2436,34 @@
 
 .wreck-tracker-dot.blackbox {
   background: var(--danger);
+}
+
+/* Tier ring swatches - hollow (panel-filled) circles whose RING matches
+   the same box-shadow-ring encoding used on the real heading-strip
+   markers (see components.css's .heading-strip-marker.hull.tier-N rules),
+   so this legend visually matches what's actually on the strip rather
+   than needing a differently-styled explanation. `color` + `currentColor`
+   lets one shared box-shadow declaration serve all three tiers instead of
+   repeating it per tier. */
+.wreck-tracker-ring {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--panel);
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.wreck-tracker-ring.tier-0 {
+  color: var(--wreck-tier-0);
+}
+
+.wreck-tracker-ring.tier-1 {
+  color: var(--wreck-tier-1);
+}
+
+.wreck-tracker-ring.tier-2 {
+  color: var(--wreck-tier-2);
 }
 
 

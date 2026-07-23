@@ -18,6 +18,67 @@
   --good: #3fb950;
   --warn: #f0883e;
   --danger: #da3633;
+  /* Wreck Tracker HUD (js/wreck-tracker-panel.js) - wreck (hull) marker
+     encoding only, deliberately NOT applied to crate/black-box markers
+     (per user request - --warn/--danger remain untouched for those,
+     unrelated markers entirely). Chosen as ONE 6-color set - fill×2
+     (size: Small/Big), ring×3 (tier: 0/1/2), edge×1 (the off-screen
+     bearing-window indicator, which nests as a THIRD concentric ring
+     around the same dot when a tiered wreck is also off-screen - see
+     components.css's .hull.edge.tier-N rules) - all picked and validated
+     together, not incrementally. Every earlier attempt here (single-hue
+     ordinal ramp; grey/green/gold; grey/magenta/orange) treated some
+     subset of these 6 roles as fixed - the app's pre-existing --accent/
+     --wreck-size-big/--danger, or the tier trio alone - and kept
+     re-breaking a DIFFERENT pair each time a fix patched the one being
+     looked at, because a value that's fine against a SWEPT stand-in for
+     another slot isn't guaranteed fine against that slot's ACTUAL value
+     (confirmed directly: a magenta chosen against a swept placeholder
+     blue passed at ΔE 21, then measured ΔE 3.5 - a real collision -
+     against the app's actual --accent once substituted in). Only a
+     genuinely joint search avoids that: greedy farthest-point selection
+     (node --input-type=module against scripts/validate_palette.js's
+     exported `validate`) starting from grey (kept - confirmed fine as
+     tier-0 throughout every prior round) and repeatedly adding whichever
+     candidate hue maximizes the WORST pairwise margin against everything
+     already chosen, all-pairs, with a hard >=60° raw hue-angle floor
+     between any two picks (not just trusting OKLab ΔE alone - the exact
+     gap that let grey/green/gold and blue/[near-blue] both look fine on
+     paper while sitting in the same visual hue family). Final 6 hues,
+     all mutually validated together (worst pair ΔE 11.9 CVD / 24.2
+     normal-vision - clears target with real margin, not just the floor):
+     grey, blue, cyan, yellow, magenta, red - assigned fill=blue/cyan
+     (closest to the ORIGINAL pre-feature look, though now dedicated vars
+     rather than reusing --accent/literal --danger, since this set's
+     specific shades are what were validated, not the app's separate
+     existing tokens), tier=grey/magenta/yellow (0/1/2 - yellow/gold as
+     the top tier matches the near-universal "gold = best" convention),
+     edge=red (matches conventional alert coloring, and happened to be
+     part of the optimal set anyway - no reason to abandon the intuitive
+     choice once the math already agrees with it).
+
+     Distance-fade interaction (the OTHER half of what made earlier
+     attempts read as "too close" - not just the hue pick): markerScale
+     fades a marker's whole opacity toward --panel with distance, and CSS
+     opacity dims box-shadow (every ring) right along with the fill.
+     Alpha-compositing ANY palette at the old 0.35 floor crushes it -
+     confirmed across multiple candidate palettes in this process, each
+     measuring ΔE 6-10 normal-vision once composited at 0.35, worse than
+     the original complaint regardless of which hues were chosen.
+     Re-validated the actual composited (faded) colors of this final set
+     at several floors - 0.65 is the minimum where every pair clears the
+     CVD TARGET post-fade, comfortably lower than earlier candidates
+     needed (their full-brightness margins were smaller to begin with, so
+     less room to survive fading) - markerScale's opacity floor set to
+     0.7 for a small margin above that minimum (see that function's own
+     comment). Dot SIZE (16px->6px, untouched by this) still carries most
+     of the near/far signal on its own. */
+  --wreck-size-small: #0d0df2;
+  --wreck-size-big: #52e0e0;
+  --wreck-tier-0: #7c828c;
+  --wreck-tier-1: #e052e0;
+  --wreck-tier-2: #f5f53d;
+  --wreck-edge: #f20d0d;
   /* Galaxy tab chip palette (js/galaxy.js's climate/water/lighting filter
      chips) - a dedicated categorical set, NOT --warn/--danger/--water
      above (those are reused elsewhere - buttons, borders - and changing
