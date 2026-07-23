@@ -42,7 +42,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from . import config, db, farming, resolver, shipwreck_loot, wreck_import, wreck_tracking
+from . import config, db, farming, poi_resource_import, resolver, shipwreck_loot, wreck_import, wreck_tracking
 
 
 class Api:
@@ -386,7 +386,34 @@ class Api:
         """node_name is a node-type name (e.g. "Clay Shell"), same
         namespace as resource_sources' own source_name column - NOT a raw
         material name, since galaxy_resources only ever holds live per-node
-        placement data (see tools/backfill_galaxy_resources.py)."""
+        placement data (see tools/backfill_galaxy_resources.py).
+
+        Also batch-attaches exact_poi_counts from poi_resource_nodes (one
+        extra query total, not one per row) - the sibling
+        spacecraft-memory-research repo's wreck_tracker.py, extended to
+        aggregate ordinary resource nodes by POI membership while the
+        player is on a planet (see that repo's CRAFTMAP_INTEGRATION.md).
+        Strictly better ground truth than this same row's own poi_tags/
+        poi_area_density (which can only say WHICH POI(s) a resource is
+        tied to, never split its count per POI) but only available for
+        planets actually visited - a row for a never-visited planet simply
+        gets exact_poi_counts: [], not a missing key, so the frontend can
+        treat it uniformly.
+
+        poi_area_density_is_exact/poi_area_density_poi_index pass through
+        db.get_galaxy_sources_for_resource's own same-named return fields -
+        when poi_area_density_is_exact is True, poi_area_density_poi_index
+        names the SINGLE POI (of possibly several exact_poi_counts entries)
+        that's actually driving this row's poi_area_density/ranking value,
+        so the frontend can point the player at that one spot directly
+        rather than making them cross-reference exact_poi_counts by hand."""
+        exact_by_planet = {}
+        for system_name, planet, poi_index, node_count, observed_at in (
+            db.get_poi_resource_node_counts_for_resource(node_name)
+        ):
+            exact_by_planet.setdefault((system_name, planet), []).append(
+                {"poi_index": poi_index, "node_count": node_count, "observed_at": observed_at}
+            )
         return [
             {
                 "system_name": system_name,
@@ -404,12 +431,16 @@ class Api:
                 "attribute_names": attribute_names,
                 "poi_landmarks": poi_landmarks,
                 "poi_sun_states": poi_sun_states,
+                "exact_poi_counts": exact_by_planet.get((system_name, planet), []),
+                "poi_area_density_is_exact": poi_area_density_is_exact,
+                "poi_area_density_poi_index": poi_area_density_poi_index,
             }
             for (
                 system_name, planet, sector, node_count, density, poi_tags,
                 pure_poi, poi_area_density, is_asteroid, temperature,
                 temperature_name, attributes, attribute_names,
                 poi_landmarks, poi_sun_states,
+                poi_area_density_is_exact, poi_area_density_poi_index,
             ) in db.get_galaxy_sources_for_resource(
                 node_name, include_asteroids=not exclude_asteroids
             )
@@ -576,22 +607,28 @@ class Api:
     def get_live_wreck_snapshot(self):
         """The poller's current-planet snapshot, read straight from its
         overwritten-every-cycle JSON file - None if never run yet. Also
-        piggybacks a wreck_events import off the SAME call (rather than
-        running a separate polling loop in this process) so wreck_events
-        stays current for free as long as the frontend keeps calling this
-        while a panel is open - safe to do on every call, even at the
-        HUD window's 5Hz poll rate, since wreck_import.import_events_
-        from_file is cursor-based (only reads newly-appended bytes, not
-        the whole file - see that function's own docstring). Import
-        failures are swallowed here - a live-view hiccup should never be
-        surfaced as if the live tracking itself failed; the next
-        successful poll's import catches back up."""
+        piggybacks TWO imports off the SAME call (rather than running a
+        separate polling loop in this process): wreck_events (cursor-based,
+        only reads newly-appended bytes) and poi_resource_nodes (whole-file
+        reread of a small, always-overwritten snapshot - see
+        poi_resource_import's own docstring for why that one doesn't need a
+        cursor). Both stay current for free as long as the frontend keeps
+        calling this while a panel is open - safe to do on every call, even
+        at the HUD window's high poll rate. Import failures are swallowed
+        here - a live-view hiccup should never be surfaced as if the live
+        tracking itself failed; the next successful poll's import catches
+        back up."""
         script_path = config.load_config().get("wreck_tracker_script_path")
         if not script_path:
             return None
         live_out, events_out, _state_path = wreck_tracking.resolve_paths(script_path)
+        poi_counts_path = wreck_tracking.resolve_poi_counts_path(script_path)
         try:
             wreck_import.import_events_from_file(events_out)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+        try:
+            poi_resource_import.import_poi_resource_snapshot(poi_counts_path)
         except Exception:  # pylint: disable=broad-exception-caught
             pass
         return wreck_tracking.read_live_snapshot(live_out)

@@ -30,6 +30,16 @@ def resolve_paths(script_path):
     )
 
 
+def resolve_poi_counts_path(script_path):
+    """poi_resource_counts.json path matching wreck_tracker.py's own
+    --poi-out default (alongside the script) - same zero-config-agreement
+    convention resolve_paths already established for the other three
+    output files. Kept as its own function rather than folded into
+    resolve_paths' return tuple so existing callers of that function don't
+    need to change shape."""
+    return Path(script_path).resolve().parent / "poi_resource_counts.json"
+
+
 def python_executable(configured_python_path):
     """The interpreter to launch wreck_tracker.py with. It's pure-stdlib
     (see its own imports), so any Python 3 install works - doesn't need

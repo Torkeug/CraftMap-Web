@@ -155,6 +155,267 @@ def test_get_galaxy_sources_leaves_poi_area_density_none_when_variants_have_diff
     assert combined[7] is None  # can't combine poi_area_density across differing footprints
 
 
+def test_get_galaxy_sources_prefers_exact_poi_area_density_when_fully_covered(db):
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "poi0", 2.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+    ])
+    # The estimate said 100 nodes; on-planet tracking found 200 - a real,
+    # much richer spot than the coarse dump guessed.
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 200, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    assert len(results) == 1
+    # density_per_node = 1.0/100 = 0.01; exact = 200 * 0.01 / 0.05 = 40.0,
+    # not the stale 2.0 estimate.
+    assert results[0][7] == pytest.approx(40.0)
+    assert results[0][15] is True  # poi_area_density_is_exact
+    assert results[0][16] == "poi0"  # poi_area_density_poi_index - the winning POI
+
+
+def test_get_galaxy_sources_credits_a_single_confirmed_poi_even_with_unconfirmed_siblings(db):
+    # poi0 AND poi1 are both declared, but only poi0 has ever been
+    # on-planet-confirmed - poi0's own density doesn't depend on poi1's
+    # (unknown) stats at all, so this should still be credited rather than
+    # falling back to the stale estimate just because poi1 is unconfirmed.
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "poi0,poi1", 2.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+        ("Sys1", "PlanetA", "poi1", "Natural Canyon", "BalisePOI2", "day", 0.4, 0.03),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 200, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    # density_per_node = 1.0/100 = 0.01; poi0 alone = 200*0.01/0.05 = 40.0
+    assert results[0][7] == pytest.approx(40.0)
+    assert results[0][15] is True  # poi_area_density_is_exact
+    assert results[0][16] == "poi0"  # poi_area_density_poi_index
+
+
+def test_get_galaxy_sources_does_not_dilute_a_rich_poi_by_summing_with_a_sparse_sibling(db):
+    # poi0 is rich (50 nodes in a small 0.05 area), poi1 is sparse (2 nodes
+    # in a much bigger 0.20 area) - an earlier, wrong version of this
+    # override BLENDED both together (50+2)/(0.05+0.20) = 208*density_per_node,
+    # far below poi0's own individual 1000*density_per_node. The current
+    # weighted-decay-sum still evaluates each POI individually and ranks
+    # poi0 first, but poi1's own (much smaller) individual density still
+    # contributes a decayed sliver on top, rather than being ignored
+    # entirely or blended in at full weight.
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "poi0,poi1", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+        ("Sys1", "PlanetA", "poi1", "Natural Canyon", "BalisePOI2", "day", 0.4, 0.20),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 50, "2026-07-23T00:00:00+00:00"),
+        ("Sys1", "PlanetA", "poi1", "Aquamarine", 2, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    # density_per_node = 1.0/100 = 0.01; poi0 alone = 50*0.01/0.05 = 10.0,
+    # poi1 alone = 2*0.01/0.20 = 0.1 - sorted [10.0, 0.1], weighted sum =
+    # 10.0 + 0.5*0.1 = 10.05, nowhere near the old (wrong) blended 208-scale
+    # figure, and still clearly poi0-led.
+    assert results[0][7] == pytest.approx(10.05)
+    assert results[0][16] == "poi0"
+
+
+def test_get_galaxy_sources_credits_multiple_good_pois_over_one_slightly_better_one(db):
+    # Planet A has TWO confirmed, genuinely good POIs (40 and 41); Planet B
+    # has only ONE, slightly better POI (42). A straight max() would rank
+    # Planet B above Planet A - wrong, since having two good options is
+    # itself worth something. The weighted decay sum should let Planet A's
+    # combined credit (41 + 0.5*40 = 61) win over Planet B's lone 42.
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "poi0,poi1", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+        (
+            "Sys2", "PlanetB", "Sec1", "Aquamarine", 100, 1.0, "poi0", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+        ("Sys1", "PlanetA", "poi1", "Natural Canyon", "BalisePOI2", "day", 0.4, 0.05),
+        ("Sys2", "PlanetB", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+    ])
+    # density_per_node = 1.0/100 = 0.01 for both planets, area = 0.05 for
+    # every POI here, so a target individual density D needs count = D*5.
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 200, "2026-07-23T00:00:00+00:00"),  # 40.0
+        ("Sys1", "PlanetA", "poi1", "Aquamarine", 205, "2026-07-23T00:00:00+00:00"),  # 41.0
+        ("Sys2", "PlanetB", "poi0", "Aquamarine", 210, "2026-07-23T00:00:00+00:00"),  # 42.0
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    assert [r[1] for r in results] == ["PlanetA", "PlanetB"]
+    by_planet = {r[1]: r for r in results}
+    assert by_planet["PlanetA"][7] == pytest.approx(41.0 + 0.5 * 40.0)
+    assert by_planet["PlanetB"][7] == pytest.approx(42.0)
+
+
+def test_get_galaxy_sources_computes_exact_poi_area_density_for_mixed_rows(db):
+    # poi_tags includes "general" - pure_poi is False, and the ESTIMATE
+    # never gets a poi_area_density for a mixed row at all (see
+    # tools/backfill_galaxy_resources.py's load_rows) - but once poi0's own
+    # sub-portion is exact-confirmed, this row should now get a real
+    # poi_area_density computed from JUST that sub-portion (ignoring the
+    # unconfirmed "general" share entirely - no confirmation of it is
+    # needed), resolving the "RANKING LIMITATION" noted above the final sort.
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "general,poi0", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 200, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    assert results[0][6] is False  # pure_poi - "general" is still present
+    # density_per_node = 1.0/100 = 0.01; exact poi0-only = 200*0.01/0.05 = 40.0
+    assert results[0][7] == pytest.approx(40.0)
+
+
+def test_get_galaxy_sources_credits_a_single_confirmed_poi_in_a_mixed_row_with_unconfirmed_siblings(db):
+    # Two actual POIs plus "general" - only poi0 is exact-confirmed, poi1
+    # isn't - poi0's own density stands alone regardless, same reasoning as
+    # the pure-POI equivalent above.
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "general,poi0,poi1", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+        ("Sys1", "PlanetA", "poi1", "Natural Canyon", "BalisePOI2", "day", 0.4, 0.03),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 200, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    assert results[0][7] == pytest.approx(40.0)
+    assert results[0][16] == "poi0"
+
+
+def test_get_galaxy_sources_mixed_row_floors_at_plain_density_when_general_dominates(db):
+    # 1000 general nodes + a small confirmed poi0 pocket of only 30 - the
+    # POI sub-portion's OWN density (30*density_per_node/0.05) comes out
+    # LOWER than the row's plain total density here, since the confirmed
+    # POI share is small relative to the still-unconfirmed general share.
+    # Taking poi_sub_density unconditionally would WRONGLY rank this row
+    # below a planet with less total supply - must floor at plain density
+    # instead, crediting the real bonus abundance beyond the POI.
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 1030, 1.0, "general,poi0", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 30, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    # density_per_node = 1.0/1030; poi_sub_density = 30*density_per_node/0.05
+    # ≈ 0.5825, well below the plain density of 1.0 - the floor should win.
+    assert results[0][7] == pytest.approx(1.0)
+    # The floor (plain density) won, not the exact POI figure - so this
+    # isn't a "newly confirmed" ranking number, and there's no single POI
+    # to point the player at.
+    assert results[0][15] is False  # poi_area_density_is_exact
+    assert results[0][16] is None  # poi_area_density_poi_index
+
+
+def test_get_galaxy_sources_exact_mixed_row_outranks_equal_density_general_only_row(db):
+    # This is the exact "RANKING LIMITATION" scenario: equal plain density,
+    # but PlanetA has a real, confirmed walkable-POI concentration and
+    # PlanetB is genuinely scattered everywhere - PlanetA should now win.
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "general,poi0", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+        (
+            "Sys2", "PlanetB", "Sec1", "Aquamarine", 100, 1.0, "general", None, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 30, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    assert [r[1] for r in results] == ["PlanetA", "PlanetB"]
+
+
+def test_get_galaxy_sources_leaves_estimate_when_poi_area_unknown(db):
+    db.import_galaxy_resources([
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "poi0", 2.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    # No galaxy_poi_landmarks row at all for poi0 - area unknown, so there's
+    # no denominator to convert the exact count into a density with.
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 200, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    assert results[0][7] == pytest.approx(2.0)  # untouched estimate
+
+
+def test_get_galaxy_sources_exact_data_can_change_ranking_order(db):
+    db.import_galaxy_resources([
+        # PlanetA's estimate looks better (3.0 > 2.0)...
+        (
+            "Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "poi0", 3.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+        (
+            "Sys2", "PlanetB", "Sec1", "Aquamarine", 100, 1.0, "poi0", 2.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db.import_galaxy_poi_landmarks([
+        ("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.10),
+    ])
+    # ...but on-planet tracking found PlanetA's real spot is much sparser
+    # than the coarse estimate guessed (density_per_node=0.01, exact=
+    # 10*0.01/0.10=1.0), which should now rank it BELOW PlanetB's untouched
+    # 2.0 estimate.
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Aquamarine", 10, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Aquamarine")
+    assert [r[1] for r in results] == ["PlanetB", "PlanetA"]
+
+
 def test_import_galaxy_poi_landmarks_is_replace_not_ignore(db):
     rows = [("Sys1", "PlanetA", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05)]
     db.import_galaxy_poi_landmarks(rows)

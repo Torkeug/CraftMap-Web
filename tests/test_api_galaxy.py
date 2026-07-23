@@ -68,8 +68,65 @@ def test_get_galaxy_sources_shapes_rows_as_dicts(api):
             "attribute_names": None,
             "poi_landmarks": [],
             "poi_sun_states": [],
+            "exact_poi_counts": [],
+            "poi_area_density_is_exact": False,
+            "poi_area_density_poi_index": None,
         }
     ]
+
+
+def test_get_galaxy_sources_attaches_exact_poi_counts(api):
+    db_module.import_galaxy_resources([
+        (
+            "Sysices", "Sysices I", "Jester", "Aquamarine", 36, 0.29, "poi0,poi1", 4.96, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db_module.import_poi_resource_nodes([
+        ("Sysices", "Sysices I", "poi0", "Aquamarine", 12, "2026-07-23T00:00:00+00:00"),
+        ("Sysices", "Sysices I", "poi1", "Aquamarine", 5, "2026-07-23T00:00:00+00:00"),
+    ])
+    rows = api.get_galaxy_sources("Aquamarine")
+    json.dumps(rows)
+    assert rows[0]["exact_poi_counts"] == [
+        {"poi_index": "poi0", "node_count": 12, "observed_at": "2026-07-23T00:00:00+00:00"},
+        {"poi_index": "poi1", "node_count": 5, "observed_at": "2026-07-23T00:00:00+00:00"},
+    ]
+
+
+def test_get_galaxy_sources_surfaces_which_poi_is_driving_the_ranking(api):
+    db_module.import_galaxy_resources([
+        (
+            "Sysices", "Sysices I", "Jester", "Aquamarine", 100, 1.0, "poi0,poi1", 2.0, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    db_module.import_galaxy_poi_landmarks([
+        ("Sysices", "Sysices I", "poi0", "Meteor Crater", "BalisePOI", "day", 0.6, 0.05),
+        ("Sysices", "Sysices I", "poi1", "Natural Canyon", "BalisePOI2", "day", 0.4, 0.20),
+    ])
+    db_module.import_poi_resource_nodes([
+        ("Sysices", "Sysices I", "poi0", "Aquamarine", 50, "2026-07-23T00:00:00+00:00"),
+        ("Sysices", "Sysices I", "poi1", "Aquamarine", 2, "2026-07-23T00:00:00+00:00"),
+    ])
+    rows = api.get_galaxy_sources("Aquamarine")
+    json.dumps(rows)
+    # poi0 (50/0.05) is a far better individual spot than poi1 (2/0.20) -
+    # the API should point directly at poi0, not just list both counts.
+    assert rows[0]["poi_area_density_is_exact"] is True
+    assert rows[0]["poi_area_density_poi_index"] == "poi0"
+
+
+def test_get_galaxy_sources_exact_poi_counts_empty_when_never_visited(api):
+    db_module.import_galaxy_resources([
+        (
+            "Sysices", "Sysices I", "Jester", "Aquamarine", 36, 0.29, "poi0,poi1", 4.96, 0,
+            "PlanetTemperate", "Temperate", None, None,
+        ),
+    ])
+    rows = api.get_galaxy_sources("Aquamarine")
+    json.dumps(rows)
+    assert rows[0]["exact_poi_counts"] == []
 
 
 def test_get_galaxy_sources_includes_poi_landmarks(api):

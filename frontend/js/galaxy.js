@@ -467,11 +467,67 @@
     return poiLine;
   }
 
+  // ---- exact per-POI counts (only present for planets actually visited
+  // while live-tracking was on - see backend/poi_resource_import.py) ----
+  // A strictly better ground truth than makePoiLine's own poi_tags-based
+  // summary above (which can only say WHICH POI(s) a resource touches,
+  // never split its count per POI) - shown as an additional line right
+  // alongside it, not a replacement, since most planets will never have
+  // this (only ones actually visited get a row here at all).
+  function makeExactPoiCountsLine(row) {
+    if (!row.exact_poi_counts || !row.exact_poi_counts.length) return null;
+
+    const el = document.createElement("div");
+    el.className = "galaxy-poi-exact-line";
+
+    const badge = document.createElement("span");
+    badge.className = "galaxy-poi-exact-badge";
+    badge.textContent = "confirmed";
+    const freshest = row.exact_poi_counts
+      .map((entry) => entry.observed_at)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    badge.title = freshest
+      ? `Exact node count, last observed while tracking on this planet: ${freshest}`
+      : "Exact node count, observed while tracking on this planet";
+    el.appendChild(badge);
+
+    row.exact_poi_counts
+      .slice()
+      .sort((a, b) => b.node_count - a.node_count)
+      .forEach((entry, i) => {
+        if (i > 0) el.appendChild(document.createTextNode(", "));
+        // poi_area_density_poi_index (backend/db.py's get_galaxy_sources_for_resource)
+        // is the ONE confirmed POI actually driving this row's ranking
+        // number (the best individual spot, not a sum/average across every
+        // confirmed POI) - highlighted here so the player can go straight
+        // to it instead of having to compare every listed count by hand.
+        const isBest = row.poi_area_density_is_exact && entry.poi_index === row.poi_area_density_poi_index;
+        const seg = document.createElement("span");
+        if (isBest) {
+          seg.className = "galaxy-poi-exact-best";
+          seg.title = "This POI's confirmed density is what's driving this row's ranking - your best bet for this resource.";
+          seg.appendChild(document.createTextNode("★ "));
+        }
+        if (entry.poi_index === "general") {
+          seg.appendChild(document.createTextNode(`unanchored: ${entry.node_count}`));
+        } else {
+          seg.appendChild(makePoiSegment(entry.poi_index, row));
+          seg.appendChild(document.createTextNode(`: ${entry.node_count}`));
+        }
+        el.appendChild(seg);
+      });
+    return el;
+  }
+
   function makeExpandDetail(row) {
     const el = document.createElement("div");
     el.className = "galaxy-row-expand";
 
     el.appendChild(makePoiLine(row));
+    const exactEl = makeExactPoiCountsLine(row);
+    if (exactEl) el.appendChild(exactEl);
 
     const statsLine = document.createElement("div");
     statsLine.className = "galaxy-row-stats";

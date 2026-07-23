@@ -1195,6 +1195,44 @@
   align-items: center;
 }
 
+/* Exact, on-planet-confirmed per-POI node counts (poi_resource_nodes,
+   backend/poi_resource_import.py) - a strictly better ground truth than
+   .galaxy-poi-line's own poi_tags-based summary above it, shown as its own
+   line only when present (most planets have never been visited while live
+   tracking was on, so this simply doesn't render for them). */
+.galaxy-poi-exact-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.galaxy-poi-exact-badge {
+  display: inline-block;
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--good);
+  border: 1px solid var(--good);
+  border-radius: 3px;
+  padding: 0 4px;
+  cursor: help;
+}
+
+/* The single confirmed POI actually driving this row's ranking value
+   (poi_area_density_poi_index) - distinct from the plain "confirmed" badge
+   above (which just means SOME exact data exists for this planet): this
+   marks WHICH of possibly several listed POIs is the one worth going to. */
+.galaxy-poi-exact-best {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: help;
+}
+
 #galaxy-rows.scroll-rows {
   flex: 1 1 auto;
   min-height: 60px;
