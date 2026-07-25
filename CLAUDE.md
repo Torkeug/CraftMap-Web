@@ -60,23 +60,32 @@ backend/
   api.py       # Api class - the pywebview js_api bridge, thin wrappers over the above
   win32util.py # ctypes Win32 interop: hwnd resolution, click-through, focus-forcing, single-instance mutex
   shipwreck_loot.py  # static shipwreck rare-loot-crate odds (Wrecks tab) - loads game_data_extract/shipwreck_loot.json
+  farming.py         # static Xenic Farm crop/variant reference (Farming tab) - loads game_data_extract/farming.json
   wreck_tracking.py  # subprocess launch/live-snapshot-read helpers for the sibling repo's wreck_tracker.py poller
   wreck_import.py    # imports wreck_tracker.py's JSONL event log into db.wreck_events (see tools/import_wreck_events.py)
+  poi_resource_import.py  # imports wreck_tracker.py's per-POI resource-node-count snapshot into poi_resource_nodes (piggybacked on the live-snapshot poll)
 frontend/
-  index.html          # main window: deposit tracker + recipe panel
+  index.html          # main window: Resource/Location/Sources/Wrecks/Farming/Recipe tabs (+ Queue-window toggle)
   queue.html          # Craft Queue window
+  wreck-tracker.html  # Wreck Tracker window (heading-strip HUD)
   css/theme.css, components.css
   js/
     api.js            # CraftMapApi.call() - wraps pywebview.api.* with try/catch + inline error banner
     drag-resize.js     # DragResize.attach() - dragbar/resize-grip handling + dynamic min-size guard
     dropdown.js         # LiveDropdown - no-grab autocomplete popover
+    confirm-dialog.js   # generic themed confirm modal (DOM, not window.confirm)
     breakdown-tree.js   # BreakdownTree - shared recipe/queue breakdown-tree renderer + step popup
-    deposits.js          # deposit tracker screen
+    deposits.js          # deposit tracker screen (incl. the Galaxy sub-tab wiring)
+    sources.js           # Sources screen: which node names yield a raw resource
+    galaxy.js            # Galaxy sub-tab: ranked per-planet data for a node type
+    wrecks.js            # Wrecks screen: shipwreck rare-loot-crate odds browser
+    farming.js           # Farming screen: Xenic Farm crop-variant reference + per-harvest calculator
     recipe-panel.js       # recipe panel screen
     queue-panel.js          # Craft Queue window logic
-    screens.js                # top-level Resource/Location/Recipe/Queue-tab switch
+    wreck-tracker-panel.js  # Wreck Tracker window logic (bearing ribbon HUD)
+    screens.js                # top-level tab switch across the main window's screens
     settings.js                # hotkey settings dialog (DOM modal)
-main.py        # entrypoint: single-instance check, init_db, create both windows, App state machine, hotkey/tray
+main.py        # entrypoint: single-instance check, init_db, window creation (main up front; Craft Queue / Wreck Tracker lazily), App state machine, hotkey/tray
 tools/
   backfill_recipe_metadata.py  # one-off maintenance script enriching resources.db from game_data_extract/
   backfill_galaxy_resources.py # repeatable import of the sibling repo's galaxy-wide dump into galaxy_resources/galaxy_systems/galaxy_poi_landmarks
@@ -93,7 +102,7 @@ game_data_extract/  # game-authoritative recipe/item data snapshots (see its own
 
 ### The `Api` bridge (`backend/api.py`)
 
-One `Api` instance, shared by both windows (`js_api=api` passed to both `webview.create_window()` calls in `main.py`), exposed to JS as `window.pywebview.api.*`. Methods are close to 1:1 wrappers around `backend/db.py`/`backend/resolver.py` functions, converting tuples to dicts for JSON-friendliness.
+One `Api` instance, shared by every window (`js_api=api` passed to each `webview.create_window()` call in `main.py` - main, Craft Queue, Wreck Tracker), exposed to JS as `window.pywebview.api.*`. Methods are close to 1:1 wrappers around `backend/db.py`/`backend/resolver.py` functions, converting tuples to dicts for JSON-friendliness.
 
 **Critical, easy to regress**: every piece of `Api`'s own internal state must be an underscore-prefixed attribute (`self._overlay_window`, `self._queue_window`, `self._on_quit`, `self._app_ctrl`, etc.), never a plain name. pywebview builds its JS-exposed function list by walking `dir(api_instance)` and recursing into every non-underscore, non-callable attribute (`webview/util.py`'s `get_functions()`). A plain `self.overlay_window = window` attribute makes it recurse into the pywebview `Window` object → its `.native` WinForms `Form` → `.AccessibilityObject.Bounds.Empty` (a static property pythonnet keeps re-wrapping), causing infinite recursion that crashes the app on load. The underscore prefix is pywebview's own documented opt-out.
 

@@ -1,6 +1,6 @@
 """Static Xenic Farm crop-variant reference data (frontend/js/farming.js's
 "Farming" tab) - hand-transcribed from shipbuilder/tools/game_logic_notes.md
-Findings 13/14 into game_data_extract/farming.json, not derived from a
+Findings 13/14/16/17/18 into game_data_extract/farming.json, not derived from a
 runtime game-data dump the way shipwreck_loot.json is (see that finding's
 own header for the data.cdb/decompile source) - so unlike
 backend/shipwreck_loot.py there's no companion extract_*.py script; update

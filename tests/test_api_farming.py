@@ -143,13 +143,13 @@ def test_only_invasive_tagged_variants_get_the_spread_adjacency_line():
     assert spread_variants == invasive_variants == {"Dreamwood", "Plainkorn"}
 
 
-def test_only_rockwood_glow_forbids_any_fertilizer():
-    """"fertilizer_forbidden_any" marks a genuinely different case from a
-    merely empty fertilizer_required (see farming.json's own
-    _meta.fertilizer_forbidden_any) - Finding 13/14's own tables write
-    Rockwood Glow's Fertilizer-required cell as the distinct word "none"
-    while every other unconstrained variant (Spacekorn Plain, Woolly
-    Spacekorn) uses "-", so only Glowwood should carry this flag."""
+def test_no_variant_carries_the_removed_fertilizer_forbidden_any_flag():
+    """An earlier revision marked Rockwood Glow "fertilizer_forbidden_any"
+    from a live-play impression; the flagged-for-follow-up disassembly
+    check then found the game has no such mechanism at all (a gate can
+    only require/forbid SPECIFIC supplements - see farming.json's own
+    _meta.fertilizer_forbidden_any_removed), so the flag must stay gone -
+    frontend/js/farming.js no longer knows how to render it either."""
     api = Api()
     crops = api.get_farming_crops()
     flagged = [
@@ -158,28 +158,29 @@ def test_only_rockwood_glow_forbids_any_fertilizer():
         for v in crop["variants"]
         if v.get("fertilizer_forbidden_any")
     ]
-    assert flagged == ["Glowwood"]
+    assert flagged == []
 
 
-def test_speed_effect_entries_have_valid_stat_type_and_value():
-    """frontend/js/farming.js's timing calculator trusts every speed_effect
-    entry's shape completely (see farming.json's own _meta.speed_effect) -
-    a bad stat/type name would silently no-op instead of erroring, and a
-    non-positive value would produce a nonsensical (zero/negative/infinite)
-    adjusted duration, so this guards the hand-transcription."""
+def test_effect_entries_have_valid_attr_and_value():
+    """frontend/js/farming.js's harvest calculator trusts every effects
+    entry's shape completely (see farming.json's own _meta.effects) - a
+    bad attr name would silently no-op instead of erroring, and a
+    non-positive growth_speed_mult would produce a nonsensical
+    (zero/negative/infinite) growth time and yield, so this guards the
+    hand-transcription. The old speed_effect model (stat/type keys) must
+    not reappear - the frontend no longer reads it."""
     api = Api()
     crops = api.get_farming_crops()
-    valid_stats = {"growth", "fruit", "byproduct"}
-    valid_types = {"additive", "multiplicative"}
+    valid_attrs = {"all_speed", "growth_speed_mult", "fruit_qty", "byproduct_qty"}
     seen_any = False
     for crop in crops:
         for variant in crop["variants"]:
             sources = list(variant["enrichments"]) + variant.get("neighbor_effects", [])
             for entry in sources:
-                for eff in entry.get("speed_effect", []):
+                assert "speed_effect" not in entry, entry
+                for eff in entry.get("effects", []):
                     seen_any = True
-                    assert eff["stat"] in valid_stats
-                    assert eff["type"] in valid_types
+                    assert eff["attr"] in valid_attrs
                     assert eff["value"] > 0
     assert seen_any
 
@@ -195,22 +196,38 @@ def test_dial_group_entries_reference_a_valid_group():
                     assert entry["dial_group"] in ("temp", "light")
 
 
-def test_quantity_only_enrichments_carry_no_speed_effect():
-    """An enrichment whose effect text says "quantity" (not "speed") boosts
-    output, not timing - this app tracks no yield/quantity field at all, so
-    those entries must NOT carry a speed_effect (frontend/js/farming.js
-    would otherwise render a checkbox that claims to change a cycle time
-    it actually has no effect on)."""
+def test_every_enrichment_is_toggleable_and_effects_match_their_prose():
+    """Since Finding 18 the app models yields, so quantity bonuses are
+    toggleable too - every enrichment must carry a non-empty effects array
+    (a missing one would silently render as dead, non-interactive text),
+    and each effect attr must agree with the entry's own prose: a
+    fruit_qty/byproduct_qty entry talks about "quantity", an all_speed
+    entry about "speed", a growth_speed_mult entry about growing "slower"
+    (the below-1 metabolic-speed tradeoff is the only kind in the data).
+    Guards the hand-transcription against attr/prose mismatches - exactly
+    the +speed-vs-+quantity mislabeling bug this tab shipped with once.
+    neighbor_effects entries are held to the same bar (each carries its
+    own "effect" prose - frontend/js/farming.js renders it after the
+    label, so a missing one would leave a description-less toggle)."""
     api = Api()
     crops = api.get_farming_crops()
-    checked_any = False
     for crop in crops:
         for variant in crop["variants"]:
-            for e in variant["enrichments"]:
-                if "quantity" in e["effect"].lower() and "speed" not in e["effect"].lower():
-                    checked_any = True
-                    assert "speed_effect" not in e, e
-    assert checked_any
+            sources = list(variant["enrichments"]) + variant.get("neighbor_effects", [])
+            for e in sources:
+                effects = e.get("effects")
+                assert effects, e
+                assert e.get("effect"), e
+                if "effect_note" in e:
+                    assert isinstance(e["effect_note"], str) and e["effect_note"], e
+                text = e["effect"].lower()
+                for eff in effects:
+                    if eff["attr"] in ("fruit_qty", "byproduct_qty"):
+                        assert "quantity" in text or "per harvest" in text, e
+                    elif eff["attr"] == "all_speed":
+                        assert "speed" in text, e
+                    elif eff["attr"] == "growth_speed_mult":
+                        assert "slower" in text, e
 
 
 def test_neighbor_effects_only_on_variants_with_a_real_source():

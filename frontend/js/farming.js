@@ -2,7 +2,18 @@
  * Xenic Farm's crop variants (Rockwood Nut / Spacekorn). Data comes from
  * game_data_extract/farming.json (backend/farming.py's get_farming_crops),
  * hand-transcribed from the sibling shipbuilder repo's game_logic_notes.md
- * Findings 13/14 - see that file for the original decompile-sourced tables.
+ * Findings 13/14/16/17/18 - see that file for the original
+ * decompile-sourced tables.
+ *
+ * Harvest model (Finding 18, see farming.json's _meta.harvest_mechanism):
+ * fruit/byproduct are NOT repeating post-maturity cycles - both accumulate
+ * while the plant grows and pay out once, at harvest, after which the plot
+ * is empty again. So the card's calculator shows growth TIME plus per-
+ * harvest YIELD counts, not three parallel "cycle" durations, and toggles
+ * feed four accumulators with the game's own attribute semantics
+ * (_meta.effects): all_speed shortens growth without changing yield,
+ * growth_speed_mult trades time against yield 1:1, fruit_qty/byproduct_qty
+ * scale only the counts.
  *
  * Deliberately goal-first, not state-first: an earlier version of this tab
  * had the player pick a Temperature/Light dial pair and highlighted which
@@ -211,14 +222,6 @@
   // fertilizer_forbidden stays OR-to-fail (any one present blocks) either
   // way, which is just what "forbidden" means for a deny-list.
   function fmtFertilizerRequirement(variant) {
-    // Distinct from an empty fertilizer_required (= no SPECIFIC fertilizer
-    // needed, any or none is fine) - this means no fertilizer of ANY kind
-    // may be present at all. See farming.json's own _meta.fertilizer_forbidden_any
-    // for why these two "none" cases are genuinely different, not just two
-    // ways of writing the same thing.
-    if (variant.fertilizer_forbidden_any) {
-      return "must be empty - no fertilizer of any kind";
-    }
     const req = variant.fertilizer_required || [];
     const forbid = variant.fertilizer_forbidden || [];
     const parts = [];
@@ -233,77 +236,109 @@
     return parts.join(" · ");
   }
 
-  // additive stacks by summing (two +50%s make +100%, matching how the
-  // enrichment bonuses' own ARatio is described - Finding 13's own
-  // semantics), multiplicative stacks by multiplying (two ×0.8s make
-  // ×0.64) - independent accumulators since they're different operations
-  // on the base duration (divide by (1+sum) vs divide by product).
-  function adjustRange(baseRange, stat) {
-    const factor = (1 + stat.add) * stat.mult;
-    return baseRange.map((v) => v / factor);
-  }
-
   // Reads every currently-checked toggle inside this card (both the
-  // variant's own speed-affecting enrichments and any neighbor_effects -
-  // see farming.json's _meta.speed_effect) and recomputes/repaints the
-  // timing box from them. The DOM's own checked state IS the source of
-  // truth here (no parallel JS state to keep in sync) - INPUT_EFFECTS maps
-  // each input straight to the speed_effect array it was built from.
+  // variant's own enrichments and any neighbor_effects - see farming.json's
+  // _meta.effects) and recomputes/repaints the harvest box from them. The
+  // DOM's own checked state IS the source of truth here (no parallel JS
+  // state to keep in sync) - INPUT_EFFECTS maps each input straight to the
+  // effects array it was built from.
   const INPUT_EFFECTS = new WeakMap();
 
-  const TIMING_STATS = [
-    ["growth", "Growth", "growth_hours"],
-    ["fruit", "Fruit cycle", "fruit_cycle_hours"],
-    ["byproduct", "Byproduct cycle", "byproduct_cycle_hours"],
-  ];
-
-  // Growth is a one-time duration (until the plant matures); Fruit/
-  // Byproduct cycles are how often each repeats AFTER that. Summing all
-  // three isn't just decoration - it's "time from a mature farm plot to
-  // having gone through growth plus one full round of each output",
-  // i.e. planting to first-fruit-and-first-byproduct-in-hand.
-  function sumRanges(ranges) {
-    return [ranges.reduce((s, r) => s + r[0], 0), ranges.reduce((s, r) => s + r[1], 0)];
-  }
-
-  function updateTiming(card, variant, timingEls) {
-    const stats = {
-      growth: { add: 0, mult: 1 },
-      fruit: { add: 0, mult: 1 },
-      byproduct: { add: 0, mult: 1 },
-    };
+  // The four accumulators mirror the game's own attribute semantics
+  // (farming.json's _meta.effects, disassembly-verified in Finding 18):
+  // additive attrs sum (two +50%s make +100%), growth_speed_mult
+  // multiplies (two ×0.8s make ×0.64).
+  function collectEffects(card) {
+    const acc = { all_speed: 0, growth_speed_mult: 1, fruit_qty: 0, byproduct_qty: 0 };
     let anyChecked = false;
     for (const input of card.querySelectorAll(".farming-toggle-input:checked")) {
       anyChecked = true;
       for (const e of INPUT_EFFECTS.get(input) || []) {
-        if (e.type === "additive") stats[e.stat].add += e.value;
-        else stats[e.stat].mult *= e.value;
+        if (e.attr === "growth_speed_mult") acc.growth_speed_mult *= e.value;
+        else acc[e.attr] += e.value;
       }
     }
-    const adjustedByKey = {};
-    for (const [key, , field] of TIMING_STATS) {
-      const baseRange = variant[field];
-      const adjusted = adjustRange(baseRange, stats[key]);
-      adjustedByKey[key] = adjusted;
-      timingEls[key].valueEl.textContent = fmtRange(adjusted);
-      timingEls[key].baseEl.textContent = anyChecked ? `base ${fmtRange(baseRange)}` : "";
-    }
-    const totalAdjusted = sumRanges(TIMING_STATS.map(([key]) => adjustedByKey[key]));
-    const totalBase = sumRanges(TIMING_STATS.map(([, , field]) => variant[field]));
-    timingEls.total.valueEl.textContent = fmtRange(totalAdjusted);
-    timingEls.total.baseEl.textContent = anyChecked ? `base ${fmtRange(totalBase)}` : "";
+    return { acc, anyChecked };
   }
 
-  function makeTimingBox(variant) {
+  // Growth time = base / ((1 + all_speed) * growth_speed_mult) - the
+  // game's growth-progress rate, inverted into a duration.
+  function growthRange(variant, acc) {
+    const rate = (1 + acc.all_speed) * acc.growth_speed_mult;
+    return variant.growth_hours.map((v) => v / rate);
+  }
+
+  // Per-harvest yield = ceil(growth_duration * (1 + qty_bonus) /
+  // (per_item_duration * growth_speed_mult)) - the game accrues product
+  // progress all through growth and converts it to items in one lump at
+  // harvest (ceil of a positive value, so never 0). all_speed cancels out
+  // (it scales growth and product accrual equally); growth_speed_mult sits
+  // in the denominator (slower metabolic growth = MORE items per harvest -
+  // the game's own "Productive Metabolic Speed" tradeoff). Both durations
+  // are independent uniform rolls, so the honest range pairs each
+  // extreme: min = shortest growth with slowest per-item timer, max the
+  // opposite.
+  function yieldRange(variant, cycleField, qtyBonus, acc) {
+    const [gLo, gHi] = variant.growth_hours;
+    const [cLo, cHi] = variant[cycleField];
+    const k = (1 + qtyBonus) / acc.growth_speed_mult;
+    return [Math.ceil((gLo / cHi) * k), Math.ceil((gHi / cLo) * k)];
+  }
+
+  // Plain item counts ("3 - 5"), deliberately NOT "×3 - ×5" - a ×-prefixed
+  // number next to modifier toggles reads as a multiplication factor, when
+  // this is the actual number of items handed over at gather.
+  function fmtCount(range) {
+    const [lo, hi] = range;
+    return lo === hi ? `${lo}` : `${lo} - ${hi}`;
+  }
+
+  const HARVEST_ROWS = [
+    ["growth", "Growth"],
+    ["fruit", "Fruit at gather"],
+    ["byproduct", "Byproduct at gather"],
+  ];
+
+  // Each row always leads with the unmodified base; once toggles change a
+  // number it becomes "base → current" in the value itself (not a small
+  // side note) - the base amount is the anchor the modifier only makes
+  // sense against. A row whose value the checked toggles DON'T change
+  // (e.g. yields under a pure Growth & Production speed bonus, which
+  // cancels out of the yield formula) just keeps showing the single base
+  // figure - itself informative: that toggle doesn't change this number.
+  function updateHarvest(card, variant, harvestEls) {
+    const { acc } = collectEffects(card);
+    const base = { all_speed: 0, growth_speed_mult: 1, fruit_qty: 0, byproduct_qty: 0 };
+    const values = {
+      growth: [fmtRange(variant.growth_hours), fmtRange(growthRange(variant, acc))],
+      fruit: [
+        fmtCount(yieldRange(variant, "fruit_cycle_hours", 0, base)),
+        fmtCount(yieldRange(variant, "fruit_cycle_hours", acc.fruit_qty, acc)),
+      ],
+      byproduct: [
+        fmtCount(yieldRange(variant, "byproduct_cycle_hours", 0, base)),
+        fmtCount(yieldRange(variant, "byproduct_cycle_hours", acc.byproduct_qty, acc)),
+      ],
+    };
+    for (const [key] of HARVEST_ROWS) {
+      const [baseText, adjusted] = values[key];
+      harvestEls[key].valueEl.textContent =
+        adjusted === baseText ? baseText : `${baseText} → ${adjusted}`;
+    }
+  }
+
+  function makeHarvestBox(variant) {
     const box = document.createElement("div");
     box.className = "farming-timing-box";
     const labelEl = document.createElement("div");
     labelEl.className = "farming-timing-label";
-    labelEl.textContent = "Timing";
+    labelEl.textContent = "Harvest";
+    labelEl.title =
+      "Fruit and byproduct build up while the plant grows and are all handed over at once when it's gathered - the plot is empty again afterwards. Counts only include time the plant's requirements were actually met.";
     box.appendChild(labelEl);
 
-    const timingEls = {};
-    for (const [key, label, field] of TIMING_STATS) {
+    const harvestEls = {};
+    for (const [key, label] of HARVEST_ROWS) {
       const row = document.createElement("div");
       row.className = "farming-timing-row";
       const statEl = document.createElement("span");
@@ -312,35 +347,12 @@
       row.appendChild(statEl);
       const valueEl = document.createElement("span");
       valueEl.className = "farming-timing-value";
-      valueEl.textContent = fmtRange(variant[field]);
       row.appendChild(valueEl);
-      const baseEl = document.createElement("span");
-      baseEl.className = "farming-timing-base";
-      row.appendChild(baseEl);
       box.appendChild(row);
-      timingEls[key] = { valueEl, baseEl };
+      harvestEls[key] = { valueEl };
     }
 
-    const totalRow = document.createElement("div");
-    totalRow.className = "farming-timing-row farming-timing-total";
-    totalRow.title = "Growth + one Fruit cycle + one Byproduct cycle - planting to first fruit and first byproduct in hand";
-    const totalStatEl = document.createElement("span");
-    totalStatEl.className = "farming-timing-stat";
-    totalStatEl.textContent = "Total";
-    totalRow.appendChild(totalStatEl);
-    const totalValueEl = document.createElement("span");
-    totalValueEl.className = "farming-timing-value";
-    totalValueEl.textContent = fmtRange(
-      sumRanges(TIMING_STATS.map(([, , field]) => variant[field]))
-    );
-    totalRow.appendChild(totalValueEl);
-    const totalBaseEl = document.createElement("span");
-    totalBaseEl.className = "farming-timing-base";
-    totalRow.appendChild(totalBaseEl);
-    box.appendChild(totalRow);
-    timingEls.total = { valueEl: totalValueEl, baseEl: totalBaseEl };
-
-    return { box, timingEls };
+    return { box, harvestEls };
   }
 
   // Toggle inputs that share a dial_group are mutually exclusive (checking
@@ -349,19 +361,19 @@
   // so e.g. a variant's own "Light dial = UV" enrichment and a "Neighboring
   // Rockwood Glow" neighbor_effect (which mirrors being UV-lit) can't both
   // apply at once even though they're rendered in different sections. See
-  // farming.json's _meta.speed_effect for the full rationale.
+  // farming.json's _meta.effects for the full rationale.
   function makeToggleInput(variantKey, entry) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "farming-toggle-input";
-    INPUT_EFFECTS.set(input, entry.speed_effect);
+    INPUT_EFFECTS.set(input, entry.effects);
     if (entry.dial_group) {
       input.dataset.dialGroup = `${variantKey}|${entry.dial_group}`;
     }
     return input;
   }
 
-  function wireToggleInput(input, card, variant, timingEls) {
+  function wireToggleInput(input, card, variant, harvestEls) {
     input.addEventListener("change", () => {
       if (input.checked && input.dataset.dialGroup) {
         for (const sibling of card.querySelectorAll(
@@ -370,7 +382,7 @@
           if (sibling !== input) sibling.checked = false;
         }
       }
-      updateTiming(card, variant, timingEls);
+      updateHarvest(card, variant, harvestEls);
     });
   }
 
@@ -398,13 +410,23 @@
   // "trigger") falls back to plain text, since there's no established
   // chip style for those.
   //
-  // An entry with a "speed_effect" (see farming.json's _meta.speed_effect)
-  // gets a checkbox that feeds the Timing box above - toggling it live-
-  // recomputes Growth/Fruit/Byproduct. An entry without one (a pure
-  // output-quantity bonus, which this app doesn't track at all) stays
-  // plain, non-interactive text, same as before - there's nothing for a
-  // checkbox to do there.
-  function makeEnrichmentSection(label, enrichments, variantKey, card, variant, timingEls) {
+  // An entry with an "effects" array (see farming.json's _meta.effects)
+  // gets a checkbox that feeds the Per-harvest box above - toggling it
+  // live-recomputes growth time AND the fruit/byproduct yield counts
+  // (quantity bonuses are toggleable too now that yields are modeled, not
+  // just cycle times). An entry without one (currently only the dead-code
+  // UV byproduct malus, described in prose) stays plain text.
+  // Dial-triggered rows lead, Temperature before Light - the same order
+  // as the Requirements lines above the box - then everything else
+  // (fertilizer/neighbor-tag) in data order. A stable sort, so entries
+  // within the same group keep farming.json's own ordering.
+  const TRIGGER_ORDER = { temp: 0, light: 1 };
+
+  function enrichmentSortRank(e) {
+    return e.trigger && e.trigger.kind in TRIGGER_ORDER ? TRIGGER_ORDER[e.trigger.kind] : 2;
+  }
+
+  function makeEnrichmentSection(label, enrichments, variantKey, card, variant, harvestEls) {
     const section = document.createElement("div");
     section.className = "farming-variant-section";
     const labelEl = document.createElement("div");
@@ -412,7 +434,8 @@
     labelEl.textContent = label;
     section.appendChild(labelEl);
     const list = document.createElement("ul");
-    for (const e of enrichments) {
+    const ordered = [...enrichments].sort((a, b) => enrichmentSortRank(a) - enrichmentSortRank(b));
+    for (const e of ordered) {
       const li = document.createElement("li");
       li.className = "farming-bonus-line";
 
@@ -427,46 +450,62 @@
         conditionEl.appendChild(makeReqText(e.condition));
       }
 
-      if (e.speed_effect) {
-        const inputEntry = { speed_effect: e.speed_effect, dial_group: e.dial_group };
+      if (e.effects) {
+        const inputEntry = { effects: e.effects, dial_group: e.dial_group };
         const input = makeToggleInput(variantKey, inputEntry);
         const toggleLabel = document.createElement("label");
         toggleLabel.className = "farming-toggle-label";
         toggleLabel.appendChild(input);
         toggleLabel.appendChild(conditionEl);
         li.appendChild(toggleLabel);
-        wireToggleInput(input, card, variant, timingEls);
+        wireToggleInput(input, card, variant, harvestEls);
       } else {
         li.appendChild(conditionEl);
       }
 
-      const arrowEl = document.createElement("span");
-      arrowEl.className = "farming-bonus-arrow";
-      arrowEl.textContent = "→";
-      li.appendChild(arrowEl);
-      const effectEl = document.createElement("span");
-      effectEl.className = "farming-bonus-effect";
-      effectEl.textContent = e.effect;
-      li.appendChild(effectEl);
+      li.appendChild(makeEffectCell(e));
       list.appendChild(li);
     }
     section.appendChild(list);
     return section;
   }
 
+  // Arrow + effect text for a bonus row. An entry's optional
+  // "effect_note" (farming.json) holds the longer aside that used to
+  // live inline in the effect string - shown as a hover tooltip (dotted
+  // underline as the cue, same title-tooltip pattern as the bio-tag
+  // pills) so the row itself stays one readable line.
+  function makeEffectCell(entry) {
+    const frag = document.createDocumentFragment();
+    const arrowEl = document.createElement("span");
+    arrowEl.className = "farming-bonus-arrow";
+    arrowEl.textContent = "→";
+    frag.appendChild(arrowEl);
+    const effectEl = document.createElement("span");
+    effectEl.className = "farming-bonus-effect";
+    effectEl.textContent = entry.effect;
+    if (entry.effect_note) {
+      effectEl.classList.add("has-note");
+      effectEl.title = entry.effect_note;
+    }
+    frag.appendChild(effectEl);
+    return frag;
+  }
+
   // Cross-variant bonuses (farming.json's own "neighbor_effects" -
   // currently just Spacekorn Plain's self-buff from a neighboring Plain,
   // and Rockwood Glow's "neighbor treated as UV-lit" mirrored onto
-  // whichever variants have their own Light=UV enrichment) - same toggle
-  // shape as makeEnrichmentSection's interactive rows, but there's no
-  // "effect" prose string to show (the label already says what it is), so
-  // just the checkbox + label, no arrow/effect pair.
-  function makeNeighborEffectsSection(neighborEffects, variantKey, card, variant, timingEls) {
+  // whichever variants have their own Light=UV enrichment) - same
+  // "condition → effect" row shape as makeEnrichmentSection, including
+  // the effect prose (an earlier version showed only the label, leaving
+  // the toggle description-less - what does a Glow neighbor DO to me? -
+  // so farming.json now carries an "effect" line for these too).
+  function makeNeighborEffectsSection(neighborEffects, variantKey, card, variant, harvestEls) {
     const section = document.createElement("div");
     section.className = "farming-variant-section";
     const labelEl = document.createElement("div");
     labelEl.className = "farming-variant-section-label";
-    labelEl.textContent = "Neighbor conditions that also affect timing:";
+    labelEl.textContent = "Neighbor conditions that also affect the harvest:";
     section.appendChild(labelEl);
     const list = document.createElement("ul");
     for (const ne of neighborEffects) {
@@ -478,7 +517,8 @@
       toggleLabel.appendChild(input);
       toggleLabel.appendChild(makeReqText(ne.label));
       li.appendChild(toggleLabel);
-      wireToggleInput(input, card, variant, timingEls);
+      wireToggleInput(input, card, variant, harvestEls);
+      li.appendChild(makeEffectCell(ne));
       list.appendChild(li);
     }
     section.appendChild(list);
@@ -535,12 +575,13 @@
     reqSection.appendChild(makeReqLine("Neighbor", makeNeighborRestriction(variant.neighbor_restriction_tag)));
     card.appendChild(reqSection);
 
-    // Built before the toggle sections below (which need timingEls to wire
+    // Built before the toggle sections below (which need harvestEls to wire
     // their change handlers into) but appended here, right under
     // Requirements, so the numbers it live-updates stay prominent and
     // above-the-fold rather than buried under every modifier.
-    const { box: timingBox, timingEls } = makeTimingBox(variant);
-    card.appendChild(timingBox);
+    const { box: harvestBox, harvestEls } = makeHarvestBox(variant);
+    card.appendChild(harvestBox);
+    updateHarvest(card, variant, harvestEls);
 
     if (variant.enrichments && variant.enrichments.length) {
       card.appendChild(
@@ -550,13 +591,13 @@
           variantKey,
           card,
           variant,
-          timingEls
+          harvestEls
         )
       );
     }
     if (variant.neighbor_effects && variant.neighbor_effects.length) {
       card.appendChild(
-        makeNeighborEffectsSection(variant.neighbor_effects, variantKey, card, variant, timingEls)
+        makeNeighborEffectsSection(variant.neighbor_effects, variantKey, card, variant, harvestEls)
       );
     }
     if (variant.adjacency && variant.adjacency.length) {

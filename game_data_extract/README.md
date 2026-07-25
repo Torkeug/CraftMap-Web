@@ -139,6 +139,24 @@ for review before you decide how to merge.
   of the same data. Not merged into `resources.db` — reference data pending a
   decision on where shipwreck loot should live in the schema.
 
+- **`farming.json`** — Xenic Farm crop/variant reference data (the "Farming"
+  tab, `backend/farming.py` + `frontend/js/farming.js`). Unlike the files
+  above it is **hand-transcribed, not script-regenerated** — sourced from
+  `shipbuilder/tools/game_logic_notes.md` Findings 13/14/16/17/18
+  (decompiled `ent.b.Farm`/`ent.b.PlotZone` logic plus `data.cdb`'s `farm`/
+  `attribute`/`constant` sheets), so a new/corrected finding there means
+  updating this file by hand to match. Per grown variant: grow-gate
+  (temperature/light dial positions, fertilizer, neighbor bio-tag rules),
+  growth/per-item durations, and toggleable enrichment/adjacency modifiers
+  using the game's real attribute semantics (`all_speed` /
+  `growth_speed_mult` / `fruit_qty` / `byproduct_qty`). Its own `_meta`
+  block is the authoritative doc for the data model — notably
+  `harvest_mechanism` (fruit/byproduct accrue during growth and pay out
+  once at gather; `*_cycle_hours` means "hours of growth per item", not a
+  repeating timer), `effects` (the modifier math the frontend computes
+  with), and `dial_mechanics` (instant dial switching, per-planet energy
+  costs, the no-Natural-light-in-dark-sites rule).
+
 ## How this differs from `resources.db`'s recipe tables
 
 | | `resources.db` (`recipes`/`recipe_ingredients`) | game data (`craft_recipes.json`) |

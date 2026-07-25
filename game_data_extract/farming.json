@@ -1,12 +1,14 @@
 {
   "_meta": {
-    "source": "shipbuilder/tools/game_logic_notes.md, Finding 13 (Rockwood Nut), Finding 14 (Spacekorn), and Finding 16 (continuous gate-checking/death-timer/Invasive-spread mechanics) - decompiled from data.cdb sheet 'farm' and ent.b.PlotZone.pickVariant/hasMinRequirement/updatePlots/checkProgress (src/ent/b/Farm.hx). Hand-transcribed, not script-regenerated - if game_logic_notes.md gets a new/corrected finding for these crops, update this file to match.",
+    "source": "shipbuilder/tools/game_logic_notes.md, Finding 13 (Rockwood Nut), Finding 14 (Spacekorn), Finding 16 (continuous gate-checking/death-timer/Invasive-spread), Finding 17 (quantity-vs-speed attr semantics) and Finding 18 (dial mechanics + the exact harvest-yield formula) - decompiled from data.cdb sheet 'farm' and ent.b.Farm/ent.b.PlotZone (src/ent/b/Farm.hx: updatePlots/checkProgress/applyPlant/hasMinRequirement/getEnrichmentValue/serverRegularUpdate/setDeployInfo and ent.SpaceBase.gatherPlant__impl). Hand-transcribed, not script-regenerated - if game_logic_notes.md gets a new/corrected finding for these crops, update this file to match.",
     "mechanism": "The Xenic Farm building has one shared Temperature dial (Cold/Temperate/Warm/Hot) and one shared Light dial (UV/Natural/Dark) - a single farm is never in two temperature or light states at once. Each grown variant's gate is a set of acceptable dial positions (OR-across-allowed-states); a variant with an empty temperature/light list is unconstrained (any dial position satisfies it) - EXCEPT a variant marked 'unreachable: true' (see that field's own note below), whose empty list means the exact opposite. After germination, ALL variants whose gates currently pass become candidates and the game picks uniformly at random among them (not priority order) - if none pass, the plant dies instead of stalling.",
-    "growth_death_mechanism": "Requirements are checked continuously, not just once - letting fertilizer, dial position, or a neighbor restriction go unmet stalls growth and starts a 5-hour death countdown. Restoring it in time is fully recoverable. Once a plant reaches its final harvest stage, requirements stop mattering entirely.",
+    "growth_death_mechanism": "Requirements are checked continuously, not just once - letting fertilizer, dial position, or a neighbor restriction go unmet stalls growth and starts a 5-hour death countdown (fully recoverable if restored in time; the countdown also winds back down while requirements are met). The farm being unpowered or disabled fails EVERY plant's requirements at once - and its dials snap back to the planet's ambient positions until power returns. Water is a hard requirement that can never be waived (even by Rockwood Dream's neighbor tolerance). Once a plant reaches its final harvest stage, requirements stop mattering entirely. Every adjacent EMPTY plot also gives a plant +5% Growth & Production speed (harvest-neutral, see the harvest note) - a fully-packed grid grows slightly slower per-plant than a checkerboard.",
+    "harvest_mechanism": "Corrected 2026-07-25 (Finding 18): fruit and byproduct are NOT repeating post-maturity drips. Both accumulate invisibly WHILE the plant grows (only during ticks its requirements pass - stalled time contributes nothing) and pay out ONCE, in a single lump sum, when the mature plant is harvested - after which the plot resets to empty and needs replanting. 'fruit_cycle_hours'/'byproduct_cycle_hours' below are the game's real per-item timers (each rolled once per planting, uniform in its range): the harvest yields ceil(accumulated_hours / per_item_hours) of each product. With no modifiers, accumulated hours = the growth duration, so base yield per harvest = growth_hours / cycle_hours (e.g. Spacekorn Plain: 36-40h growth, 4-6h per Plain Pulp = roughly 6-10 Pulp per harvest). Exact game formula: yield = ceil(growth_duration * (1 + quantity_bonuses) / (per_item_duration * productive_metabolic_speed)) - see _meta.effects for how each modifier slots in.",
+    "dial_mechanics": "Verified from raw disassembly (Finding 18): dial changes take effect INSTANTLY (next server tick) while the farm is powered - there is no transition/ramp time. The four Temperature positions are the same canonical targets on every planet; only their power cost differs (30 power per 'step' of distance from the planet's ambient band - the position nearest ambient is free, e.g. Temperate is free on a Temperate planet, Cold is free on a Frozen one, Warm is free on a Hot planet). The UV light position costs a flat 20 power; Natural and Dark are free. A farm deployed at a spot with no natural light (the game checks the deploy site's light level) has NO Natural position at all - selecting it just sets Dark; only UV lamps or Dark are possible there. When unpowered, both dials snap to the ambient defaults (nearest-ambient temperature; Natural if the site is lit, else Dark) and every plant stalls regardless (see growth_death_mechanism). A neighboring Rockwood Glow forces a plot to be treated as UV-lit for ALL light checks - bonuses AND requirements (it would e.g. break a Dark-requiring plant's gate) - replacing, not stacking with, the farm's actual light dial.",
     "enrichment_trigger": "An enrichment entry's optional 'trigger' field ({kind: 'temp'|'light'|'neighbor_tag', values: [...]}) marks the ones frontend/js/farming.js can render as a pill instead of plain text: 'temp'/'light' are gated by the SAME shared Temperature/Light dial as the variant's own grow-gate, rendered as the same dial chips used in Requirements; 'neighbor_tag' names a bio-tag (see each variant's own 'bio_tag' and 'neighbor_restriction_tag') a neighbor plant must carry, rendered as the same pill used for the bio-tag badge and the Requirements Neighbor line. Fertilizer conditions carry no trigger - there's no established pill style for those.",
-    "fertilizer_forbidden_any": "A variant's optional 'fertilizer_forbidden_any: true' means NO fertilizer/supplement of any kind may be present - genuinely different from an empty 'fertilizer_required' (which just means no SPECIFIC fertilizer is required, any or none is fine). Only Rockwood Glow (Glowwood) is marked this way, per live in-game observation - Finding 13's own table wrote its Fertilizer-required cell as the distinct word 'none' (vs the dash '-' every unconstrained variant elsewhere in Findings 13/14 uses), consistent with this, but this specific reading (unlike the 'unreachable' field below) has NOT been re-checked against raw disassembly - flag for follow-up if that's ever done.",
     "unreachable": "A variant's optional 'unreachable: true' (+ 'unreachable_note', the player-facing explanation frontend/js/farming.js shows in a warning banner) means its grow-gate can NEVER pass in normal play, confirmed by both raw disassembly and a direct in-game test - it is not just rare or hard, it's a dead branch of pickVariant. Only Rockwood Glow (Glowwood) is marked this way: its 'temperature'/'light' fields are present with a literal integer 0 in the source data rather than being absent, and hasMinRequirement only skips the dial check on an ABSENT field - a present 0 always fails the bitwise-AND test, every tick, no matter the farm's dial position. This is the opposite of every other 'unconstrained' variant in Findings 13/14 (which all use an absent key), so Glowwood's empty temperature/light arrays here do NOT mean 'any dial position works' the way they do for other variants - see this field's own presence as the disambiguator, and always check it before treating an empty temperature/light list as unconstrained. A theorized loophole (stacking Dreamwood neighbors' allowMissing tolerance to cover both misses) was investigated and ruled out - it caps at 1, Glow needs 2. The only way to place it at all is a debug/admin-only function, not normal play.",
-    "speed_effect": "An enrichment's optional 'speed_effect' ([{stat: 'growth'|'fruit'|'byproduct', type: 'additive'|'multiplicative', value}]) is ONLY present when that enrichment actually changes a cycle TIME (growth_hours/fruit_cycle_hours/byproduct_cycle_hours) - several enrichments instead boost output QUANTITY (e.g. 'Byproduct quantity +100%'), which this app doesn't track at all (no yield/quantity field exists anywhere in this data), so those carry no speed_effect and stay plain, non-interactive text in frontend/js/farming.js. 'additive' value 0.5 means +50% speed (duration divided by 1.5); 'multiplicative' value 0.6 means the speed itself is multiplied by 0.6 (duration divided by 0.6, i.e. SLOWER despite being an enrichment 'bonus' - Finding 13's own ARatio/MRatio semantics, applied literally). A variant's own 'neighbor_effects' ([{label, speed_effect, dial_group?}]) are the same shape, sourced from a DIFFERENT variant's adjacency entry rather than this variant's own enrichments - currently just two real cases: Spacekorn Plain's self-buff from a neighboring Spacekorn Plain, and Rockwood Glow's 'neighbor treated as UV-lit' effect (mirrors the receiving variant's own Light=UV enrichment numbers, so it's grouped into that variant's own 'light' dial_group - being UV-lit via a Glow neighbor and via the farm's actual Light dial are the same state, not two stacking bonuses). Entries (both enrichments and neighbor_effects) that share a 'dial_group' (temp/light) are mutually exclusive in the UI (radio-button-style) since the farm only has one Temperature and one Light position at a time - entries with no dial_group (fertilizer- or neighbor-tag-gated, or Plain's own neighbor buff) toggle independently, since a plot can hold multiple simultaneous supplements/conditions."
+    "fertilizer_forbidden_any_removed": "An earlier revision marked Rockwood Glow 'fertilizer_forbidden_any: true' (no fertilizer of ANY kind may be present) based on a live-play impression, explicitly flagged for follow-up against raw disassembly. That follow-up happened (2026-07-25, Finding 18): the game's requirement checker has no such branch at all - a variant can only require or forbid SPECIFIC supplements, and Glowwood's game-data gate carries neither list. The flag was wrong and has been removed; Glowwood's fertilizer cell is simply unconstrained (academic anyway, since its temperature/light gate is unreachable - see 'unreachable').",
+    "effects": "Replaces the earlier 'speed_effect' model (2026-07-25, Findings 17/18) - the old model treated fruit/byproduct numbers as cycle TIMES, which the game does not do (see harvest_mechanism). An enrichment's or neighbor_effect's optional 'effects' array ([{attr, value}]) uses the game's own attribute semantics: 'all_speed' (additive; speeds growth AND product accumulation equally - harvest comes sooner, yield per harvest UNCHANGED - the game calls it Growth and Production Speed), 'growth_speed_mult' (multiplicative on growth progress only - the game's Productive Metabolic Speed; a value below 1 grows SLOWER but yields MORE per harvest by exactly 1/value, since products keep accumulating over the longer growth - the game's own description spells out this tradeoff), 'fruit_qty' / 'byproduct_qty' (additive quantity bonuses: multiply that product's yield by (1+sum), no effect on any time). Frontend math (all verified against the disassembled formulas): growth_time = growth_hours / ((1+sum all_speed) * (1+sum growth_speed... there is no additive growth_speed in current data) * product growth_speed_mult); fruit_yield = ceil(growth_hours * (1+sum fruit_qty) / (fruit_cycle_hours * product growth_speed_mult)); byproduct likewise. Note all_speed cancels out of the yield formulas entirely. Entries sharing a 'dial_group' (temp/light) are mutually exclusive in the UI (the farm holds one Temperature and one Light position at a time); entries with no dial_group toggle independently. neighbor_effects entries carry the same 'effects' array plus their own 'effect' prose line, rendered identically to enrichment rows (condition -> effect) so no toggle is ever description-less. Either kind of entry may also carry an 'effect_note': a longer aside (dead-code caveats, stacking rules, the why behind a slower-but-richer tradeoff) shown as a hover tooltip on the effect text rather than inline - keep 'effect' itself to one readable line; a long inline effect used to wrap onto its own full-width line, visually detaching from its row. The game data also defines multiplicative fruit/byproduct-quantity attrs, but they are DEAD CODE in the current build (computed then discarded, confirmed at raw-opcode level) - the one place they appear (Spacekorn's UV entry, a would-be -20% byproduct malus) is described in prose but carries no effect entry."
   },
   "crops": [
     {
@@ -33,10 +35,10 @@
           "enrichments": [
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +50%, Byproduct speed +50%",
-              "speed_effect": [
-                { "stat": "fruit", "type": "additive", "value": 0.5 },
-                { "stat": "byproduct", "type": "additive", "value": 0.5 }
+              "effect": "Fruit quantity +50%, Byproduct quantity +50%",
+              "effects": [
+                { "attr": "fruit_qty", "value": 0.5 },
+                { "attr": "byproduct_qty", "value": 0.5 }
               ]
             }
           ],
@@ -61,22 +63,23 @@
           "enrichments": [
             {
               "condition": "Neutral Fertilizer present",
-              "effect": "Byproduct speed +75%",
-              "speed_effect": [{ "stat": "byproduct", "type": "additive", "value": 0.75 }]
+              "effect": "Byproduct quantity +75%",
+              "effects": [{ "attr": "byproduct_qty", "value": 0.75 }]
             },
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +50%, Byproduct speed +50%",
-              "speed_effect": [
-                { "stat": "fruit", "type": "additive", "value": 0.5 },
-                { "stat": "byproduct", "type": "additive", "value": 0.5 }
+              "effect": "Fruit quantity +50%, Byproduct quantity +50%",
+              "effects": [
+                { "attr": "fruit_qty", "value": 0.5 },
+                { "attr": "byproduct_qty", "value": 0.5 }
               ]
             },
             {
               "condition": "Neighbor tagged Putrescent",
-              "effect": "Growth speed / Liquid consumption / Supplement consumption all ×0.6 (-40% each)",
+              "effect": "Grows 40% slower but yields ~×1.67 fruit AND byproduct per harvest; consumes 40% less liquid & supplements",
+              "effect_note": "Products keep accumulating during the longer growth - that's where the extra per-harvest yield comes from.",
               "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
-              "speed_effect": [{ "stat": "growth", "type": "multiplicative", "value": 0.6 }]
+              "effects": [{ "attr": "growth_speed_mult", "value": 0.6 }]
             }
           ],
           "adjacency": ["Neighbor supplement consumption -50%"],
@@ -98,27 +101,24 @@
           "enrichments": [
             {
               "condition": "Temperature dial = Cold or Temperate",
-              "effect": "Growth+Production speed +100%",
+              "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "temp", "values": ["Cold", "Temperate"] },
               "dial_group": "temp",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.0 },
-                { "stat": "fruit", "type": "additive", "value": 1.0 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +350%",
-              "speed_effect": [{ "stat": "fruit", "type": "additive", "value": 3.5 }]
+              "effect": "Fruit quantity +350%",
+              "effects": [{ "attr": "fruit_qty", "value": 3.5 }]
             },
             {
               "condition": "Acidic Fertilizer present",
-              "effect": "Byproduct speed +120%",
-              "speed_effect": [{ "stat": "byproduct", "type": "additive", "value": 1.2 }]
+              "effect": "Byproduct quantity +120%",
+              "effects": [{ "attr": "byproduct_qty", "value": 1.2 }]
             }
           ],
           "adjacency": [
-            "Neighbor tolerates 1 unmet requirement instead of dying",
+            "Neighbor tolerates 1 unmet requirement instead of dying (water and farm power can never be waived)",
             "Invasive spread on maturing: 50% chance to claim an adjacent empty plot, 25% chance to overwrite an adjacent germinating seed or dead plant (never an already-grown live neighbor) with a copy of itself"
           ],
           "neighbor_restriction_tag": null
@@ -131,7 +131,6 @@
           "byproduct": "Rockwood Bark",
           "fertilizer_required": [],
           "fertilizer_forbidden": [],
-          "fertilizer_forbidden_any": true,
           "unreachable": true,
           "unreachable_note": "Not obtainable through normal play. Its Temperature/Light requirements can never actually be satisfied on a real farm, no matter how it's set up.",
           "temperature": [],
@@ -142,32 +141,31 @@
           "enrichments": [
             {
               "condition": "Light dial = Dark",
-              "effect": "Fruit speed +30%",
+              "effect": "Fruit quantity +30%",
               "trigger": { "kind": "light", "values": ["Dark"] },
               "dial_group": "light",
-              "speed_effect": [{ "stat": "fruit", "type": "additive", "value": 0.3 }]
+              "effects": [{ "attr": "fruit_qty", "value": 0.3 }]
             },
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Fruit speed +20%, Byproduct speed +20%",
-              "speed_effect": [
-                { "stat": "fruit", "type": "additive", "value": 0.2 },
-                { "stat": "byproduct", "type": "additive", "value": 0.2 }
+              "effect": "Fruit quantity +20%, Byproduct quantity +20%",
+              "effects": [
+                { "attr": "fruit_qty", "value": 0.2 },
+                { "attr": "byproduct_qty", "value": 0.2 }
               ]
             },
             {
               "condition": "Neighbor tagged Putrescent",
-              "effect": "Growth+Production speed +25%, Byproduct speed +25%",
+              "effect": "Growth & Production speed +25% (faster harvest, same yield) AND Byproduct quantity +25%",
               "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 0.25 },
-                { "stat": "fruit", "type": "additive", "value": 0.25 },
-                { "stat": "byproduct", "type": "additive", "value": 0.25 }
+              "effects": [
+                { "attr": "all_speed", "value": 0.25 },
+                { "attr": "byproduct_qty", "value": 0.25 }
               ]
             }
           ],
           "adjacency": [
-            "Neighbor treated as if lit by UV, regardless of the farm's actual light dial"
+            "Neighbor treated as if lit by UV for ALL light checks - it satisfies a UV light bonus, but would also break a neighbor's Dark light requirement; the farm's actual light dial stops mattering for that plot"
           ],
           "neighbor_restriction_tag": "Reclusive"
         },
@@ -187,27 +185,25 @@
           "enrichments": [
             {
               "condition": "Light dial = Dark",
-              "effect": "Growth speed / Liquid consumption / Supplement consumption all ×0.8 (-20% each)",
+              "effect": "Grows 20% slower but yields ~×1.25 fruit AND byproduct per harvest; consumes 20% less liquid & supplements",
+              "effect_note": "Products keep accumulating during the longer growth - that's where the extra per-harvest yield comes from.",
               "trigger": { "kind": "light", "values": ["Dark"] },
               "dial_group": "light",
-              "speed_effect": [{ "stat": "growth", "type": "multiplicative", "value": 0.8 }]
+              "effects": [{ "attr": "growth_speed_mult", "value": 0.8 }]
             },
             {
               "condition": "Light dial = UV",
-              "effect": "Growth+Production speed +30%",
+              "effect": "Growth & Production speed +30% - faster harvest, same yield per harvest",
               "trigger": { "kind": "light", "values": ["UV"] },
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 0.3 },
-                { "stat": "fruit", "type": "additive", "value": 0.3 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 0.3 }]
             },
             {
               "condition": "Temperature dial = Hot",
-              "effect": "Byproduct speed +40%",
+              "effect": "Byproduct quantity +40%",
               "trigger": { "kind": "temp", "values": ["Hot"] },
               "dial_group": "temp",
-              "speed_effect": [{ "stat": "byproduct", "type": "additive", "value": 0.4 }]
+              "effects": [{ "attr": "byproduct_qty", "value": 0.4 }]
             }
           ],
           "adjacency": [
@@ -217,11 +213,10 @@
           "neighbor_effects": [
             {
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "effect": "Growth & Production speed +30% - same as the Light dial = UV bonus",
+              "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 0.3 },
-                { "stat": "fruit", "type": "additive", "value": 0.3 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 0.3 }]
             }
           ]
         }
@@ -252,64 +247,58 @@
           "enrichments": [
             {
               "condition": "Light dial = Natural",
-              "effect": "Growth+Production speed +100%",
+              "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "light", "values": ["Natural"] },
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.0 },
-                { "stat": "fruit", "type": "additive", "value": 1.0 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
               "condition": "Light dial = UV",
-              "effect": "Growth+Production speed +150%, but Byproduct quantity ×0.8 (-20%)",
+              "effect": "Growth & Production speed +150% - faster harvest, same yield per harvest",
+              "effect_note": "The game's data also lists a -20% byproduct-quantity malus for UV, but that attribute is dead code in the current build - it never actually applies.",
               "trigger": { "kind": "light", "values": ["UV"] },
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.5 },
-                { "stat": "fruit", "type": "additive", "value": 1.5 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.5 }]
             },
             {
               "condition": "Neutral Fertilizer present",
-              "effect": "Byproduct quantity +100%"
+              "effect": "Byproduct quantity +100%",
+              "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
             },
             {
               "condition": "Temperature dial = Temperate",
-              "effect": "Growth+Production speed +100%",
+              "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "temp", "values": ["Temperate"] },
               "dial_group": "temp",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.0 },
-                { "stat": "fruit", "type": "additive", "value": 1.0 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
               "condition": "Neighbor tagged Putrescent",
-              "effect": "Germ quantity +40%, Byproduct quantity +40%",
-              "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] }
+              "effect": "Fruit quantity +40%, Byproduct quantity +40%",
+              "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
+              "effects": [
+                { "attr": "fruit_qty", "value": 0.4 },
+                { "attr": "byproduct_qty", "value": 0.4 }
+              ]
             }
           ],
           "adjacency": [
-            "+15% Growth/Production speed to neighboring Spacekorn Plain plants specifically (not any neighbor); not consumed on use",
+            "+15% Growth & Production speed to neighboring Spacekorn Plain plants specifically (not any neighbor); not consumed on use",
             "Invasive spread on maturing: 50% chance to claim an adjacent empty plot, 25% chance to overwrite an adjacent germinating seed or dead plant (never an already-grown live neighbor) with a copy of itself"
           ],
           "neighbor_restriction_tag": null,
           "neighbor_effects": [
             {
               "label": "Neighboring Spacekorn Plain plant",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 0.15 },
-                { "stat": "fruit", "type": "additive", "value": 0.15 }
-              ]
+              "effect": "Growth & Production speed +15% - faster harvest, same yield per harvest",
+              "effects": [{ "attr": "all_speed", "value": 0.15 }]
             },
             {
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "effect": "Growth & Production speed +150% - same as the Light dial = UV bonus",
+              "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.5 },
-                { "stat": "fruit", "type": "additive", "value": 1.5 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.5 }]
             }
           ]
         },
@@ -329,27 +318,23 @@
           "enrichments": [
             {
               "condition": "Light dial = Natural",
-              "effect": "Growth+Production speed +100%",
+              "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "light", "values": ["Natural"] },
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.0 },
-                { "stat": "fruit", "type": "additive", "value": 1.0 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
               "condition": "Light dial = UV",
-              "effect": "Growth+Production speed +150%, but Byproduct quantity ×0.8 (-20%)",
+              "effect": "Growth & Production speed +150% - faster harvest, same yield per harvest",
+              "effect_note": "The game's data also lists a -20% byproduct-quantity malus for UV, but that attribute is dead code in the current build - it never actually applies.",
               "trigger": { "kind": "light", "values": ["UV"] },
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.5 },
-                { "stat": "fruit", "type": "additive", "value": 1.5 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.5 }]
             },
             {
               "condition": "Neutral Fertilizer present",
-              "effect": "Byproduct quantity +100%"
+              "effect": "Byproduct quantity +100%",
+              "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
             }
           ],
           "adjacency": [
@@ -359,11 +344,10 @@
           "neighbor_effects": [
             {
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "effect": "Growth & Production speed +150% - same as the Light dial = UV bonus",
+              "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.5 },
-                { "stat": "fruit", "type": "additive", "value": 1.5 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.5 }]
             }
           ]
         },
@@ -383,31 +367,29 @@
           "enrichments": [
             {
               "condition": "Light dial = Natural",
-              "effect": "Growth+Production speed +100%",
+              "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "light", "values": ["Natural"] },
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.0 },
-                { "stat": "fruit", "type": "additive", "value": 1.0 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
               "condition": "Light dial = UV",
-              "effect": "Growth+Production speed +150%, but Byproduct quantity ×0.8 (-20%)",
+              "effect": "Growth & Production speed +150% - faster harvest, same yield per harvest",
+              "effect_note": "The game's data also lists a -20% byproduct-quantity malus for UV, but that attribute is dead code in the current build - it never actually applies.",
               "trigger": { "kind": "light", "values": ["UV"] },
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.5 },
-                { "stat": "fruit", "type": "additive", "value": 1.5 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.5 }]
             },
             {
               "condition": "Neutral Fertilizer present",
-              "effect": "Byproduct quantity +100%"
+              "effect": "Byproduct quantity +100%",
+              "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
             },
             {
               "condition": "Carbonic Fertilizer present",
-              "effect": "Byproduct quantity +100% (stacks with the Neutral Fertilizer entry above if somehow both present)"
+              "effect": "Byproduct quantity +100%",
+              "effect_note": "Stacks with the Neutral Fertilizer bonus above if both are present at once.",
+              "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
             }
           ],
           "adjacency": ["+20% Byproduct quantity to any neighbor; repeatable, not consumed on use"],
@@ -415,11 +397,10 @@
           "neighbor_effects": [
             {
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
+              "effect": "Growth & Production speed +150% - same as the Light dial = UV bonus",
+              "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
-              "speed_effect": [
-                { "stat": "growth", "type": "additive", "value": 1.5 },
-                { "stat": "fruit", "type": "additive", "value": 1.5 }
-              ]
+              "effects": [{ "attr": "all_speed", "value": 1.5 }]
             }
           ]
         }
