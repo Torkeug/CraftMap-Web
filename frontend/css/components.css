@@ -1568,6 +1568,24 @@
   cursor: pointer;
 }
 
+/* Rare-crate-odds-by-wreck-SIZE figures - constant across every sector
+   (see backend/shipwreck_loot.py's crate_spawn_by_size docstring for why),
+   so shown once here instead of repeated inside each sector's own tree
+   node. */
+#wrecks-crate-stats-row {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 2px;
+}
+
+#wrecks-crate-stats-row.hidden {
+  display: none;
+}
+
 /* ---------- wrecks tree (js/wrecks.js's own renderer - reuses
    .tree-node/.tree-row/.disclosure/.tree-children/.tree-label from the
    deposit tracker's tree above for a consistent visual language, plus its

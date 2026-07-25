@@ -35,6 +35,7 @@
   const filterPatch = document.getElementById("wrecks-filter-patch");
   const filterBlueprint = document.getElementById("wrecks-filter-blueprint");
   const liveViewEl = document.getElementById("wrecks-live-view");
+  const crateStatsRowEl = document.getElementById("wrecks-crate-stats-row");
 
   let mode = "sector"; // "sector" | "item" | "live" - session-only, not persisted
   let sectorsData = null; // fetched once per mode, cached
@@ -68,22 +69,50 @@
     return !q || text.toLowerCase().includes(q);
   }
 
-  // "avg Y/Big wreck, Z/Small wreck" - see the crate_spawn_by_size docstring
-  // in backend/shipwreck_loot.py for why this is shown per size rather than
-  // as one sector-blended figure. Uses "total" (debris field + the hull
-  // piece's own secondary generation pass - always present, not tied to
-  // any player action, see that same docstring) since that's the real
-  // total for the wreck, not just what's scattered loose around it -
-  // falls back to "n/a" for a sector whose generation table has no
-  // variant of a given size at all (rare, but crate_spawn_by_size only
-  // ever has keys for sizes present).
-  function formatAvgBySize(bySize) {
-    const parts = [];
+  // "62% Small · 38% Big" - the ONE thing that actually varies by sector
+  // (see backend/shipwreck_loot.py's wreck_size_counts docstring): a
+  // sector's own generation-table mix of wreck-size variants, which drives
+  // how often you run into a Big wreck (worth ~4x a Small wreck's own
+  // crate count - see crate_spawn_by_size's docstring) versus a Small one
+  // here, as opposed to what a wreck of a given size itself yields (that
+  // part is sector-invariant - see renderCrateStatsRow below).
+  function formatSizeDistribution(counts) {
+    const total = counts && Object.values(counts).reduce((a, b) => a + b, 0);
+    if (!total) return "";
+    return ["Big", "Small"]
+      .filter((size) => counts[size])
+      .map((size) => `${Math.round((counts[size] / total) * 100)}% ${size}`)
+      .join(" · ");
+  }
+
+  // The rare-crate-odds-by-wreck-SIZE figures ("avg Y/Big wreck, Z/Small
+  // wreck") are identical in every sector (crate_spawn_by_size's own
+  // docstring) - shown once here, above the sector list, instead of
+  // repeated inside all ~18 sector nodes. Populated once sectorsData is
+  // fetched (see ensureDataLoaded) since any sector's own bySize figures
+  // are the shared, sector-invariant ones. Uses "total" (debris field +
+  // the hull piece's own always-on secondary generation pass) since that's
+  // the real total for the wreck, not just what's scattered loose around
+  // it.
+  function renderCrateStatsRow() {
+    crateStatsRowEl.innerHTML = "";
+    const bySize = sectorsData && sectorsData[0] && sectorsData[0].crate_spawn_by_size;
+    if (!bySize) return;
+    const header = document.createElement("div");
+    header.textContent =
+      "Rare crate odds by wreck size (same in every sector - only the Big/Small mix shown per-sector below varies):";
+    crateStatsRowEl.appendChild(header);
     for (const size of ["Big", "Small"]) {
-      const stats = bySize && bySize[size];
-      if (stats) parts.push(`${stats.total.expected_count.toFixed(2)}/${size} wreck`);
+      const stats = bySize[size];
+      if (!stats) continue;
+      const total = stats.total;
+      const line = document.createElement("div");
+      line.textContent =
+        `${size} wreck: ${fmtPct(stats.at_least_one * 100)} chance of ≥1 in the debris ` +
+        `field alone (avg ${stats.expected_count.toFixed(2)}) · ${fmtPct(total.at_least_one * 100)} ` +
+        `chance of ≥1 total (avg ${total.expected_count.toFixed(2)})`;
+      crateStatsRowEl.appendChild(line);
     }
-    return parts.length ? `avg ${parts.join(", ")}` : "";
   }
 
   // ---- node builders ----
@@ -193,16 +222,13 @@
           ? `L${itemLevels[0]}`
           : `L${Math.min(...itemLevels)}-L${Math.max(...itemLevels)}`
         : "";
-      // avg crates/wreck on the row itself (not just the expanded "Rare
-      // crate odds" summary below) so it's visible without expanding. Shown
-      // per SIZE, not the blended sector average: a Big wreck (BigPiece1/2
-      // + SmallPiece1/2 debris hull) runs ~4x a Small wreck's own crate
-      // count (backend/shipwreck_loot.py's get_all_sectors docstring), so
-      // quoting one blended number understates Big and overstates Small -
-      // whichever wreck you're actually standing at, the size-specific
-      // number is the one that applies.
-      const avgCrateText = formatAvgBySize(sector.crate_spawn_by_size);
-      const rowRightText = [levelRangeText, avgCrateText].filter(Boolean).join(" · ");
+      // Wreck-size mix on the row itself (not just the expanded summary
+      // below) so it's visible without expanding - THIS is what actually
+      // differs sector to sector (see formatSizeDistribution's own
+      // comment); the per-size crate-count figures themselves don't, so
+      // they're shown once above the whole list instead (renderCrateStatsRow).
+      const sizeDistText = formatSizeDistribution(sector.wreck_size_counts);
+      const rowRightText = [levelRangeText, sizeDistText].filter(Boolean).join(" · ");
 
       const sectorNode = makeGroupNode(
         `wsec|${sector.name}`,
@@ -220,36 +246,14 @@
           "loc_sum"
         )
       );
-      // Whether a wreck HAS a rare loot crate at all, not what's in one
-      // given it exists (that's crateTargets/the items below) - a single
-      // wreck can hold more than one, hence "avg X/wreck" alongside the
-      // at-least-one %. Broken out per SIZE (Big vs Small), not the
-      // sector-blended average - see backend.shipwreck_loot.get_all_sectors's
-      // own docstring for why the blend understates/overstates depending on
-      // which size wreck you're actually at. Each size also splits the
-      // scattered debris field out from the FULL wreck total (its marked
-      // hull piece always triggers a SECOND, independent generation pass
-      // too - unconditional, not tied to any player action - same
-      // docstring) - shown as two lines since "just the loose debris" and
-      // "everything this wreck has" are both meaningful numbers on their
-      // own, not two player-behavior scenarios to pick between.
-      for (const size of ["Big", "Small"]) {
-        const stats = sector.crate_spawn_by_size && sector.crate_spawn_by_size[size];
-        if (!stats) continue;
+      // No per-size crate-odds detail here (moved to renderCrateStatsRow,
+      // above the whole list - it's the same figures in every sector, see
+      // that function's own comment) - just this sector's own wreck mix,
+      // which is what determines how often you actually run into the
+      // higher-crate-count Big variant here.
+      if (sizeDistText) {
         sectorNode.children.push(
-          makeSummaryNode(
-            `Rare crate odds (${size} wreck, debris field only): ` +
-              `${fmtPct(stats.at_least_one * 100)} chance of ≥1 (avg ${stats.expected_count.toFixed(2)}/wreck)`,
-            "loc_sum"
-          )
-        );
-        const total = stats.total;
-        sectorNode.children.push(
-          makeSummaryNode(
-            `Rare crate odds (${size} wreck, full site): ` +
-              `${fmtPct(total.at_least_one * 100)} chance of ≥1 (avg ${total.expected_count.toFixed(2)}/wreck)`,
-            "loc_sum"
-          )
+          makeSummaryNode(`Wreck mix: ${sizeDistText}`, "loc_sum")
         );
       }
       sectorNode.children.push(
@@ -363,6 +367,7 @@
   async function ensureDataLoaded() {
     if (mode === "sector" && sectorsData === null) {
       sectorsData = await CraftMapApi.call("get_wreck_sectors");
+      renderCrateStatsRow();
     } else if (mode === "item" && itemsData === null) {
       itemsData = await CraftMapApi.call("get_wreck_items");
     }
@@ -376,6 +381,7 @@
     modeLiveBtn.classList.toggle("active", mode === "live");
     searchRowEl.classList.toggle("hidden", mode === "live");
     treeEl.classList.toggle("hidden", mode === "live");
+    crateStatsRowEl.classList.toggle("hidden", mode !== "sector");
     liveViewEl.classList.toggle("hidden", mode !== "live");
     if (mode === "live") {
       await LiveTracking.onShow();

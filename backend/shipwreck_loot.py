@@ -141,7 +141,16 @@ def get_all_sectors():
     Each item row's own pct is itemDropOdds's (conditional on a crate
     already being open); expected_per_wreck/at_least_one_pct alongside it
     are wreckSiteItemOdds's (fold in the sector's own crate-count mix too -
-    see _wreck_site_lookup and shipwreck_loot_integration.md)."""
+    see _wreck_site_lookup and shipwreck_loot_integration.md).
+
+    wreck_size_counts is the {"Big": n, "Small": m} count of wreck-size
+    variants in this sector's own generation table - THIS is what varies
+    by sector, unlike crate_spawn_by_size's own per-size figures (which are
+    the same everywhere, since a Big/Small wreck's crate generation doesn't
+    depend on which sector it's in - see crate_spawn_by_size's docstring
+    above). A sector heavier on Big wrecks sees more crates on average not
+    because Big wrecks behave differently there, but because it rolls Big
+    wrecks more often."""
     data = _load()
     wreck_site = _wreck_site_lookup(data)
     sector_items = {name: [] for name in (s["name"] for s in data["sectors"].values())}
@@ -173,6 +182,7 @@ def get_all_sectors():
                 "name": sector["name"],
                 "explo_level": sector["exploLevel"],
                 "max_loot_level": sector["maxLootLevel"],
+                "wreck_size_counts": sector.get("wreckSizeCounts", {}),
                 "loot_level_probability": sector["lootLevelProbability"],
                 "secondary_material_pool": [
                     SECONDARY_MATERIAL_NAMES.get(m, m) for m in sector["secondaryMaterialPool"]
