@@ -102,7 +102,11 @@
         await CraftMapApi.call("update_queue_qty", job.queue_id, qty);
         if (selectedJob && selectedJob.queue_id === job.queue_id) {
           selectedJob.qty = qty;
-          await refreshBreakdown();
+          // forceFull: true - renderQueueMode's cache is keyed only by
+          // queue_id, so a bare refreshBreakdown() would keep showing the
+          // stale per-ingredient quantities from before this edit until
+          // something else (e.g. selecting a different job) invalidates it.
+          await refreshBreakdown({ forceFull: true });
         }
       };
       qtyInput.addEventListener("keydown", (e) => {
@@ -835,6 +839,9 @@
       },
     });
     addRecipeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addJob();
+    });
+    addQtyInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") addJob();
     });
 

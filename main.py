@@ -263,37 +263,46 @@ class App:
     def toggle(self):
         hwnd = win32util.pywebview_hwnd(self.window)
         if not self.visible:
-            if (
+            # A pinned, visible companion window is still up on its own
+            # with the main window hidden - the first hotkey press should
+            # hand it focus rather than also unhiding the main overlay. A
+            # second press (some companion window now focused) falls
+            # through to the deiconify branch below.
+            #
+            # This must be judged across BOTH companions at once, not one
+            # `if` per window: checking each independently ("is *this one*
+            # not foreground?") means that with both queue and wreck
+            # tracker pinned+visible, focusing one always leaves the
+            # other's check true on the *next* press, so the hotkey (and
+            # the tray icon's Show/Hide item, which calls this same
+            # method) just ping-pongs focus between the two companions
+            # forever and can never reach self.window.show().
+            companion_focused = (
                 self.queue_pinned
                 and self.queue_visible
-                and not win32util.hwnd_is_foreground(
+                and win32util.hwnd_is_foreground(
                     win32util.pywebview_hwnd(self.queue_window)
                 )
-            ):
-                # The pinned queue window is still up on its own with the
-                # main window hidden - the first hotkey press should hand
-                # it focus, not also unhide the main overlay. A second
-                # press (queue now focused, main still hidden) falls
-                # through to the deiconify branch below.
-                win32util.force_foreground_window(
-                    win32util.pywebview_hwnd(self.queue_window)
-                )
-                self.sync_input_passthrough()
-                return
-            if (
+            ) or (
                 self.wreck_tracker_pinned
                 and self.wreck_tracker_visible
-                and not win32util.hwnd_is_foreground(
+                and win32util.hwnd_is_foreground(
                     win32util.pywebview_hwnd(self.wreck_tracker_window)
                 )
-            ):
-                # Same idea as the queue-pinned check above, for the
-                # wreck tracker window.
-                win32util.force_foreground_window(
-                    win32util.pywebview_hwnd(self.wreck_tracker_window)
-                )
-                self.sync_input_passthrough()
-                return
+            )
+            if not companion_focused:
+                if self.queue_pinned and self.queue_visible:
+                    win32util.force_foreground_window(
+                        win32util.pywebview_hwnd(self.queue_window)
+                    )
+                    self.sync_input_passthrough()
+                    return
+                if self.wreck_tracker_pinned and self.wreck_tracker_visible:
+                    win32util.force_foreground_window(
+                        win32util.pywebview_hwnd(self.wreck_tracker_window)
+                    )
+                    self.sync_input_passthrough()
+                    return
             self.window.show()
             self.visible = True
             win32util.force_foreground_window(hwnd)
