@@ -142,7 +142,7 @@ for review before you decide how to merge.
 - **`farming.json`** — Xenic Farm crop/variant reference data (the "Farming"
   tab, `backend/farming.py` + `frontend/js/farming.js`). Unlike the files
   above it is **hand-transcribed, not script-regenerated** — sourced from
-  `shipbuilder/tools/game_logic_notes.md` Findings 13/14/16/17/18
+  `shipbuilder/tools/game_logic_notes.md` Findings 13/14/16/17/18/19
   (decompiled `ent.b.Farm`/`ent.b.PlotZone` logic plus `data.cdb`'s `farm`/
   `attribute`/`constant` sheets), so a new/corrected finding there means
   updating this file by hand to match. Per grown variant: grow-gate
@@ -154,8 +154,13 @@ for review before you decide how to merge.
   `harvest_mechanism` (fruit/byproduct accrue during growth and pay out
   once at gather; `*_cycle_hours` means "hours of growth per item", not a
   repeating timer), `effects` (the modifier math the frontend computes
-  with), and `dial_mechanics` (instant dial switching, per-planet energy
-  costs, the no-Natural-light-in-dark-sites rule). A top-level `layouts`
+  with), `dial_mechanics` (instant dial switching, per-planet energy
+  costs, the no-Natural-light-in-dark-sites rule), and `adjacency_timing`
+  (Finding 19: a neighbor's own grow stage never gates its adjacency
+  effect — only whether a grown-variant row is assigned to its plot at
+  all does, so a companion buffs its neighbor for its whole
+  post-germination lifetime, including while mature and unharvested, not
+  just while both are still actively growing). A top-level `layouts`
   object plus each variant's own `goal_presets` (see `_meta.
   goal_presets_and_layouts`) back the Farming tab's Layouts sub-mode - 5x3
   plot grids for the Xenic Farm's real neighbor mechanics, picked per
