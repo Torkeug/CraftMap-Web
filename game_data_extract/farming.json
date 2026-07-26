@@ -8,7 +8,76 @@
     "enrichment_trigger": "An enrichment entry's optional 'trigger' field ({kind: 'temp'|'light'|'neighbor_tag', values: [...]}) marks the ones frontend/js/farming.js can render as a pill instead of plain text: 'temp'/'light' are gated by the SAME shared Temperature/Light dial as the variant's own grow-gate, rendered as the same dial chips used in Requirements; 'neighbor_tag' names a bio-tag (see each variant's own 'bio_tag' and 'neighbor_restriction_tag') a neighbor plant must carry, rendered as the same pill used for the bio-tag badge and the Requirements Neighbor line. Fertilizer conditions carry no trigger - there's no established pill style for those.",
     "unreachable": "A variant's optional 'unreachable: true' (+ 'unreachable_note', the player-facing explanation frontend/js/farming.js shows in a warning banner) means its grow-gate can NEVER pass in normal play, confirmed by both raw disassembly and a direct in-game test - it is not just rare or hard, it's a dead branch of pickVariant. Only Rockwood Glow (Glowwood) is marked this way: its 'temperature'/'light' fields are present with a literal integer 0 in the source data rather than being absent, and hasMinRequirement only skips the dial check on an ABSENT field - a present 0 always fails the bitwise-AND test, every tick, no matter the farm's dial position. This is the opposite of every other 'unconstrained' variant in Findings 13/14 (which all use an absent key), so Glowwood's empty temperature/light arrays here do NOT mean 'any dial position works' the way they do for other variants - see this field's own presence as the disambiguator, and always check it before treating an empty temperature/light list as unconstrained. A theorized loophole (stacking Dreamwood neighbors' allowMissing tolerance to cover both misses) was investigated and ruled out - it caps at 1, Glow needs 2. The only way to place it at all is a debug/admin-only function, not normal play.",
     "fertilizer_forbidden_any_removed": "An earlier revision marked Rockwood Glow 'fertilizer_forbidden_any: true' (no fertilizer of ANY kind may be present) based on a live-play impression, explicitly flagged for follow-up against raw disassembly. That follow-up happened (2026-07-25, Finding 18): the game's requirement checker has no such branch at all - a variant can only require or forbid SPECIFIC supplements, and Glowwood's game-data gate carries neither list. The flag was wrong and has been removed; Glowwood's fertilizer cell is simply unconstrained (academic anyway, since its temperature/light gate is unreachable - see 'unreachable').",
-    "effects": "Replaces the earlier 'speed_effect' model (2026-07-25, Findings 17/18) - the old model treated fruit/byproduct numbers as cycle TIMES, which the game does not do (see harvest_mechanism). An enrichment's or neighbor_effect's optional 'effects' array ([{attr, value}]) uses the game's own attribute semantics: 'all_speed' (additive; speeds growth AND product accumulation equally - harvest comes sooner, yield per harvest UNCHANGED - the game calls it Growth and Production Speed), 'growth_speed_mult' (multiplicative on growth progress only - the game's Productive Metabolic Speed; a value below 1 grows SLOWER but yields MORE per harvest by exactly 1/value, since products keep accumulating over the longer growth - the game's own description spells out this tradeoff), 'fruit_qty' / 'byproduct_qty' (additive quantity bonuses: multiply that product's yield by (1+sum), no effect on any time). Frontend math (all verified against the disassembled formulas): growth_time = growth_hours / ((1+sum all_speed) * (1+sum growth_speed... there is no additive growth_speed in current data) * product growth_speed_mult); fruit_yield = ceil(growth_hours * (1+sum fruit_qty) / (fruit_cycle_hours * product growth_speed_mult)); byproduct likewise. Note all_speed cancels out of the yield formulas entirely. Entries sharing a 'dial_group' (temp/light) are mutually exclusive in the UI (the farm holds one Temperature and one Light position at a time); entries with no dial_group toggle independently. neighbor_effects entries carry the same 'effects' array plus their own 'effect' prose line, rendered identically to enrichment rows (condition -> effect) so no toggle is ever description-less. Either kind of entry may also carry an 'effect_note': a longer aside (dead-code caveats, stacking rules, the why behind a slower-but-richer tradeoff) shown as a hover tooltip on the effect text rather than inline - keep 'effect' itself to one readable line; a long inline effect used to wrap onto its own full-width line, visually detaching from its row. The game data also defines multiplicative fruit/byproduct-quantity attrs, but they are DEAD CODE in the current build (computed then discarded, confirmed at raw-opcode level) - the one place they appear (Spacekorn's UV entry, a would-be -20% byproduct malus) is described in prose but carries no effect entry."
+    "effects": "Replaces the earlier 'speed_effect' model (2026-07-25, Findings 17/18) - the old model treated fruit/byproduct numbers as cycle TIMES, which the game does not do (see harvest_mechanism). An enrichment's or neighbor_effect's optional 'effects' array ([{attr, value}]) uses the game's own attribute semantics: 'all_speed' (additive; speeds growth AND product accumulation equally - harvest comes sooner, yield per harvest UNCHANGED - the game calls it Growth and Production Speed), 'growth_speed_mult' (multiplicative on growth progress only - the game's Productive Metabolic Speed; a value below 1 grows SLOWER but yields MORE per harvest by exactly 1/value, since products keep accumulating over the longer growth - the game's own description spells out this tradeoff), 'fruit_qty' / 'byproduct_qty' (additive quantity bonuses: multiply that product's yield by (1+sum), no effect on any time). Frontend math (all verified against the disassembled formulas): growth_time = growth_hours / ((1+sum all_speed) * (1+sum growth_speed... there is no additive growth_speed in current data) * product growth_speed_mult); fruit_yield = ceil(growth_hours * (1+sum fruit_qty) / (fruit_cycle_hours * product growth_speed_mult)); byproduct likewise. Note all_speed cancels out of the yield formulas entirely. Entries sharing a 'dial_group' (temp/light) are mutually exclusive in the UI (the farm holds one Temperature and one Light position at a time); entries with no dial_group toggle independently. neighbor_effects entries carry the same 'effects' array plus their own 'effect' prose line, rendered identically to enrichment rows (condition -> effect) so no toggle is ever description-less. Either kind of entry may also carry an 'effect_note': a longer aside (dead-code caveats, stacking rules, the why behind a slower-but-richer tradeoff) shown as a hover tooltip on the effect text rather than inline - keep 'effect' itself to one readable line; a long inline effect used to wrap onto its own full-width line, visually detaching from its row. The game data also defines multiplicative fruit/byproduct-quantity attrs, but they are DEAD CODE in the current build (computed then discarded, confirmed at raw-opcode level) - the one place they appear (Spacekorn's UV entry, a would-be -20% byproduct malus) is described in prose but carries no effect entry. Every togglable entry (any enrichment or neighbor_effect carrying 'effects') also carries a stable 'id', added so per-variant 'goal_presets' below can reference exactly which toggles a recommended setup implies without duplicating numbers - the id is a slug, unique within that variant, not global.",
+    "goal_presets_and_layouts": "Added alongside the Layouts reference view (frontend/js/farming.js): each variant's 'goal_presets' names, for each of the 'rate' (items/hour) and 'harvest' (items/harvest) framings, which of that SAME variant's own toggle ids to check for an 'overall' (both products), 'fruit_only', or 'byproduct_only' goal - deliberately not precomputed numbers, so the Layouts view drives the exact same live calculator as the Reference view and can never drift from it. A goal's preset always includes every toggle genuinely part of that setup (including pure-speed ones), not just the ones touching the target product - the only toggles ever dropped for a *_only goal are fertilizer-only bonuses that contribute nothing to the wanted product, since spending a supplement slot for zero benefit is waste, not a neutral choice (a bonus that's free either way - i.e. costs no fertilizer, most neighbor effects - is always kept). Where no single setup dominates both products (Spacekorn Plain's rate table only), 'overall' is an {no_dominant: true, options: [...]} shape instead of a single preset - a real Pareto trade-off, not an oversight. Each preset also names a 'layout' (a key into the top-level 'layouts' object) - some variants use the same layout across both framings (Green, Dream, Sour, Woolly, Plain's harvest table), others switch layout by framing because the metabolic-slowdown tradeoff genuinely reverses which physical pairing wins (White: Layout C-alt for rate, Layout C for harvest; Spacekorn Plain: Layout D for byproduct-rate specifically, Layout D-mix everywhere else). Discovered while building this: Rockwood Green, White, and Dream were all missing a 'Neighboring Woolly Spacekorn' neighbor_effect - Woolly's own +20% Byproduct quantity to 'any neighbor' (see ChillyEinkorn's adjacency line) had only ever been recorded as what Woolly does to others, never mirrored onto the receiving variants' own cards the way Rockwood Glow's UV-lit effect already was - so it was real but untoggleable. Fixed here since it directly changed which pairing is actually optimal for White (see Layout C-alt)."
+  },
+  "layouts": {
+    "A": {
+      "label": "Dream Vault",
+      "crop": "rockwood",
+      "dial": { "temperature": ["Cold", "Temperate"], "light": ["Dark"] },
+      "note": "Full pack, single variant - Dream carries no Reclusive/Putrescent tag and no neighbor restriction, so there's no conflict to route around.",
+      "grid": [
+        ["Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood"],
+        ["Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood"],
+        ["Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood"]
+      ]
+    },
+    "B": {
+      "label": "Green / Woolly Weave",
+      "crop": "mixed",
+      "dial": { "temperature": ["Cold"], "light": ["UV"] },
+      "note": "Checkerboard - every Green plot's neighbors are all Woolly, never another Reclusive plant, so this packs solid at 15/15 with no gate-failure risk.",
+      "grid": [
+        ["Rockwood", "ChillyEinkorn", "Rockwood", "ChillyEinkorn", "Rockwood"],
+        ["ChillyEinkorn", "Rockwood", "ChillyEinkorn", "Rockwood", "ChillyEinkorn"],
+        ["Rockwood", "ChillyEinkorn", "Rockwood", "ChillyEinkorn", "Rockwood"]
+      ]
+    },
+    "C": {
+      "label": "Bitter / White Checkerboard",
+      "crop": "rockwood",
+      "dial": { "temperature": ["Hot"], "light": ["Dark"] },
+      "note": "White's harvest-optimal pairing - the Putrescent-neighbor metabolic-slowdown trade grows bigger (not faster) hauls of both of White's products, which is why this layout is only the right call for the items/harvest framing, not items/hour (see Layout C-alt).",
+      "grid": [
+        ["Sulfwood", "Whitewood", "Sulfwood", "Whitewood", "Sulfwood"],
+        ["Whitewood", "Sulfwood", "Whitewood", "Sulfwood", "Whitewood"],
+        ["Sulfwood", "Whitewood", "Sulfwood", "Whitewood", "Sulfwood"]
+      ]
+    },
+    "C-alt": {
+      "label": "White / Woolly Checkerboard",
+      "crop": "mixed",
+      "dial": { "temperature": ["Cold"], "light": ["UV"] },
+      "note": "White's rate-optimal pairing - Woolly's blanket +20% Byproduct quantity with none of Bitter's metabolic slowdown, since White doesn't need a bigger-but-slower harvest to win on items/hour. Strictly beats pairing White with Bitter (or with nothing) for both of White's own products' rates.",
+      "grid": [
+        ["Whitewood", "ChillyEinkorn", "Whitewood", "ChillyEinkorn", "Whitewood"],
+        ["ChillyEinkorn", "Whitewood", "ChillyEinkorn", "Whitewood", "ChillyEinkorn"],
+        ["Whitewood", "ChillyEinkorn", "Whitewood", "ChillyEinkorn", "Whitewood"]
+      ]
+    },
+    "D": {
+      "label": "Plain Vault",
+      "crop": "spacekorn",
+      "dial": { "temperature": ["Temperate"], "light": ["UV"] },
+      "note": "Byproduct-rate-optimal only - Temperate's own speed-only enrichment pays off best on Plain Pulp's short cycle specifically. Strictly worse than Layout D-mix for fruit rate and for harvest size on both products, since Temperate's bonus is pure growth speed and does nothing once time isn't being measured.",
+      "grid": [
+        ["Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn"],
+        ["Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn"],
+        ["Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn"]
+      ]
+    },
+    "D-mix": {
+      "label": "Plain / Sour Stripe",
+      "crop": "spacekorn",
+      "dial": { "temperature": ["Warm"], "light": ["UV"] },
+      "note": "Fruit-rate-optimal and harvest-optimal (all goals) for both Plain and Sour. Column stripes, not a checkerboard: every Plain plot touches a Sour column horizontally and another Plain vertically within its own column, so both of Plain's own adjacency bonuses land at once.",
+      "grid": [
+        ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"],
+        ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"],
+        ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"]
+      ]
+    }
   },
   "crops": [
     {
@@ -34,7 +103,9 @@
           "byproduct_cycle_hours": [0.14, 0.18],
           "enrichments": [
             {
+              "id": "carbonic",
               "condition": "Carbonic Fertilizer present",
+              "fertilizer_item": "Carbonic Fertilizer",
               "effect": "Fruit quantity +50%, Byproduct quantity +50%",
               "effects": [
                 { "attr": "fruit_qty", "value": 0.5 },
@@ -45,7 +116,28 @@
           "adjacency": [
             "Neighbor seed germination speed +100%; neighbor seed death speed ×0.5"
           ],
-          "neighbor_restriction_tag": "Reclusive"
+          "neighbor_restriction_tag": "Reclusive",
+          "neighbor_effects": [
+            {
+              "id": "woolly_neighbor",
+              "label": "Neighboring Woolly Spacekorn",
+              "effect": "Byproduct quantity +20%",
+              "effect_note": "Woolly Spacekorn's own adjacency effect applies to any neighbor regardless of crop - added here since it was previously only recorded as what Woolly does to others, not toggleable on the receiving variant's own card.",
+              "effects": [{ "attr": "byproduct_qty", "value": 0.2 }]
+            }
+          ],
+          "goal_presets": {
+            "rate": {
+              "overall": { "layout": "B", "toggle_ids": ["carbonic", "woolly_neighbor"] },
+              "fruit_only": { "layout": "B", "toggle_ids": ["carbonic", "woolly_neighbor"] },
+              "byproduct_only": { "layout": "B", "toggle_ids": ["carbonic", "woolly_neighbor"] }
+            },
+            "harvest": {
+              "overall": { "layout": "B", "toggle_ids": ["carbonic", "woolly_neighbor"] },
+              "fruit_only": { "layout": "B", "toggle_ids": ["carbonic", "woolly_neighbor"] },
+              "byproduct_only": { "layout": "B", "toggle_ids": ["carbonic", "woolly_neighbor"] }
+            }
+          }
         },
         {
           "id": "Whitewood",
@@ -62,12 +154,16 @@
           "byproduct_cycle_hours": [1.3, 1.7],
           "enrichments": [
             {
+              "id": "neutral",
               "condition": "Neutral Fertilizer present",
+              "fertilizer_item": "Neutral Fertilizer",
               "effect": "Byproduct quantity +75%",
               "effects": [{ "attr": "byproduct_qty", "value": 0.75 }]
             },
             {
+              "id": "carbonic",
               "condition": "Carbonic Fertilizer present",
+              "fertilizer_item": "Carbonic Fertilizer",
               "effect": "Fruit quantity +50%, Byproduct quantity +50%",
               "effects": [
                 { "attr": "fruit_qty", "value": 0.5 },
@@ -75,15 +171,37 @@
               ]
             },
             {
+              "id": "putrescent_neighbor",
               "condition": "Neighbor tagged Putrescent",
               "effect": "Grows 40% slower but yields ~×1.67 fruit AND byproduct per harvest; consumes 40% less liquid & supplements",
-              "effect_note": "Products keep accumulating during the longer growth - that's where the extra per-harvest yield comes from.",
+              "effect_note": "Products keep accumulating during the longer growth - that's where the extra per-harvest yield comes from. Strictly worse than skipping this for items/hour (see Layout C-alt) but strictly better for items/harvest (see Layout C) - not a wash once you know which framing you're optimizing.",
               "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
               "effects": [{ "attr": "growth_speed_mult", "value": 0.6 }]
             }
           ],
           "adjacency": ["Neighbor supplement consumption -50%"],
-          "neighbor_restriction_tag": "Reclusive"
+          "neighbor_restriction_tag": "Reclusive",
+          "neighbor_effects": [
+            {
+              "id": "woolly_neighbor",
+              "label": "Neighboring Woolly Spacekorn",
+              "effect": "Byproduct quantity +20%",
+              "effect_note": "Woolly Spacekorn's own adjacency effect applies to any neighbor regardless of crop - added here since it was previously only recorded as what Woolly does to others, not toggleable on the receiving variant's own card. This is what makes Layout C-alt (White + Woolly) strictly beat Layout C (White + Bitter) for White's own items/hour numbers.",
+              "effects": [{ "attr": "byproduct_qty", "value": 0.2 }]
+            }
+          ],
+          "goal_presets": {
+            "rate": {
+              "overall": { "layout": "C-alt", "toggle_ids": ["carbonic", "neutral", "woolly_neighbor"] },
+              "fruit_only": { "layout": "C-alt", "toggle_ids": ["carbonic", "woolly_neighbor"] },
+              "byproduct_only": { "layout": "C-alt", "toggle_ids": ["carbonic", "neutral", "woolly_neighbor"] }
+            },
+            "harvest": {
+              "overall": { "layout": "C", "toggle_ids": ["carbonic", "neutral", "putrescent_neighbor"] },
+              "fruit_only": { "layout": "C", "toggle_ids": ["carbonic", "putrescent_neighbor"] },
+              "byproduct_only": { "layout": "C", "toggle_ids": ["carbonic", "neutral", "putrescent_neighbor"] }
+            }
+          }
         },
         {
           "id": "Dreamwood",
@@ -100,6 +218,7 @@
           "byproduct_cycle_hours": [3, 4.6],
           "enrichments": [
             {
+              "id": "cold_temp_speed",
               "condition": "Temperature dial = Cold or Temperate",
               "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "temp", "values": ["Cold", "Temperate"] },
@@ -107,12 +226,16 @@
               "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
+              "id": "carbonic",
               "condition": "Carbonic Fertilizer present",
+              "fertilizer_item": "Carbonic Fertilizer",
               "effect": "Fruit quantity +350%",
               "effects": [{ "attr": "fruit_qty", "value": 3.5 }]
             },
             {
+              "id": "acidic",
               "condition": "Acidic Fertilizer present",
+              "fertilizer_item": "Acidic Fertilizer",
               "effect": "Byproduct quantity +120%",
               "effects": [{ "attr": "byproduct_qty", "value": 1.2 }]
             }
@@ -121,7 +244,28 @@
             "Neighbor tolerates 1 unmet requirement instead of dying (water and farm power can never be waived)",
             "Invasive spread on maturing: 50% chance to claim an adjacent empty plot, 25% chance to overwrite an adjacent germinating seed or dead plant (never an already-grown live neighbor) with a copy of itself"
           ],
-          "neighbor_restriction_tag": null
+          "neighbor_restriction_tag": null,
+          "neighbor_effects": [
+            {
+              "id": "woolly_neighbor",
+              "label": "Neighboring Woolly Spacekorn",
+              "effect": "Byproduct quantity +20%",
+              "effect_note": "Compatible dial-wise (Woolly's Cold-only gate falls inside Dream's own Cold/Temperate/Warm range) but not part of Dream's own recommended layout - a full Dream monoculture (Layout A) packs more Dream plants overall than swapping some plots for Woolly would gain back in per-plant byproduct. Left toggleable here for accuracy if you build a hybrid anyway.",
+              "effects": [{ "attr": "byproduct_qty", "value": 0.2 }]
+            }
+          ],
+          "goal_presets": {
+            "rate": {
+              "overall": { "layout": "A", "toggle_ids": ["cold_temp_speed", "carbonic", "acidic"] },
+              "fruit_only": { "layout": "A", "toggle_ids": ["cold_temp_speed", "carbonic"] },
+              "byproduct_only": { "layout": "A", "toggle_ids": ["cold_temp_speed", "acidic"] }
+            },
+            "harvest": {
+              "overall": { "layout": "A", "toggle_ids": ["cold_temp_speed", "carbonic", "acidic"] },
+              "fruit_only": { "layout": "A", "toggle_ids": ["cold_temp_speed", "carbonic"] },
+              "byproduct_only": { "layout": "A", "toggle_ids": ["cold_temp_speed", "acidic"] }
+            }
+          }
         },
         {
           "id": "Glowwood",
@@ -140,6 +284,7 @@
           "byproduct_cycle_hours": [0.01, 0.02],
           "enrichments": [
             {
+              "id": "dark_qty",
               "condition": "Light dial = Dark",
               "effect": "Fruit quantity +30%",
               "trigger": { "kind": "light", "values": ["Dark"] },
@@ -147,7 +292,9 @@
               "effects": [{ "attr": "fruit_qty", "value": 0.3 }]
             },
             {
+              "id": "carbonic",
               "condition": "Carbonic Fertilizer present",
+              "fertilizer_item": "Carbonic Fertilizer",
               "effect": "Fruit quantity +20%, Byproduct quantity +20%",
               "effects": [
                 { "attr": "fruit_qty", "value": 0.2 },
@@ -155,6 +302,7 @@
               ]
             },
             {
+              "id": "putrescent_neighbor",
               "condition": "Neighbor tagged Putrescent",
               "effect": "Growth & Production speed +25% (faster harvest, same yield) AND Byproduct quantity +25%",
               "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
@@ -184,6 +332,7 @@
           "byproduct_cycle_hours": [1.1, 1.35],
           "enrichments": [
             {
+              "id": "dark_mult",
               "condition": "Light dial = Dark",
               "effect": "Grows 20% slower but yields ~×1.25 fruit AND byproduct per harvest; consumes 20% less liquid & supplements",
               "effect_note": "Products keep accumulating during the longer growth - that's where the extra per-harvest yield comes from.",
@@ -192,6 +341,7 @@
               "effects": [{ "attr": "growth_speed_mult", "value": 0.8 }]
             },
             {
+              "id": "uv_speed",
               "condition": "Light dial = UV",
               "effect": "Growth & Production speed +30% - faster harvest, same yield per harvest",
               "trigger": { "kind": "light", "values": ["UV"] },
@@ -199,6 +349,7 @@
               "effects": [{ "attr": "all_speed", "value": 0.3 }]
             },
             {
+              "id": "hot_qty",
               "condition": "Temperature dial = Hot",
               "effect": "Byproduct quantity +40%",
               "trigger": { "kind": "temp", "values": ["Hot"] },
@@ -212,13 +363,26 @@
           "neighbor_restriction_tag": null,
           "neighbor_effects": [
             {
+              "id": "glow_neighbor",
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
               "effect": "Growth & Production speed +30% - same as the Light dial = UV bonus",
               "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
               "effects": [{ "attr": "all_speed", "value": 0.3 }]
             }
-          ]
+          ],
+          "goal_presets": {
+            "rate": {
+              "overall": { "layout": "C", "toggle_ids": ["hot_qty", "uv_speed"] },
+              "fruit_only": { "layout": "C", "toggle_ids": ["hot_qty", "uv_speed"] },
+              "byproduct_only": { "layout": "C", "toggle_ids": ["hot_qty", "uv_speed"] }
+            },
+            "harvest": {
+              "overall": { "layout": "C", "toggle_ids": ["hot_qty", "dark_mult"] },
+              "fruit_only": { "layout": "C", "toggle_ids": ["hot_qty", "dark_mult"] },
+              "byproduct_only": { "layout": "C", "toggle_ids": ["hot_qty", "dark_mult"] }
+            }
+          }
         }
       ]
     },
@@ -229,7 +393,6 @@
       "building": "Xenic Farm",
       "germination_hours": [2.7, 3],
       "germination_needs": "Water",
-      "note": "Woolly Spacekorn fruits into an intermediate shell item (Wooly Korn - 'contains a few spacekorn seed, a grinder is required to extract them') rather than directly back into Spacekorn Seed, unlike the other variants here and unlike any Rockwood Nut variant.",
       "variants": [
         {
           "id": "Plainkorn",
@@ -246,6 +409,7 @@
           "byproduct_cycle_hours": [4, 6],
           "enrichments": [
             {
+              "id": "natural_speed",
               "condition": "Light dial = Natural",
               "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "light", "values": ["Natural"] },
@@ -253,6 +417,7 @@
               "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
+              "id": "uv_speed",
               "condition": "Light dial = UV",
               "effect": "Growth & Production speed +150% - faster harvest, same yield per harvest",
               "effect_note": "The game's data also lists a -20% byproduct-quantity malus for UV, but that attribute is dead code in the current build - it never actually applies.",
@@ -261,11 +426,14 @@
               "effects": [{ "attr": "all_speed", "value": 1.5 }]
             },
             {
+              "id": "neutral",
               "condition": "Neutral Fertilizer present",
+              "fertilizer_item": "Neutral Fertilizer",
               "effect": "Byproduct quantity +100%",
               "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
             },
             {
+              "id": "temperate_speed",
               "condition": "Temperature dial = Temperate",
               "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "temp", "values": ["Temperate"] },
@@ -273,8 +441,10 @@
               "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
+              "id": "putrescent_neighbor",
               "condition": "Neighbor tagged Putrescent",
               "effect": "Fruit quantity +40%, Byproduct quantity +40%",
+              "effect_note": "Requires a Warm-dial farm (Sour's own gate needs Warm or Hot, and rejects Temperate outright) - mixing this in costs Plain its own Temperate-only speed enrichment above. Free quantity, not free: see Layout D vs D-mix.",
               "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
               "effects": [
                 { "attr": "fruit_qty", "value": 0.4 },
@@ -289,18 +459,39 @@
           "neighbor_restriction_tag": null,
           "neighbor_effects": [
             {
+              "id": "plain_neighbor",
               "label": "Neighboring Spacekorn Plain plant",
               "effect": "Growth & Production speed +15% - faster harvest, same yield per harvest",
               "effects": [{ "attr": "all_speed", "value": 0.15 }]
             },
             {
+              "id": "glow_neighbor",
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
               "effect": "Growth & Production speed +150% - same as the Light dial = UV bonus",
               "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
               "effects": [{ "attr": "all_speed", "value": 1.5 }]
             }
-          ]
+          ],
+          "goal_presets": {
+            "rate": {
+              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor"] },
+              "byproduct_only": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] },
+              "overall": {
+                "no_dominant": true,
+                "note": "No single winner - a genuine Pareto trade-off, not a rounding artifact. D-mix's fruit-rate edge (+16% relative) is larger than D's byproduct-rate edge (+9% relative), so lean D-mix if you have no preference either way.",
+                "options": [
+                  { "label": "Lean fruit (Layout D-mix)", "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor", "neutral"] },
+                  { "label": "Lean byproduct (Layout D)", "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] }
+                ]
+              }
+            },
+            "harvest": {
+              "overall": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor", "neutral"] },
+              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor"] },
+              "byproduct_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor", "neutral"] }
+            }
+          }
         },
         {
           "id": "SourEinkorn",
@@ -317,6 +508,7 @@
           "byproduct_cycle_hours": [3.2, 4.4],
           "enrichments": [
             {
+              "id": "natural_speed",
               "condition": "Light dial = Natural",
               "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "light", "values": ["Natural"] },
@@ -324,6 +516,7 @@
               "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
+              "id": "uv_speed",
               "condition": "Light dial = UV",
               "effect": "Growth & Production speed +150% - faster harvest, same yield per harvest",
               "effect_note": "The game's data also lists a -20% byproduct-quantity malus for UV, but that attribute is dead code in the current build - it never actually applies.",
@@ -332,7 +525,9 @@
               "effects": [{ "attr": "all_speed", "value": 1.5 }]
             },
             {
+              "id": "neutral",
               "condition": "Neutral Fertilizer present",
+              "fertilizer_item": "Neutral Fertilizer",
               "effect": "Byproduct quantity +100%",
               "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
             }
@@ -343,17 +538,32 @@
           "neighbor_restriction_tag": null,
           "neighbor_effects": [
             {
+              "id": "glow_neighbor",
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
               "effect": "Growth & Production speed +150% - same as the Light dial = UV bonus",
               "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
               "effects": [{ "attr": "all_speed", "value": 1.5 }]
             }
-          ]
+          ],
+          "goal_presets": {
+            "rate": {
+              "overall": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] },
+              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] }
+            },
+            "harvest": {
+              "overall": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] },
+              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] }
+            }
+          },
+          "goal_preset_note": "Sour's fruit (Spacekorn Seed) has no quantity lever at all in this data - the number never moves regardless of goal, and it's the same item Plain produces at a higher ceiling, so there's no fruit-focused reason to grow Sour over Plain. Fruit-only here is purely about not spending Neutral Fertilizer on a byproduct you've decided you don't want."
         },
         {
           "id": "ChillyEinkorn",
           "name": "Woolly Spacekorn",
+          "note": "Fruits into an intermediate shell item (Wooly Korn - 'contains a few spacekorn seed, a grinder is required to extract them') rather than directly back into Spacekorn Seed, unlike the other variants here and unlike any Rockwood Nut variant.",
           "bio_tag": null,
           "fruit": "Wooly Korn (shell item - grind to extract Spacekorn Seed)",
           "byproduct": "Frost Pulp",
@@ -366,6 +576,7 @@
           "byproduct_cycle_hours": [4, 6],
           "enrichments": [
             {
+              "id": "natural_speed",
               "condition": "Light dial = Natural",
               "effect": "Growth & Production speed +100% - harvest comes twice as fast, same yield per harvest",
               "trigger": { "kind": "light", "values": ["Natural"] },
@@ -373,6 +584,7 @@
               "effects": [{ "attr": "all_speed", "value": 1.0 }]
             },
             {
+              "id": "uv_speed",
               "condition": "Light dial = UV",
               "effect": "Growth & Production speed +150% - faster harvest, same yield per harvest",
               "effect_note": "The game's data also lists a -20% byproduct-quantity malus for UV, but that attribute is dead code in the current build - it never actually applies.",
@@ -381,12 +593,16 @@
               "effects": [{ "attr": "all_speed", "value": 1.5 }]
             },
             {
+              "id": "neutral",
               "condition": "Neutral Fertilizer present",
+              "fertilizer_item": "Neutral Fertilizer",
               "effect": "Byproduct quantity +100%",
               "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
             },
             {
+              "id": "carbonic",
               "condition": "Carbonic Fertilizer present",
+              "fertilizer_item": "Carbonic Fertilizer",
               "effect": "Byproduct quantity +100%",
               "effect_note": "Stacks with the Neutral Fertilizer bonus above if both are present at once.",
               "effects": [{ "attr": "byproduct_qty", "value": 1.0 }]
@@ -396,13 +612,27 @@
           "neighbor_restriction_tag": "Putrescent",
           "neighbor_effects": [
             {
+              "id": "glow_neighbor",
               "label": "Neighboring Rockwood Glow (treated as UV-lit)",
               "effect": "Growth & Production speed +150% - same as the Light dial = UV bonus",
               "effect_note": "Being next to a Rockwood Glow makes the plot count as UV-lit no matter the farm's actual Light dial - so this can't stack with the dial's own UV bonus.",
               "dial_group": "light",
               "effects": [{ "attr": "all_speed", "value": 1.5 }]
             }
-          ]
+          ],
+          "goal_presets": {
+            "rate": {
+              "overall": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] },
+              "fruit_only": { "layout": "B", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] }
+            },
+            "harvest": {
+              "overall": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] },
+              "fruit_only": { "layout": "B", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] }
+            }
+          },
+          "goal_preset_note": "Woolly's own fruit (Wooly Korn) has no quantity lever at all - neither fertilizer buys anything there, so fruit-only skips both. Its adjacency effect (+20% Byproduct quantity to 'any neighbor') is what it gives to whatever's next to it, not something it receives back from its own neighbor - it does not appear in its own goal_presets."
         }
       ]
     }

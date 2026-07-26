@@ -35,10 +35,25 @@
   const cropTabRockwood = document.getElementById("farming-crop-rockwood");
   const cropTabSpacekorn = document.getElementById("farming-crop-spacekorn");
   const infoRowEl = document.getElementById("farming-info-row");
-  const mechanicsNoteEl = document.getElementById("farming-mechanics-note");
   const variantsEl = document.getElementById("farming-variants");
 
+  const modeReferenceBtn = document.getElementById("farming-mode-reference");
+  const modeLayoutsBtn = document.getElementById("farming-mode-layouts");
+  const referenceViewEl = document.getElementById("farming-reference-view");
+  const layoutsViewEl = document.getElementById("farming-layouts-view");
+  const layoutsGoalGroupEl = document.getElementById("farming-layouts-goal-group");
+  const layoutsVariantSelect = document.getElementById("farming-layouts-variant-select");
+  const layoutsResultEl = document.getElementById("farming-layouts-result");
+
   let cropsData = null; // {rockwood: crop, spacekorn: crop}, fetched once
+  let layoutsData = null; // {A: layout, B: layout, ...}, fetched once
+  // variant "id" (e.g. "Dreamwood") -> {cropId, variant} - built once
+  // alongside cropsData, same rationale as goalIndex below but keyed by the
+  // variant's own farming.json id rather than every label a player might
+  // type, since the Layouts picker addresses a variant directly.
+  let variantById = null;
+  let currentFarmingMode = "reference";
+  let currentLayoutsGoal = "overall";
   let currentCrop = "spacekorn";
   // label (fruit/byproduct/variant name, lowercased) -> {cropId, variant} -
   // built once alongside cropsData so the goal search can jump to a variant
@@ -299,17 +314,14 @@
     ["byproduct", "Byproduct at gather"],
   ];
 
-  // Each row always leads with the unmodified base; once toggles change a
-  // number it becomes "base → current" in the value itself (not a small
-  // side note) - the base amount is the anchor the modifier only makes
-  // sense against. A row whose value the checked toggles DON'T change
-  // (e.g. yields under a pure Growth & Production speed bonus, which
-  // cancels out of the yield formula) just keeps showing the single base
-  // figure - itself informative: that toggle doesn't change this number.
-  function updateHarvest(card, variant, harvestEls) {
-    const { acc } = collectEffects(card);
+  // Pure {growth, fruit, byproduct} -> [base, adjusted] computation, shared
+  // by the Reference card's live calculator (updateHarvest, DOM-driven) and
+  // the Layouts view (below, driven by a goal_preset's toggle_ids instead
+  // of checkbox state) - one formula, two ways of choosing which bonuses
+  // are active, so the two views can never disagree with each other.
+  function computeHarvestValues(variant, acc) {
     const base = { all_speed: 0, growth_speed_mult: 1, fruit_qty: 0, byproduct_qty: 0 };
-    const values = {
+    return {
       growth: [fmtRange(variant.growth_hours), fmtRange(growthRange(variant, acc))],
       fruit: [
         fmtCount(yieldRange(variant, "fruit_cycle_hours", 0, base)),
@@ -320,6 +332,18 @@
         fmtCount(yieldRange(variant, "byproduct_cycle_hours", acc.byproduct_qty, acc)),
       ],
     };
+  }
+
+  // Each row always leads with the unmodified base; once toggles change a
+  // number it becomes "base → current" in the value itself (not a small
+  // side note) - the base amount is the anchor the modifier only makes
+  // sense against. A row whose value the checked toggles DON'T change
+  // (e.g. yields under a pure Growth & Production speed bonus, which
+  // cancels out of the yield formula) just keeps showing the single base
+  // figure - itself informative: that toggle doesn't change this number.
+  function updateHarvest(card, variant, harvestEls) {
+    const { acc } = collectEffects(card);
+    const values = computeHarvestValues(variant, acc);
     for (const [key] of HARVEST_ROWS) {
       const [baseText, adjusted] = values[key];
       harvestEls[key].valueEl.textContent =
@@ -559,6 +583,13 @@
     producesEl.textContent = `Produces: ${variant.fruit} (fruit) · ${variant.byproduct} (byproduct)`;
     card.appendChild(producesEl);
 
+    if (variant.note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "farming-variant-note";
+      noteEl.textContent = variant.note;
+      card.appendChild(noteEl);
+    }
+
     const reqSection = document.createElement("div");
     reqSection.className = "farming-variant-section";
     const reqLabelEl = document.createElement("div");
@@ -617,12 +648,6 @@
       crop.germination_hours
     )} (needs ${crop.germination_needs})`;
     infoRowEl.appendChild(infoLine);
-    if (crop.note) {
-      const noteLine = document.createElement("div");
-      noteLine.className = "farming-crop-note";
-      noteLine.textContent = crop.note;
-      infoRowEl.appendChild(noteLine);
-    }
 
     variantsEl.innerHTML = "";
     for (const variant of crop.variants) {
@@ -683,19 +708,340 @@
     if (entry) jumpToVariant(entry);
   }
 
+  // ---- Layouts view (frontend/js/farming.js's second mode) ----
+  //
+  // A goal+variant picker over the same 5x3 plot layouts worked out
+  // alongside the Reference tab's per-variant calculator (see
+  // farming.json's own _meta.goal_presets_and_layouts): each variant names,
+  // per (rate|harvest) framing and (overall|fruit_only|byproduct_only)
+  // goal, which of its OWN toggle ids to check and which layout grid that
+  // implies. Numbers shown here are computed straight from those same ids
+  // through computeHarvestValues (the exact pure formula the Reference
+  // card's own checkboxes drive) - not a jump-and-click-through to the
+  // other tab, and not a second, hand-maintained set of figures either.
+
+  // Short 3-letter tags for a layout board's cells - purely a legend/board
+  // label, matches the variant's own display name closely enough to read
+  // at the small board size a 5x3 grid gets in this window.
+  const LAYOUT_CELL_ABBR = {
+    Rockwood: "GRN",
+    Whitewood: "WHT",
+    Dreamwood: "DRM",
+    Sulfwood: "BTR",
+    Plainkorn: "PLN",
+    SourEinkorn: "SOR",
+    ChillyEinkorn: "WLY",
+  };
+
+  function renderLayoutBoard(layout) {
+    const board = document.createElement("div");
+    board.className = "farming-layout-board";
+    for (const row of layout.grid) {
+      for (const cellId of row) {
+        const cell = document.createElement("div");
+        cell.className = "farming-layout-cell";
+        if (cellId) {
+          const speciesClass = SPECIES_CLASS[cellId];
+          if (speciesClass) cell.classList.add(speciesClass);
+          const entry = variantById.get(cellId);
+          cell.textContent = LAYOUT_CELL_ABBR[cellId] || cellId.slice(0, 3).toUpperCase();
+          cell.title = entry ? entry.variant.name : cellId;
+        } else {
+          cell.classList.add("farming-layout-cell-empty");
+        }
+        board.appendChild(cell);
+      }
+    }
+    return board;
+  }
+
+  // One row per distinct variant actually present on the board - reads the
+  // grid itself rather than duplicating a variant list in farming.json, so
+  // it can never drift from what renderLayoutBoard just drew.
+  function renderLayoutLegend(layout) {
+    const wrap = document.createElement("div");
+    wrap.className = "farming-layout-legend";
+    const seen = new Set();
+    for (const row of layout.grid) {
+      for (const cellId of row) {
+        if (!cellId || seen.has(cellId)) continue;
+        seen.add(cellId);
+        const entry = variantById.get(cellId);
+        if (!entry) continue;
+        const item = document.createElement("div");
+        item.className = "farming-layout-legend-item";
+        const swatch = document.createElement("span");
+        swatch.className = "farming-layout-swatch " + (SPECIES_CLASS[cellId] || "");
+        item.appendChild(swatch);
+        const text = document.createElement("span");
+        text.textContent = `${entry.variant.name} → ${entry.variant.fruit} + ${entry.variant.byproduct}`;
+        item.appendChild(text);
+        wrap.appendChild(item);
+      }
+    }
+    return wrap;
+  }
+
+  // Same accumulator shape collectEffects(card) builds from checked DOM
+  // inputs, but built straight from a goal_preset's toggle_ids against the
+  // variant's own enrichments/neighbor_effects - no card, no checkboxes,
+  // same four-attribute math (farming.json's own _meta.effects).
+  function collectEffectsForIds(variant, toggleIds) {
+    const acc = { all_speed: 0, growth_speed_mult: 1, fruit_qty: 0, byproduct_qty: 0 };
+    const sources = [...(variant.enrichments || []), ...(variant.neighbor_effects || [])];
+    for (const entry of sources) {
+      if (!entry.id || !toggleIds.includes(entry.id)) continue;
+      for (const e of entry.effects || []) {
+        if (e.attr === "growth_speed_mult") acc.growth_speed_mult *= e.value;
+        else acc[e.attr] += e.value;
+      }
+    }
+    return acc;
+  }
+
+  // Same visual shape as the Reference card's own harvest box
+  // (makeHarvestBox/HARVEST_ROWS) so a number reads identically in both
+  // places - built fresh each render rather than reused, since there's no
+  // live checkbox state to update in place here.
+  function renderPresetHarvestBox(variant, toggleIds) {
+    const values = computeHarvestValues(variant, collectEffectsForIds(variant, toggleIds));
+    const box = document.createElement("div");
+    box.className = "farming-timing-box";
+    const labelEl = document.createElement("div");
+    labelEl.className = "farming-timing-label";
+    labelEl.textContent = "Harvest with this setup";
+    box.appendChild(labelEl);
+    for (const [key, label] of HARVEST_ROWS) {
+      const [baseText, adjusted] = values[key];
+      const row = document.createElement("div");
+      row.className = "farming-timing-row";
+      const statEl = document.createElement("span");
+      statEl.className = "farming-timing-stat";
+      statEl.textContent = label;
+      row.appendChild(statEl);
+      const valueEl = document.createElement("span");
+      valueEl.className = "farming-timing-value";
+      valueEl.textContent = adjusted === baseText ? baseText : `${baseText} → ${adjusted}`;
+      row.appendChild(valueEl);
+      box.appendChild(row);
+    }
+    return box;
+  }
+
+  // Required fertilizer (always on, regardless of goal) plus whichever
+  // optional fertilizer-granting enrichments THIS preset actually turns on
+  // (matched by fertilizer_item - see farming.json's own _meta.effects) -
+  // the same "what do I load this plot with" question the Reference tab's
+  // own Fertilizer requirement line answers, just goal-scoped here instead
+  // of listing every possible supplement at once.
+  function fmtPresetFertilizer(variant, toggleIds) {
+    const parts = [];
+    if (variant.fertilizer_required && variant.fertilizer_required.length) {
+      parts.push(`${variant.fertilizer_required.join(" + ")} (required)`);
+    }
+    const optional = (variant.enrichments || [])
+      .filter((e) => e.fertilizer_item && toggleIds.includes(e.id))
+      .map((e) => e.fertilizer_item);
+    if (optional.length) parts.push(optional.join(" + "));
+    if (variant.fertilizer_forbidden && variant.fertilizer_forbidden.length) {
+      parts.push(`${variant.fertilizer_forbidden.join(", ")} forbidden`);
+    }
+    return parts.length ? parts.join(" · ") : "none";
+  }
+
+  // Which bio-tag (if any) this preset's neighbor is actually leaned on for
+  // - an enrichment with a neighbor_tag trigger (farming.json's own
+  // _meta.enrichment_trigger) that's checked "on" in this preset's
+  // toggle_ids. Separate from neighbor_restriction_tag below: one is a
+  // gate the variant itself imposes on ITS neighbor, the other is a bonus
+  // this specific setup collects FROM its neighbor - a variant can have
+  // either, both, or neither.
+  function findActiveNeighborTagBonus(variant, toggleIds) {
+    for (const e of variant.enrichments || []) {
+      if (e.trigger && e.trigger.kind === "neighbor_tag" && toggleIds.includes(e.id)) {
+        return e.trigger.values[0];
+      }
+    }
+    return null;
+  }
+
+  function renderPresetPanel(heading, presetEntry, variant) {
+    const panel = document.createElement("div");
+    panel.className = "farming-layout-panel";
+    const head = document.createElement("div");
+    head.className = "farming-layout-panel-head";
+    head.textContent = heading;
+    panel.appendChild(head);
+
+    const layout = layoutsData[presetEntry.layout];
+    const nameEl = document.createElement("div");
+    nameEl.className = "farming-layout-name";
+    nameEl.textContent = layout.label;
+    panel.appendChild(nameEl);
+
+    // Same chip/pill vocabulary as the Reference tab's own Requirements
+    // block (makeDialChips/makeBioTagChip/makeNeighborRestriction) rather
+    // than plain text, so a Temperature/Light/bio-tag reads identically in
+    // both views.
+    panel.appendChild(makeReqLine("Temperature", makeDialChips(layout.dial.temperature, "temp")));
+    panel.appendChild(makeReqLine("Light", makeDialChips(layout.dial.light, "light")));
+    panel.appendChild(
+      makeReqLine("Fertilizer", makeReqText(fmtPresetFertilizer(variant, presetEntry.toggle_ids)))
+    );
+    if (variant.neighbor_restriction_tag) {
+      panel.appendChild(
+        makeReqLine("Neighbor", makeNeighborRestriction(variant.neighbor_restriction_tag))
+      );
+    }
+    const neighborTagBonus = findActiveNeighborTagBonus(variant, presetEntry.toggle_ids);
+    if (neighborTagBonus) {
+      const bonusEl = document.createElement("span");
+      bonusEl.className = "farming-req-chips";
+      bonusEl.appendChild(document.createTextNode("Bonus from neighbor tagged "));
+      bonusEl.appendChild(makeBioTagChip(neighborTagBonus));
+      panel.appendChild(makeReqLine("Neighbor bonus", bonusEl));
+    }
+
+    panel.appendChild(renderLayoutBoard(layout));
+    panel.appendChild(renderLayoutLegend(layout));
+    panel.appendChild(renderPresetHarvestBox(variant, presetEntry.toggle_ids));
+
+    if (layout.note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "farming-layout-note";
+      noteEl.textContent = layout.note;
+      panel.appendChild(noteEl);
+    }
+
+    return panel;
+  }
+
+  // A goal_presets entry for one (metric, goal) pair is either a normal
+  // {layout, toggle_ids} preset, or - only ever seen on Spacekorn Plain's
+  // rate/overall - a {no_dominant: true, options: [...]} shape for a
+  // genuine Pareto trade-off with no single winner (see farming.json's own
+  // _meta.goal_presets_and_layouts). Rendered as its own labeled group of
+  // side-by-side options rather than forcing a fake single answer.
+  function renderMetricSection(label, presetEntry, variant) {
+    if (!presetEntry.no_dominant) {
+      return renderPresetPanel(label, presetEntry, variant);
+    }
+    const section = document.createElement("div");
+    section.className = "farming-layout-no-dominant";
+    const head = document.createElement("div");
+    head.className = "farming-layout-panel-head";
+    head.textContent = label;
+    section.appendChild(head);
+    const note = document.createElement("p");
+    note.className = "farming-layout-note";
+    note.textContent = presetEntry.note;
+    section.appendChild(note);
+    for (const option of presetEntry.options) {
+      section.appendChild(renderPresetPanel(option.label, option, variant));
+    }
+    return section;
+  }
+
+  function presetsEqual(a, b) {
+    const idsA = [...a.toggle_ids].sort();
+    const idsB = [...b.toggle_ids].sort();
+    return (
+      a.layout === b.layout &&
+      idsA.length === idsB.length &&
+      idsA.every((v, i) => v === idsB[i])
+    );
+  }
+
+  function renderGoalPresets(variant, goal) {
+    const wrap = document.createDocumentFragment();
+    const presets = variant.goal_presets;
+    if (!presets) {
+      const msg = document.createElement("p");
+      msg.className = "farming-layout-unavailable";
+      msg.textContent = `${variant.name} is unreachable in normal play - there's no real setup to recommend for it.`;
+      wrap.appendChild(msg);
+      return wrap;
+    }
+    const ratePreset = presets.rate[goal];
+    const harvestPreset = presets.harvest[goal];
+    // Several variants recommend the exact same layout+toggles regardless
+    // of which framing you're optimizing (Green, Dream, Bitter, Sour,
+    // Woolly, and Plain's own harvest table) - merge into one panel rather
+    // than showing the same board twice.
+    if (!ratePreset.no_dominant && !harvestPreset.no_dominant && presetsEqual(ratePreset, harvestPreset)) {
+      wrap.appendChild(
+        renderPresetPanel("Same setup for items/hour and items/harvest", ratePreset, variant)
+      );
+      return wrap;
+    }
+    wrap.appendChild(renderMetricSection("Items / hour (fastest cycle)", ratePreset, variant));
+    wrap.appendChild(
+      renderMetricSection("Items / harvest (biggest single haul)", harvestPreset, variant)
+    );
+    return wrap;
+  }
+
+  function renderLayoutsView() {
+    layoutsResultEl.innerHTML = "";
+    const raw = layoutsVariantSelect.value;
+    if (!raw) return;
+    const variantId = raw.split(":")[1];
+    const entry = variantById.get(variantId);
+    if (!entry) return;
+    const header = document.createElement("div");
+    header.className = "farming-layout-variant-header";
+    header.textContent = `${entry.variant.name} → ${entry.variant.fruit} (fruit) · ${entry.variant.byproduct} (byproduct)`;
+    layoutsResultEl.appendChild(header);
+    layoutsResultEl.appendChild(renderGoalPresets(entry.variant, currentLayoutsGoal));
+  }
+
+  function populateLayoutsVariantSelect() {
+    layoutsVariantSelect.innerHTML = "";
+    for (const cropId of ["spacekorn", "rockwood"]) {
+      const crop = cropsData[cropId];
+      if (!crop) continue;
+      const group = document.createElement("optgroup");
+      group.label = cropId === "rockwood" ? "Rockwood Nut" : "Spacekorn";
+      for (const variant of crop.variants) {
+        // Rockwood Glow has no goal_presets at all - unreachable in normal
+        // play (see farming.json's own _meta.unreachable), nothing to
+        // recommend a layout for.
+        if (variant.unreachable) continue;
+        const option = document.createElement("option");
+        option.value = `${cropId}:${variant.id}`;
+        option.textContent = variant.name;
+        group.appendChild(option);
+      }
+      layoutsVariantSelect.appendChild(group);
+    }
+  }
+
+  function setFarmingMode(mode) {
+    currentFarmingMode = mode;
+    modeReferenceBtn.classList.toggle("active", mode === "reference");
+    modeLayoutsBtn.classList.toggle("active", mode === "layouts");
+    referenceViewEl.classList.toggle("hidden", mode !== "reference");
+    layoutsViewEl.classList.toggle("hidden", mode !== "layouts");
+    if (mode === "layouts") renderLayoutsView();
+  }
+
   async function ensureDataLoaded() {
     if (cropsData !== null) return;
-    const [crops, mechanicsNote] = await Promise.all([
+    const [crops, layouts] = await Promise.all([
       CraftMapApi.call("get_farming_crops"),
-      CraftMapApi.call("get_farming_mechanics_note"),
+      CraftMapApi.call("get_farming_layouts"),
     ]);
     cropsData = {};
     for (const crop of crops) cropsData[crop.id] = crop;
+    layoutsData = layouts;
+    variantById = new Map();
+    for (const cropId of Object.keys(cropsData)) {
+      for (const variant of cropsData[cropId].variants) {
+        variantById.set(variant.id, { cropId, variant });
+      }
+    }
     buildGoalIndex();
-    // Crop-independent (same Xenic Farm building/mechanic either way) -
-    // rendered once here rather than in render(), which only ever redraws
-    // the parts that actually change on a crop switch.
-    mechanicsNoteEl.textContent = mechanicsNote;
+    populateLayoutsVariantSelect();
   }
 
   async function init() {
@@ -710,6 +1056,19 @@
     goalSearchInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") onGoalCommit();
     });
+
+    modeReferenceBtn.addEventListener("click", () => setFarmingMode("reference"));
+    modeLayoutsBtn.addEventListener("click", () => setFarmingMode("layouts"));
+    for (const btn of layoutsGoalGroupEl.querySelectorAll("[data-goal]")) {
+      btn.addEventListener("click", () => {
+        currentLayoutsGoal = btn.dataset.goal;
+        for (const b of layoutsGoalGroupEl.querySelectorAll("[data-goal]")) {
+          b.classList.toggle("active", b === btn);
+        }
+        renderLayoutsView();
+      });
+    }
+    layoutsVariantSelect.addEventListener("change", renderLayoutsView);
   }
 
   init();

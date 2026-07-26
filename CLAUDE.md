@@ -60,7 +60,7 @@ backend/
   api.py       # Api class - the pywebview js_api bridge, thin wrappers over the above
   win32util.py # ctypes Win32 interop: hwnd resolution, click-through, focus-forcing, single-instance mutex
   shipwreck_loot.py  # static shipwreck rare-loot-crate odds (Wrecks tab) - loads game_data_extract/shipwreck_loot.json
-  farming.py         # static Xenic Farm crop/variant reference (Farming tab) - loads game_data_extract/farming.json
+  farming.py         # static Xenic Farm crop/variant reference + 5x3 plot-layout data (Farming tab) - loads game_data_extract/farming.json
   wreck_tracking.py  # subprocess launch/live-snapshot-read helpers for the sibling repo's wreck_tracker.py poller
   wreck_import.py    # imports wreck_tracker.py's JSONL event log into db.wreck_events (see tools/import_wreck_events.py)
   poi_resource_import.py  # imports wreck_tracker.py's per-POI resource-node-count snapshot into poi_resource_nodes (piggybacked on the live-snapshot poll)
@@ -79,7 +79,7 @@ frontend/
     sources.js           # Sources screen: which node names yield a raw resource
     galaxy.js            # Galaxy sub-tab: ranked per-planet data for a node type
     wrecks.js            # Wrecks screen: shipwreck rare-loot-crate odds browser
-    farming.js           # Farming screen: Xenic Farm crop-variant reference + per-harvest calculator
+    farming.js           # Farming screen: Xenic Farm crop-variant reference + per-harvest calculator, plus a Layouts sub-mode (5x3 plot-grid picker by goal/variant, driving the same calculator's checkboxes rather than duplicating its numbers)
     recipe-panel.js       # recipe panel screen
     queue-panel.js          # Craft Queue window logic
     wreck-tracker-panel.js  # Wreck Tracker window logic (bearing ribbon HUD)

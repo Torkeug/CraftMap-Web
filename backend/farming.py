@@ -36,10 +36,10 @@ def get_crops():
     return _load()["crops"]
 
 
-def get_growth_death_mechanism():
-    """The tick-based gate-checking/death-timer/Invasive-spread mechanic
-    (game_logic_notes.md Finding 16) - applies identically to every variant
-    of both crops (same Xenic Farm building), so it's a single shared note
-    rather than data repeated on each variant - see farming.json's own
-    _meta.growth_death_mechanism for the full text."""
-    return _load()["_meta"]["growth_death_mechanism"]
+def get_layouts():
+    """Xenic Farm 5x3 plot layouts (frontend/js/farming.js's Layouts view) -
+    each keyed by the layout id referenced from a variant's own
+    goal_presets (see farming.json's _meta.goal_presets_and_layouts).
+    Returned as {id: layout} rather than a list since the frontend only
+    ever looks one up by id, never iterates the whole set."""
+    return _load()["layouts"]

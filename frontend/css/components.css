@@ -1813,21 +1813,6 @@
   border-color: var(--accent);
 }
 
-/* Crop-independent (same Xenic Farm building/mechanic either way, see
-   js/farming.js's ensureDataLoaded) - sits above the crop tabs rather than
-   inside #farming-info-row, which only ever holds the CURRENT crop's own
-   germination info and gets wiped on every crop switch. */
-#farming-mechanics-note {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.4;
-  padding: 4px 6px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-}
-
 #farming-crop-tabs {
   flex: 0 0 auto;
   display: flex;
@@ -1840,8 +1825,9 @@
   font-size: 11px;
 }
 
-.farming-crop-note {
+.farming-variant-note {
   color: var(--faint);
+  font-size: 11px;
   margin-top: 2px;
 }
 
@@ -2147,6 +2133,254 @@
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
+}
+
+/* ---------- Farming tab's mode switch + Layouts view (js/farming.js) -
+   #farming-reference-view/#farming-layouts-view each take over the
+   flex-column/gap job #farming-view itself used to do directly on its
+   children, now that farming-view's own direct children are just the mode
+   tabs plus these two panels - min-height:0 on both for the same nested-
+   flex-scrolling reason #farming-view carries it. Board/cell styling
+   below deliberately reuses the Reference tab's own farming-variant-card
+   species-tint classes (SPECIES_CLASS in js/farming.js) rather than a
+   second color system, so a layout board and its own variant's card read
+   as the same crop at a glance. ---------- */
+#farming-mode-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+
+#farming-reference-view,
+#farming-layouts-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#farming-reference-view.hidden,
+#farming-layouts-view.hidden {
+  display: none;
+}
+
+#farming-layouts-picker {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  /* Lines the GOAL label up with the mode tabs' own text above it
+     (.tab-btn's 10px horizontal padding) - without this the picker row's
+     text sits flush against the view edge while every button row above
+     and below it has that same 10px inset, reading as a jog rather than
+     a new row. */
+  padding-left: 10px;
+}
+
+#farming-layouts-goal-group,
+#farming-layouts-variant-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A vertical rule between the two groups reads as "this is a boundary
+   between two separate pickers", not just extra whitespace - without it
+   the label text and the button/select labels next to it are similar
+   enough in weight/size to blur together into one row of choices. */
+#farming-layouts-variant-group {
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+}
+
+/* An accent-colored pill, same bordered-chip vocabulary as
+   .farming-bio-tag/.chip elsewhere in this tab, rather than plain text -
+   a category header needs to read as its own distinct element next to
+   the buttons/select it introduces, not blend into the same row of
+   choices at a similar weight/color. */
+#farming-layouts-goal-group label,
+#farming-layouts-variant-group label {
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex: 0 0 auto;
+}
+
+.farming-layouts-goal-buttons {
+  display: flex;
+  gap: 2px;
+}
+
+#farming-layouts-variant-select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 5px;
+  font-family: var(--ui);
+  font-size: 11px;
+}
+
+#farming-layouts-result.scroll-rows {
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.farming-layout-variant-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.farming-layout-no-dominant {
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.farming-layout-panel {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.farming-layout-panel-head {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.farming-layout-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.farming-layout-board {
+  display: grid;
+  grid-template-columns: repeat(5, 32px);
+  grid-template-rows: repeat(3, 32px);
+  gap: 3px;
+}
+
+.farming-layout-cell {
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.farming-layout-cell-empty {
+  border: 1px dashed var(--line);
+  background: transparent;
+}
+
+.farming-layout-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.farming-layout-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.farming-layout-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  background: var(--panel-2);
+}
+
+.farming-layout-note {
+  font-size: 10px;
+  color: var(--faint);
+  line-height: 1.4;
+}
+
+.farming-layout-unavailable {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Board cells/legend swatches use a SOLID species fill, unlike
+   .farming-variant-card's own faint 22% overlay above - a whole card only
+   ever needs a subtle tint since it carries its own long-form text, but a
+   32px board cell's 3-letter tag needs a bold, at-a-glance color to be
+   legible as a grid pattern at all. Each gets an explicit text color since
+   --species-* spans both light (whitewood/plainkorn/soureinkorn/
+   chillyeinkorn) and dark (rockwood/dreamwood) hues - the base
+   .farming-layout-cell color:var(--text) rule (light grey, tuned for the
+   app's own dark panels) doesn't have enough contrast against the lighter
+   half of that set. */
+.farming-layout-cell.species-rockwood,
+.farming-layout-swatch.species-rockwood {
+  background: var(--species-rockwood);
+}
+.farming-layout-cell.species-dreamwood,
+.farming-layout-swatch.species-dreamwood {
+  background: var(--species-dreamwood);
+}
+.farming-layout-cell.species-whitewood,
+.farming-layout-swatch.species-whitewood {
+  background: var(--species-whitewood);
+}
+.farming-layout-cell.species-sulfwood,
+.farming-layout-swatch.species-sulfwood {
+  background: var(--species-sulfwood);
+}
+.farming-layout-cell.species-plainkorn,
+.farming-layout-swatch.species-plainkorn {
+  background: var(--species-plainkorn);
+}
+.farming-layout-cell.species-soureinkorn,
+.farming-layout-swatch.species-soureinkorn {
+  background: var(--species-soureinkorn);
+}
+.farming-layout-cell.species-chillyeinkorn,
+.farming-layout-swatch.species-chillyeinkorn {
+  background: var(--species-chillyeinkorn);
+}
+.farming-layout-cell.species-whitewood,
+.farming-layout-cell.species-sulfwood,
+.farming-layout-cell.species-plainkorn,
+.farming-layout-cell.species-soureinkorn,
+.farming-layout-cell.species-chillyeinkorn {
+  color: #14171c;
 }
 
 /* ---------- Wreck Tracker window (frontend/wreck-tracker.html,

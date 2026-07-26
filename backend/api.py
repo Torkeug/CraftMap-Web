@@ -543,8 +543,8 @@ class Api:
     def get_farming_crops(self):
         return farming.get_crops()
 
-    def get_farming_mechanics_note(self):
-        return farming.get_growth_death_mechanism()
+    def get_farming_layouts(self):
+        return farming.get_layouts()
 
     # ---- live wreck/crate tracking (frontend/js/wrecks.js) - see
     # backend/wreck_tracking.py's own docstring for why this is a

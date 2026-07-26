@@ -287,27 +287,55 @@
         </div>
 
         <div id="farming-view">
-          <div id="farming-goal-row">
-            <label>What do you want to grow?</label>
-            <div id="farming-goal-wrap" class="dropdown-anchor">
-              <input
-                id="farming-goal-search"
-                type="text"
-                placeholder="Search a fruit, byproduct, or variant name..."
-              />
+          <div id="farming-mode-tabs">
+            <button class="tab-btn mode-btn active" id="farming-mode-reference" data-farming-mode="reference">
+              Reference
+            </button>
+            <button class="tab-btn mode-btn" id="farming-mode-layouts" data-farming-mode="layouts">
+              Layouts
+            </button>
+          </div>
+
+          <div id="farming-reference-view">
+            <div id="farming-goal-row">
+              <label>What do you want to grow?</label>
+              <div id="farming-goal-wrap" class="dropdown-anchor">
+                <input
+                  id="farming-goal-search"
+                  type="text"
+                  placeholder="Search a fruit, byproduct, or variant name..."
+                />
+              </div>
             </div>
+            <div id="farming-crop-tabs">
+              <button class="tab-btn mode-btn active" id="farming-crop-spacekorn" data-crop="spacekorn">
+                Spacekorn
+              </button>
+              <button class="tab-btn mode-btn" id="farming-crop-rockwood" data-crop="rockwood">
+                Rockwood Nut
+              </button>
+            </div>
+            <div id="farming-info-row"></div>
+            <div id="farming-variants" class="scroll-rows"></div>
           </div>
-          <div id="farming-mechanics-note"></div>
-          <div id="farming-crop-tabs">
-            <button class="tab-btn mode-btn active" id="farming-crop-spacekorn" data-crop="spacekorn">
-              Spacekorn
-            </button>
-            <button class="tab-btn mode-btn" id="farming-crop-rockwood" data-crop="rockwood">
-              Rockwood Nut
-            </button>
+
+          <div id="farming-layouts-view" class="hidden">
+            <div id="farming-layouts-picker">
+              <div id="farming-layouts-goal-group">
+                <label>Goal</label>
+                <div class="farming-layouts-goal-buttons">
+                  <button class="tab-btn mode-btn active" data-goal="overall">Overall</button>
+                  <button class="tab-btn mode-btn" data-goal="fruit_only">Fruit only</button>
+                  <button class="tab-btn mode-btn" data-goal="byproduct_only">Byproduct only</button>
+                </div>
+              </div>
+              <div id="farming-layouts-variant-group">
+                <label for="farming-layouts-variant-select">Variant</label>
+                <select id="farming-layouts-variant-select"></select>
+              </div>
+            </div>
+            <div id="farming-layouts-result" class="scroll-rows"></div>
           </div>
-          <div id="farming-info-row"></div>
-          <div id="farming-variants" class="scroll-rows"></div>
         </div>
       </div>
       <div id="error-banner"></div>

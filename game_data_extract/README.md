@@ -155,7 +155,15 @@ for review before you decide how to merge.
   once at gather; `*_cycle_hours` means "hours of growth per item", not a
   repeating timer), `effects` (the modifier math the frontend computes
   with), and `dial_mechanics` (instant dial switching, per-planet energy
-  costs, the no-Natural-light-in-dark-sites rule).
+  costs, the no-Natural-light-in-dark-sites rule). A top-level `layouts`
+  object plus each variant's own `goal_presets` (see `_meta.
+  goal_presets_and_layouts`) back the Farming tab's Layouts sub-mode - 5x3
+  plot grids for the Xenic Farm's real neighbor mechanics, picked per
+  variant and per (items/hour vs items/harvest, overall vs fruit-only vs
+  byproduct-only) goal. Deliberately not precomputed numbers: a preset
+  just names which of that variant's own toggle ids to check, so the
+  Layouts view drives the same live calculator the Reference cards use
+  rather than a second calculation that could drift from it.
 
 ## How this differs from `resources.db`'s recipe tables
 

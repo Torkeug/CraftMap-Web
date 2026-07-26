@@ -117,13 +117,6 @@ def test_neighbor_restriction_tag_is_a_valid_bio_tag_or_none():
             assert tag is None or tag in valid_tags
 
 
-def test_get_farming_mechanics_note_returns_nonempty_text():
-    api = Api()
-    note = api.get_farming_mechanics_note()
-    json.dumps(note)
-    assert isinstance(note, str) and len(note) > 100
-
-
 def test_only_invasive_tagged_variants_get_the_spread_adjacency_line():
     """game_logic_notes.md Finding 16's Invasive-spread mechanic only
     applies to Invasive-tagged variants - Rockwood Dream and Spacekorn
@@ -231,11 +224,17 @@ def test_every_enrichment_is_toggleable_and_effects_match_their_prose():
 
 
 def test_neighbor_effects_only_on_variants_with_a_real_source():
-    """Only two real cross-variant cases exist per game_logic_notes.md
-    Finding 13/16: Spacekorn Plain's self-buff from a neighboring Plain,
-    and Rockwood Glow's UV-lit effect mirrored onto whichever variants
-    have their own Light=UV enrichment (Rockwood Bitter and all three
-    Spacekorn variants)."""
+    """Three real cross-variant cases exist: Spacekorn Plain's self-buff
+    from a neighboring Plain, Rockwood Glow's UV-lit effect mirrored onto
+    whichever variants have their own Light=UV enrichment (Rockwood Bitter
+    and all three Spacekorn variants), and Woolly Spacekorn's own +20%
+    Byproduct quantity 'to any neighbor' (its adjacency line) mirrored onto
+    the Rockwood variants that can actually share its Cold-only dial gate
+    (Green/White/Dream - not Bitter, whose Warm/Hot gate can never overlap
+    a Cold farm). That third case was originally missing entirely (Woolly's
+    own card recorded what it gives, but no receiving variant's card could
+    toggle receiving it) until building the Layouts view's goal_presets
+    exposed that White's own rate-optimal pairing depends on it."""
     api = Api()
     crops = api.get_farming_crops()
     with_neighbor_effects = {
@@ -244,7 +243,170 @@ def test_neighbor_effects_only_on_variants_with_a_real_source():
         for v in crop["variants"]
         if v.get("neighbor_effects")
     }
-    assert with_neighbor_effects == {"Plainkorn", "SourEinkorn", "ChillyEinkorn", "Sulfwood"}
+    assert with_neighbor_effects == {
+        "Plainkorn",
+        "SourEinkorn",
+        "ChillyEinkorn",
+        "Sulfwood",
+        "Rockwood",
+        "Whitewood",
+        "Dreamwood",
+    }
+
+
+def test_every_togglable_entry_has_a_stable_id():
+    """frontend/js/farming.js's Layouts view resolves a goal_preset's
+    toggle_ids against these same ids (see farming.json's own
+    _meta.effects) - a togglable entry (anything carrying 'effects')
+    missing one would make that preset's checkbox unreachable."""
+    api = Api()
+    crops = api.get_farming_crops()
+    for crop in crops:
+        for variant in crop["variants"]:
+            sources = list(variant["enrichments"]) + variant.get("neighbor_effects", [])
+            for e in sources:
+                if "effects" in e:
+                    assert e.get("id"), (variant["id"], e)
+
+
+def test_get_farming_layouts_returns_expected_layout_ids():
+    api = Api()
+    layouts = api.get_farming_layouts()
+    json.dumps(layouts)
+    assert set(layouts.keys()) == {"A", "B", "C", "C-alt", "D", "D-mix"}
+
+
+def test_every_layout_grid_is_a_valid_5x3_board_of_real_variant_ids():
+    api = Api()
+    layouts = api.get_farming_layouts()
+    crops = api.get_farming_crops()
+    valid_variant_ids = {v["id"] for crop in crops for v in crop["variants"]}
+    for layout_id, layout in layouts.items():
+        grid = layout["grid"]
+        assert len(grid) == 3, layout_id
+        for row in grid:
+            assert len(row) == 5, layout_id
+            for cell in row:
+                assert cell is None or cell in valid_variant_ids, (layout_id, cell)
+
+
+def test_every_layout_dial_is_a_structured_valid_temp_and_light_list():
+    """frontend/js/farming.js's Layouts view renders a layout's dial as
+    Temperature/Light chips (makeDialChips, the same component the
+    Reference tab's own Requirements block uses) rather than a plain
+    string - this guards that 'dial' stayed structured (not a leftover
+    'dial_display' free-text field) and only ever names real dial
+    positions."""
+    api = Api()
+    layouts = api.get_farming_layouts()
+    valid_temps = {"Cold", "Temperate", "Warm", "Hot"}
+    valid_lights = {"UV", "Natural", "Dark"}
+    for layout_id, layout in layouts.items():
+        assert "dial_display" not in layout, layout_id
+        dial = layout["dial"]
+        assert dial["temperature"], layout_id
+        assert set(dial["temperature"]) <= valid_temps, layout_id
+        assert dial["light"], layout_id
+        assert set(dial["light"]) <= valid_lights, layout_id
+
+
+def test_fertilizer_item_entries_match_their_own_condition_and_are_real_supplements():
+    """frontend/js/farming.js's Layouts view builds a preset's Fertilizer
+    line from fertilizer_item (see farming.json's own _meta.effects) -
+    only ever set on an enrichment whose condition is a plain "<item>
+    present" fertilizer gate (never a temp/light/neighbor_tag trigger,
+    which farming.js's Layouts view handles as chips instead), and the
+    named item must be a real fertilizer this data model knows about."""
+    api = Api()
+    crops = api.get_farming_crops()
+    valid_fertilizers = {
+        "Neutral Fertilizer",
+        "Metallic Fertilizer",
+        "Carbonic Fertilizer",
+        "Acidic Fertilizer",
+        "Elmerium Dust",
+    }
+    seen_any = False
+    for crop in crops:
+        for variant in crop["variants"]:
+            for e in variant["enrichments"]:
+                if "fertilizer_item" not in e:
+                    continue
+                seen_any = True
+                assert "trigger" not in e, (variant["id"], e["id"])
+                assert e["fertilizer_item"] in valid_fertilizers, (variant["id"], e["id"])
+                assert e["condition"] == f"{e['fertilizer_item']} present", (variant["id"], e["id"])
+    assert seen_any
+
+
+def test_every_goal_preset_toggle_id_exists_on_that_same_variant():
+    """A goal_presets entry only ever references its OWN variant's toggle
+    ids (see farming.json's own _meta.goal_presets_and_layouts) - this
+    guards against a typo'd id or a stale reference left over from
+    reshuffling which toggles a preset implies."""
+    api = Api()
+    crops = api.get_farming_crops()
+
+    def all_preset_id_lists(goal_entry):
+        if goal_entry.get("no_dominant"):
+            for option in goal_entry["options"]:
+                yield option["toggle_ids"]
+        else:
+            yield goal_entry["toggle_ids"]
+
+    for crop in crops:
+        for variant in crop["variants"]:
+            presets = variant.get("goal_presets")
+            if not presets:
+                continue
+            own_ids = {
+                e["id"]
+                for e in list(variant["enrichments"]) + variant.get("neighbor_effects", [])
+                if "id" in e
+            }
+            for metric in ("rate", "harvest"):
+                for goal in ("overall", "fruit_only", "byproduct_only"):
+                    for ids in all_preset_id_lists(presets[metric][goal]):
+                        assert set(ids) <= own_ids, (variant["id"], metric, goal, ids)
+
+
+def test_every_goal_preset_layout_reference_exists():
+    api = Api()
+    crops = api.get_farming_crops()
+    layouts = api.get_farming_layouts()
+
+    def all_preset_layout_refs(goal_entry):
+        if goal_entry.get("no_dominant"):
+            for option in goal_entry["options"]:
+                yield option["layout"]
+        else:
+            yield goal_entry["layout"]
+
+    for crop in crops:
+        for variant in crop["variants"]:
+            presets = variant.get("goal_presets")
+            if not presets:
+                continue
+            for metric in ("rate", "harvest"):
+                for goal in ("overall", "fruit_only", "byproduct_only"):
+                    for layout_id in all_preset_layout_refs(presets[metric][goal]):
+                        assert layout_id in layouts, (variant["id"], metric, goal, layout_id)
+
+
+def test_variants_with_goal_presets_cover_every_non_unreachable_variant():
+    """Rockwood Glow is the one variant with no goal_presets at all - it's
+    unreachable in normal play (see farming.json's own _meta.unreachable),
+    so there's no real setup to recommend for it."""
+    api = Api()
+    crops = api.get_farming_crops()
+    with_presets = {
+        v["id"] for crop in crops for v in crop["variants"] if v.get("goal_presets")
+    }
+    without_presets = {
+        v["id"] for crop in crops for v in crop["variants"] if not v.get("goal_presets")
+    }
+    assert without_presets == {"Glowwood"}
+    assert "Glowwood" not in with_presets
 
 
 def test_only_rockwood_glow_is_marked_unreachable():
