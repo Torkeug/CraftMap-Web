@@ -7,8 +7,11 @@ dist/
 *.spec
 _spike/
 
-# Compiled binary
+# Compiled binary (--onedir build.bat output: the exe plus its support-file
+# folder, both moved up to the project root so they share resources.db/
+# config.json's location with dev-mode `python main.py` - see build.bat)
 CraftMap.exe
+/_internal/
 
 # User data & local config (shared with the retired tkinter app; see
 # NOTICE.md - resources.db is populated entirely from your own entries and

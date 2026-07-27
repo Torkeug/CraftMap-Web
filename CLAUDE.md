@@ -40,7 +40,7 @@ pip install -r requirements.txt
 ```
 build.bat
 ```
-Runs PyInstaller (`--onefile --noconsole`), bundling `frontend/` as data, and produces `CraftMap.exe` in the project root. No manual `--hidden-import` flags are needed - both `pywebview` and `pythonnet` ship their own PyInstaller hooks.
+Runs PyInstaller (`--onedir --noconsole`), bundling `frontend/` as data, then moves the resulting `CraftMap.exe` and its `_internal/` support folder up from PyInstaller's own `CraftMap/` output subfolder into the project root, so the exe ends up as a direct sibling of `resources.db`/`config.json` again (same as `--onefile` used to give for free) - see `backend/paths.py`'s `sys.executable`-anchored `DB_PATH`/`CONFIG_PATH` and the comment in `build.bat` itself for why that placement matters: every `tools/*.py` script resolves the same `resources.db` via its own source-relative path, so a frozen build living anywhere else would silently point at a second, empty database. `--onedir` over `--onefile`: onefile's bootloader re-extracts its whole payload to a throwaway temp dir on every launch and deletes it again on every exit, adding ~0.3s to both - onedir runs directly from its own folder with neither cost. No manual `--hidden-import` flags are needed - both `pywebview` and `pythonnet` ship their own PyInstaller hooks.
 
 **Run tests:**
 ```
@@ -98,7 +98,7 @@ game_data_extract/  # game-authoritative recipe/item data snapshots (see its own
 
 `DB_PATH`/`CONFIG_PATH` resolve to `resources.db`/`config.json` alongside this app's own install directory - anchored on `sys.executable` when frozen (`getattr(sys, "frozen", False)`), or two levels up from `paths.py` itself when running from source. Neither is tracked in git (see `.gitignore`/`NOTICE.md`) - `resources.db` is populated entirely from your own manual entries.
 
-`main.py`'s `frontend/` asset path uses `sys._MEIPASS` when frozen (the documented, version-independent way to locate PyInstaller `--onefile` bundled data - `__file__`'s behavior for a frozen entry script isn't something to rely on) or `__file__`'s own directory otherwise.
+`main.py`'s `frontend/` asset path uses `sys._MEIPASS` when frozen (the documented, version-independent way to locate PyInstaller-bundled data under both `--onefile` and `--onedir` - `__file__`'s behavior for a frozen entry script isn't something to rely on) or `__file__`'s own directory otherwise.
 
 ### The `Api` bridge (`backend/api.py`)
 
