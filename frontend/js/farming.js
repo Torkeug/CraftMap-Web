@@ -938,7 +938,7 @@
   // the same "what do I load this plot with" question the Reference tab's
   // own Fertilizer requirement line answers, just goal-scoped here instead
   // of listing every possible supplement at once.
-  function fmtPresetFertilizer(variant, toggleIds) {
+  function fmtPresetFertilizer(variant, toggleIds, extraFertilizer) {
     const parts = [];
     if (variant.fertilizer_required && variant.fertilizer_required.length) {
       parts.push(`${variant.fertilizer_required.join(" + ")} (required)`);
@@ -947,6 +947,11 @@
       .filter((e) => e.fertilizer_item && toggleIds.includes(e.id))
       .map((e) => e.fertilizer_item);
     if (optional.length) parts.push(optional.join(" + "));
+    // extraFertilizer (see a layout's own dial_alternates) is a pure
+    // germination-safety additive with no enrichment/yield effect of its
+    // own for THIS variant - it wouldn't be found by the toggleIds-driven
+    // scan above, since there's no toggle for it at all.
+    if (extraFertilizer && extraFertilizer.length) parts.push(extraFertilizer.join(" + "));
     if (variant.fertilizer_forbidden && variant.fertilizer_forbidden.length) {
       parts.push(`${variant.fertilizer_forbidden.join(", ")} forbidden`);
     }
@@ -967,6 +972,41 @@
       }
     }
     return null;
+  }
+
+  // A layout's own OPTIONAL "dial_alternates" array (currently only Layout
+  // F/Sour Vault - see farming.json's own _meta.germination_ambiguity):
+  // one or more genuinely equally-good OTHER dial+fertilizer combinations
+  // for the SAME grid/toggle_ids, surfaced as their own compact,
+  // structured block rather than buried in the layout's free-text note -
+  // this is exactly the gap the player flagged (an equivalence documented
+  // only in prose never actually reads as "here's a real alternative you
+  // can pick"). Each entry names its own dial plus any additional
+  // fertilizer item(s) needed ON TOP of the primary setup's own
+  // (required + toggled-optional) fertilizer - see fmtPresetFertilizer's
+  // own extraFertilizer param.
+  function renderDialAlternate(alt, variant, toggleIds) {
+    const box = document.createElement("div");
+    box.className = "farming-layout-alternate";
+    const labelEl = document.createElement("div");
+    labelEl.className = "farming-layout-alternate-label";
+    labelEl.textContent = "Equally good alternative: " + alt.label;
+    box.appendChild(labelEl);
+    box.appendChild(makeReqLine("Temperature", makeDialChips(alt.dial.temperature, "temp")));
+    box.appendChild(makeReqLine("Light", makeDialChips(alt.dial.light, "light")));
+    box.appendChild(
+      makeReqLine(
+        "Fertilizer",
+        makeReqText(fmtPresetFertilizer(variant, toggleIds, alt.extra_fertilizer))
+      )
+    );
+    if (alt.note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "farming-layout-note";
+      noteEl.textContent = alt.note;
+      box.appendChild(noteEl);
+    }
+    return box;
   }
 
   function renderPresetPanel(heading, presetEntry, variant) {
@@ -1004,6 +1044,10 @@
       bonusEl.appendChild(document.createTextNode("Bonus from neighbor tagged "));
       bonusEl.appendChild(makeBioTagChip(neighborTagBonus));
       panel.appendChild(makeReqLine("Neighbor bonus", bonusEl));
+    }
+
+    for (const alt of layout.dial_alternates || []) {
+      panel.appendChild(renderDialAlternate(alt, variant, presetEntry.toggle_ids));
     }
 
     panel.appendChild(renderLayoutBoard(layout));

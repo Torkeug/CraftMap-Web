@@ -1022,9 +1022,12 @@ def test_sour_vault_warm_plus_metallic_is_a_genuinely_equal_alternative():
     real, equally-good alternative once Metallic Fertilizer is added on
     top (Plain forbids Metallic, so its presence excludes Plain the same
     way Hot's own dial mismatch does; Sour has no opinion on Metallic
-    either way). This is documented in Layout F's own note, not the
-    structured dial field - this test guards the underlying claim itself,
-    so the note doesn't silently go stale if the gate data ever changes."""
+    either way). Surfaced structurally in Layout F's own 'dial_alternates'
+    (added 2026-07-28 - it used to live only in the layout's free-text
+    note, which the player pointed out doesn't actually render as a real,
+    pickable alternative anywhere in the UI) - this test guards the
+    underlying claim itself, so neither the note nor the structured field
+    can silently go stale if the gate data ever changes."""
     api = Api()
     crops = api.get_farming_crops()
     variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
@@ -1035,6 +1038,47 @@ def test_sour_vault_warm_plus_metallic_is_a_genuinely_equal_alternative():
     assert _gate_passes(sour, "Warm", "UV", ferts)
     assert not _gate_passes(plain, "Warm", "UV", ferts)
     assert not _gate_passes(woolly, "Warm", "UV", ferts)
+
+
+def test_every_layout_dial_alternate_is_well_formed_and_genuinely_different():
+    """Structural guard for the 2026-07-28 UI addition (frontend/js/
+    farming.js's renderDialAlternate): a layout's own OPTIONAL
+    'dial_alternates' array must have real content for the Layouts view
+    to render (a label, a structured dial in the same shape
+    test_every_layout_dial_is_a_structured_valid_temp_and_light_list
+    checks for a layout's own primary dial, and extra_fertilizer naming
+    only real supplements) - and each alternate's dial must actually
+    differ from the layout's own primary dial, or it isn't a genuine
+    alternative at all. Currently only Layout F (Sour Vault) has one -
+    see farming.json's own _meta.germination_ambiguity for why every
+    other active preset's dial position is either unique or a true
+    same-fertilizer equivalent (already representable directly in the
+    primary 'dial' field, e.g. Dream's Cold/Temperate)."""
+    api = Api()
+    layouts = api.get_farming_layouts()
+    valid_temps = {"Cold", "Temperate", "Warm", "Hot"}
+    valid_lights = {"UV", "Natural", "Dark"}
+    valid_fertilizers = {
+        "Neutral Fertilizer",
+        "Metallic Fertilizer",
+        "Carbonic Fertilizer",
+        "Acidic Fertilizer",
+        "Elmerium Dust",
+    }
+    seen_any = False
+    for layout_id, layout in layouts.items():
+        for alt in layout.get("dial_alternates", []):
+            seen_any = True
+            assert isinstance(alt.get("label"), str) and alt["label"], (layout_id, alt)
+            dial = alt["dial"]
+            assert dial["temperature"] and set(dial["temperature"]) <= valid_temps, (layout_id, alt)
+            assert dial["light"] and set(dial["light"]) <= valid_lights, (layout_id, alt)
+            assert set(alt.get("extra_fertilizer", [])) <= valid_fertilizers, (layout_id, alt)
+            assert dial != layout["dial"], (
+                layout_id, alt, "alternate dial must actually differ from the primary dial"
+            )
+    assert seen_any, "no layout currently has a dial_alternates entry - update this test if that's ever true"
+    assert "F" in layouts and layouts["F"].get("dial_alternates"), "Layout F should carry the Sour Warm+Metallic alternate"
 
 
 def test_d_mix_dial_is_documented_as_mutually_ambiguous():

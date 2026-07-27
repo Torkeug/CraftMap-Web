@@ -23,7 +23,6 @@
       "label": "Dream Vault",
       "crop": "rockwood",
       "dial": { "temperature": ["Cold", "Temperate"], "light": ["Dark"] },
-      "note": "Full pack, single variant - Dream carries no Reclusive/Putrescent tag and no neighbor restriction, so there's no conflict to route around.",
       "grid": [
         ["Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood"],
         ["Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood", "Dreamwood"],
@@ -34,7 +33,6 @@
       "label": "Green / Woolly Weave",
       "crop": "mixed",
       "dial": { "temperature": ["Cold"], "light": ["UV"] },
-      "note": "Green's own weave - every Green plot's neighbors are all Woolly, never another Reclusive plant, so this packs solid at 15/15 with no gate-failure risk, and Woolly's blanket byproduct bonus reaches every Green plot. Woolly itself gets nothing measurable back (Green's own perk only speeds up a neighbor's germination/death-timer while it's still a seed - not one of the four attributes CraftMap's calculator tracks) - it's grown here purely as Green's companion. If Woolly is the actual goal, see the Woolly Vault layout instead.",
       "grid": [
         ["Rockwood", "ChillyEinkorn", "Rockwood", "ChillyEinkorn", "Rockwood"],
         ["ChillyEinkorn", "Rockwood", "ChillyEinkorn", "Rockwood", "ChillyEinkorn"],
@@ -45,7 +43,6 @@
       "label": "White / Sour Checkerboard",
       "crop": "mixed",
       "dial": { "temperature": ["Warm"], "light": ["UV"] },
-      "note": "White's harvest-optimal pairing, corrected 2026-07-28 (Finding 21/_meta.adjacency_timing): there is no 'parked battery' - a neighbor bonus only exists while the companion is ALSO actively growing, so this is a genuine, live, 8-White/7-Sour checkerboard, not a mix. Bitter (Rockwood Bitter/Sulfwood) also carries the Putrescent tag this trade needs, but its own fertilizer_forbidden list includes Carbonic Fertilizer, which White's own optional bonus needs present - Sour (Spacekorn Sour/SourEinkorn) has no such conflict (its own required item, Carbonic, is the SAME item), and gives identical numbers either way since the tag-based bonus doesn't care which Putrescent-tagged variant provides it (_meta.fertilizer_scope). White in the 8-cell MAJORITY color (an independent, still-valid fix from earlier this session - the original version of this layout had White backwards, in the 7-cell minority, losing 12.5% of achievable harvest for nothing). Sour itself gets nothing measurable back (no neighbor_tag enrichment of its own to receive anything through) - grown here purely as White's companion; see the Sour Vault if Sour itself is the actual goal.",
       "grid": [
         ["Whitewood", "SourEinkorn", "Whitewood", "SourEinkorn", "Whitewood"],
         ["SourEinkorn", "Whitewood", "SourEinkorn", "Whitewood", "SourEinkorn"],
@@ -56,7 +53,6 @@
       "label": "White / Woolly Checkerboard",
       "crop": "mixed",
       "dial": { "temperature": ["Cold"], "light": ["UV"] },
-      "note": "White's rate-optimal pairing, every goal on that framing (overall/fruit_only/byproduct_only all share this exact grid) - Woolly's blanket +20% Byproduct quantity with none of Bitter/Sour's metabolic slowdown, since rate never wants a bigger-but-slower harvest. White in the 8-cell majority color, Woolly filling the other 7 - same shape as Layout C, different companion.",
       "grid": [
         ["Whitewood", "ChillyEinkorn", "Whitewood", "ChillyEinkorn", "Whitewood"],
         ["ChillyEinkorn", "Whitewood", "ChillyEinkorn", "Whitewood", "ChillyEinkorn"],
@@ -67,7 +63,6 @@
       "label": "Plain Vault",
       "crop": "spacekorn",
       "dial": { "temperature": ["Temperate"], "light": ["UV"] },
-      "note": "Plain's own setup, every goal and both framings (rate and harvest alike) - Plain has no usable live companion at all: Sour/Bitter need Warm/Hot (Plain's own Temperate-speed bonus needs Temperate specifically, and even Warm loses that bonus for nothing in return, since neither gives Plain anything measurable back), and Woolly needs Cold (never compatible with Plain's own Temperate/Warm range at all). A solid monoculture beats every live pairing for Plain's own total output. D-mix's Sour-neighbor quantity bonus looks appealing per-plant, but isn't achievable as a controlled pairing at all (see _meta.germination_ambiguity) and wouldn't beat this layout's farm total even if it were (see _meta.per_slot_vs_per_farm). Grow Sour separately (Layout F) if you want its own byproduct too.",
       "grid": [
         ["Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn"],
         ["Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn"],
@@ -78,7 +73,7 @@
       "label": "Plain / Sour Stripe",
       "crop": "spacekorn",
       "dial": { "temperature": ["Warm"], "light": ["UV"] },
-      "note": "Not farm-total-optimal for EITHER crop grown here (Plain's own per-plant numbers are higher than in Layout D, but D fits 15 Plain to this layout's 9 and wins the farm total regardless - see Layout D's own note and _meta.per_slot_vs_per_farm; Sour gets nothing measurable from Plain either and has its own farm-total-dominant monoculture, Layout F). MORE IMPORTANTLY (added 2026-07-27, see _meta.germination_ambiguity): the deterministic alternating pattern shown here is NOT actually achievable by live, simultaneous growing - under this layout's own Warm dial, Plainkorn's gate and SourEinkorn's gate BOTH pass at every single cell (Plain has no fertilizer requirement of its own to exclude via the Carbonic Fertilizer Sour needs), so a Spacekorn seed planted anywhere in this group has a real, roughly-random chance of becoming either one - not the controlled 9/6 split drawn here. There is no working way to combine Plain and Sour deterministically on one farm group at all (corrected 2026-07-28, Finding 21/adjacency_timing: the previously-documented 'grow Sour first, then park it and switch the dial for Plain' technique doesn't work - a mature, unharvested plant's adjacency effects and bio_tag both go dead the instant it finishes growing, so a 'parked' Sour gives Plain nothing anyway even where the germination ambiguity above weren't a problem). This layout is kept as real, verifiable data (the grid IS a legal state to end up in, just not a controllable OR beneficial one) - not as an achievable recommendation. Grow Plain (Layout D) and Sour (Layout F) separately instead.",
+      "note": "Not actually achievable: a seed planted anywhere in this group can randomly grow into either Plain or Sour, not the pattern shown - and it isn't the better choice for either crop anyway. Grow Plain (Plain Vault) and Sour (Sour Vault) separately instead.",
       "grid": [
         ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"],
         ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"],
@@ -89,7 +84,7 @@
       "label": "Bitter Vault",
       "crop": "rockwood",
       "dial": { "temperature": ["Hot"], "light": ["Dark"] },
-      "note": "Bitter's own harvest-optimal setup. Bitter gets nothing measurable back from a companion neighbor, so a solid monoculture beats any checkerboard pairing for Bitter's own total output - same plant count doing useful work either way, but here every plot is Bitter instead of half going to a companion crop Bitter doesn't benefit from. (Bitter was briefly White's own Layout C companion too, until a 2026-07-27 fertilizer-scope correction swapped it for Sour there - see Layout C's own note; this Vault was never affected either way.) IMPORTANT (see _meta.germination_ambiguity): unlike every other Vault in this file, this one can NEVER be grown as pure Bitter - Rockwood White's own gate (unconstrained dial, needs only Metallic Fertilizer, forbids nothing) always ALSO passes wherever Bitter's does, since Bitter needs that same Metallic plus Acidic. There is no dial or fertilizer choice that excludes White here; expect a real, roughly-random fraction of these plots to sprout White instead of Bitter, with no known way around it.",
+      "note": "Some plots may sprout Rockwood White instead of Bitter - there's no fertilizer or dial setup that fully prevents this.",
       "grid": [
         ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
         ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
@@ -100,7 +95,7 @@
       "label": "Bitter Vault (UV)",
       "crop": "rockwood",
       "dial": { "temperature": ["Hot"], "light": ["UV"] },
-      "note": "Bitter's own rate-optimal setup - same monoculture as Layout E, UV instead of Dark since UV wins on speed with no yield tradeoff (see Bitter's own Light-dial fork). Only the dial differs from Layout E; the grid is identical. Same caveat as Layout E applies here too, unaffected by the Dark/UV choice: this can never be grown as pure Bitter, since Rockwood White's own gate always also passes wherever Bitter's does (see _meta.germination_ambiguity).",
+      "note": "Some plots may sprout Rockwood White instead of Bitter - there's no fertilizer or dial setup that fully prevents this.",
       "grid": [
         ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
         ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
@@ -111,7 +106,14 @@
       "label": "Sour Vault",
       "crop": "spacekorn",
       "dial": { "temperature": ["Hot"], "light": ["UV"] },
-      "note": "Sour's own setup, all goals and both framings - Sour has no neighbor_tag enrichment of its own (its fruit and byproduct numbers never depend on what's next to it), so a solid monoculture beats the Layout D-mix stripe for Sour's own total output. Corrected 2026-07-27 (germination_ambiguity): this used to also list Warm as equally valid (no dial-triggered enrichment differs between them for Sour's OWN yield, which is still true) - but Warm is also inside Plainkorn's own accepted range, and Plain has no fertilizer requirement of its own to exclude via this layout's Carbonic Fertilizer, so a Spacekorn seed planted under Warm here has a real, roughly 50/50 chance of sprouting Plain instead of Sour, UNLESS Metallic Fertilizer is also loaded (Plain forbids Metallic; Sour has no opinion on it either way, so it's a pure add with no effect on Sour's own numbers). So there are genuinely TWO equally-good clean setups here, not one: Hot with no extra fertilizer (this layout's own default), or Warm with Metallic Fertilizer added on top of the usual Carbonic. Same numbers either way - pick whichever dial position is cheaper on your farm's own planet (dial_mechanics: the position nearest a planet's ambient band is free, everything else costs 30 power per step away from it) rather than assuming Hot is required.",
+      "dial_alternates": [
+        {
+          "label": "Warm dial (with Metallic Fertilizer added)",
+          "dial": { "temperature": ["Warm"], "light": ["UV"] },
+          "extra_fertilizer": ["Metallic Fertilizer"],
+          "note": "Same result either way - pick whichever dial position costs less power on your planet."
+        }
+      ],
       "grid": [
         ["SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn"],
         ["SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn"],
@@ -122,7 +124,6 @@
       "label": "Woolly Vault",
       "crop": "spacekorn",
       "dial": { "temperature": ["Cold"], "light": ["UV"] },
-      "note": "Woolly's own setup, all goals and both framings - Woolly has no neighbor_tag enrichment of its own, and Green's perk (the one thing a Layout B neighbor would give it) only ever touches a neighbor's transient seed-stage timers, not any of the four attributes this app tracks. A solid monoculture beats the Layout B weave for Woolly's own total output.",
       "grid": [
         ["ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn"],
         ["ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn"],
@@ -238,7 +239,7 @@
               "id": "woolly_neighbor",
               "label": "Neighboring Woolly Spacekorn",
               "effect": "Byproduct quantity +20%",
-              "effect_note": "Woolly Spacekorn's own adjacency effect applies to any neighbor regardless of crop - added here since it was previously only recorded as what Woolly does to others, not toggleable on the receiving variant's own card. Can NOT be combined with putrescent_neighbor below in one live grid: Woolly needs a Cold dial to grow at all, while Sour/Bitter (the only Putrescent-tagged variants) need Warm/Hot - one farm group has only one shared Temperature dial, so it's Layout C (White+Sour, harvest-optimal) OR Layout C-alt (White+Woolly, rate-optimal), never both at once (corrected 2026-07-28, Finding 21 - a previous version of this file modeled Woolly as a static 'parked battery' that could sit alongside a live Sour regardless of dial; that doesn't work, see _meta.adjacency_timing).",
+              "effect_note": "Can't be combined with the Putrescent-neighbor bonus below in one grid: Woolly needs a Cold dial, but Sour/Bitter need Warm/Hot. Use the White/Sour Checkerboard for one, White/Woolly Checkerboard for the other.",
               "trigger": { "kind": "neighbor_variant", "values": ["ChillyEinkorn"] },
               "effects": [{ "attr": "byproduct_qty", "value": 0.2 }]
             }
@@ -429,7 +430,7 @@
               "id": "woolly_neighbor",
               "label": "Neighboring Woolly Spacekorn",
               "effect": "Byproduct quantity +20%",
-              "effect_note": "Woolly's own gate (Cold-only) conflicts with Bitter's own (Warm/Hot) - a farm can only hold one Temperature position at a time, so a LIVE Woolly can never grow beside a live Bitter at all, full stop (corrected 2026-07-28, Finding 21/adjacency_timing: there is no 'parked battery' workaround - a mature, unharvested Woolly's adjacency effects and bio_tag both go dead the instant it finishes growing). Bitter's own solid monoculture (Layout E/E-alt) remains correct with no caveat.",
+              "effect_note": "Woolly needs a Cold dial to grow; Bitter needs Warm/Hot. They can never be grown together.",
               "trigger": { "kind": "neighbor_variant", "values": ["ChillyEinkorn"] },
               "effects": [{ "attr": "byproduct_qty", "value": 0.2 }]
             }
@@ -508,7 +509,7 @@
               "id": "putrescent_neighbor",
               "condition": "Neighbor tagged Putrescent",
               "effect": "Fruit quantity +40%, Byproduct quantity +40%",
-              "effect_note": "Requires a Warm-dial farm (Sour's own gate needs Warm or Hot, and rejects Temperate outright) - mixing this in costs Plain its own Temperate-only speed enrichment above. Free quantity, not free: see Layout D vs D-mix.",
+              "effect_note": "Requires a Warm-dial farm and a live Sour neighbor - costs Plain its own Temperate-only speed bonus above, and Sour can't actually be grown alongside Plain (see the Plain Vault layout).",
               "trigger": { "kind": "neighbor_tag", "values": ["Putrescent"] },
               "effects": [
                 { "attr": "fruit_qty", "value": 0.4 },
@@ -542,7 +543,7 @@
               "id": "woolly_neighbor",
               "label": "Neighboring Woolly Spacekorn",
               "effect": "Byproduct quantity +20%",
-              "effect_note": "Woolly's own gate (Cold-only) conflicts with Plain's own (Temperate/Warm) - a farm can only hold one Temperature position at a time, so a live Woolly can never grow beside a live Plain at all, full stop (corrected 2026-07-28, Finding 21/adjacency_timing: there is no 'parked battery' workaround). See Plain's own goal_preset_note - Layout D's solid monoculture is correct with no caveat.",
+              "effect_note": "Woolly needs a Cold dial to grow; Plain needs Temperate/Warm. They can never be grown together.",
               "trigger": { "kind": "neighbor_variant", "values": ["ChillyEinkorn"] },
               "effects": [{ "attr": "byproduct_qty", "value": 0.2 }]
             }
@@ -618,7 +619,7 @@
               "id": "woolly_neighbor",
               "label": "Neighboring Woolly Spacekorn",
               "effect": "Byproduct quantity +20%",
-              "effect_note": "Woolly's own gate (Cold-only) conflicts with Sour's own (Warm/Hot) - a farm can only hold one Temperature position at a time, so a live Woolly can never grow beside a live Sour at all, full stop (corrected 2026-07-28, Finding 21/adjacency_timing: there is no 'parked battery' workaround). Sour's own solid monoculture (Layout F) remains correct with no caveat.",
+              "effect_note": "Woolly needs a Cold dial to grow; Sour needs Warm/Hot. They can never be grown together.",
               "trigger": { "kind": "neighbor_variant", "values": ["ChillyEinkorn"] },
               "effects": [{ "attr": "byproduct_qty", "value": 0.2 }]
             }

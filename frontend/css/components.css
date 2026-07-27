@@ -2293,6 +2293,26 @@
   color: var(--text);
 }
 
+/* A layout's own "equally good alternative" dial+fertilizer combo (see
+   farming.js's own renderDialAlternate) - a dashed border and indent so
+   it reads as a genuine sibling setup, not a continuation of the primary
+   requirements block above it. */
+.farming-layout-alternate {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 6px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+}
+
+.farming-layout-alternate-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
 .farming-layout-board {
   display: grid;
   grid-template-columns: repeat(5, 32px);
