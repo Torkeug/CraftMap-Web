@@ -3,14 +3,17 @@
     "source": "shipbuilder/tools/game_logic_notes.md, Finding 13 (Rockwood Nut), Finding 14 (Spacekorn), Finding 16 (continuous gate-checking/death-timer/Invasive-spread), Finding 17 (quantity-vs-speed attr semantics), Finding 18 (dial mechanics + the exact harvest-yield formula) and Finding 19 (a neighbor's adjacency effects run for its whole post-germination lifetime, not just while still growing) - decompiled from data.cdb sheet 'farm' and ent.b.Farm/ent.b.PlotZone (src/ent/b/Farm.hx: updatePlots/checkProgress/applyPlant/hasMinRequirement/getEnrichmentValue/serverRegularUpdate/setDeployInfo and ent.SpaceBase.gatherPlant__impl). Hand-transcribed, not script-regenerated - if game_logic_notes.md gets a new/corrected finding for these crops, update this file to match.",
     "mechanism": "The Xenic Farm building has one shared Temperature dial (Cold/Temperate/Warm/Hot) and one shared Light dial (UV/Natural/Dark) - a single farm is never in two temperature or light states at once. Each grown variant's gate is a set of acceptable dial positions (OR-across-allowed-states); a variant with an empty temperature/light list is unconstrained (any dial position satisfies it) - EXCEPT a variant marked 'unreachable: true' (see that field's own note below), whose empty list means the exact opposite. After germination, ALL variants whose gates currently pass become candidates and the game picks uniformly at random among them (not priority order) - if none pass, the plant dies instead of stalling.",
     "growth_death_mechanism": "Requirements are checked continuously, not just once - letting fertilizer, dial position, or a neighbor restriction go unmet stalls growth and starts a 5-hour death countdown (fully recoverable if restored in time; the countdown also winds back down while requirements are met). The farm being unpowered or disabled fails EVERY plant's requirements at once - and its dials snap back to the planet's ambient positions until power returns. Water is a hard requirement that can never be waived (even by Rockwood Dream's neighbor tolerance). Once a plant reaches its final harvest stage, requirements stop mattering entirely. Every adjacent EMPTY plot also gives a plant +5% Growth & Production speed (harvest-neutral, see the harvest note) - a fully-packed grid grows slightly slower per-plant than a checkerboard.",
-    "adjacency_timing": "Verified 2026-07-26 (Finding 19, raw disassembly of updatePlots): a neighbor's OWN growth stage never gates whether its adjacency effects reach you - only which row currently occupies its plot does. A germinating seed gives nothing yet (no grown-variant row assigned, so no adjacency data exists to read). The instant that seed resolves into a grown variant, that variant's adjacency list is live - active from the start of its own growth, not deferred until it's fully grown. It keeps applying all the way through full maturity while sitting unharvested at the gather stage, since nothing in this code path distinguishes 'still growing' from 'done growing, awaiting harvest' - only dying (progress swaps the plot to a separate deadVariant row) stops it. Practically: a companion pairing (Green/White + Woolly, White + Bitter, Plain + Sour, etc.) does not need its two crops harvested in lockstep to keep the bonus flowing - the companion buffs its neighbor for its entire post-germination lifetime, right up until it's actually picked or dies.",
+    "adjacency_timing": "Verified 2026-07-26 (Finding 19, raw disassembly of updatePlots): a neighbor's OWN growth stage never gates whether its adjacency effects reach you - only which row currently occupies its plot does. A germinating seed gives nothing yet (no grown-variant row assigned, so no adjacency data exists to read). The instant that seed resolves into a grown variant, that variant's adjacency list is live - active from the start of its own growth, not deferred until it's fully grown. It keeps applying all the way through full maturity while sitting unharvested at the gather stage, since nothing in this code path distinguishes 'still growing' from 'done growing, awaiting harvest' - only dying (progress swaps the plot to a separate deadVariant row) stops it. Practically: a companion pairing (Green/White + Woolly, White + Bitter, Plain + Sour, etc.) does not need its two crops harvested in lockstep to keep the bonus flowing - the companion buffs its neighbor for its entire post-germination lifetime, right up until it's actually picked or dies. A mature, UNHARVESTED plant can even be parked as a static 'battery' next to a crop its own dial would normally conflict with (grow Woolly to maturity under Cold, then swap the farm to Warm and grow Sour beside it - the parked Woolly no longer cares about the dial once mature, and keeps handing out its +20% Byproduct quantity regardless).",
+    "dream_tolerance": "Verified 2026-07-27 (Finding 20, raw disassembly + Finding 13's own allowMissing description reread more carefully): Rockwood Dream's adjacency effect ('neighbor tolerates 1 unmet requirement') is the only allowMissing grant anywhere in this dataset, and it doesn't just delay a neighbor's death timer - hasMinRequirement's own pass condition is missingCount <= allowMissing, so a covered miss makes the gate PASS, meaning growth continues normally with one requirement genuinely wrong. Combined with adjacency_timing above (a live, un-parked Dream works fine - no parking needed), this means a Dream neighbor can let a plant grow on a farm dial that doesn't match its own gate at all, PROVIDED exactly one of the five checked things (fertilizer-required / fertilizer-forbidden / temperature / light / no-restricted-neighbor-tag) is what's wrong - a second simultaneous miss still fails (confirmed already for Rockwood Glow, which needs two waived and can't get them - Finding 13's own loophole-ruled-out note). Two real consequences, both re-verified against the actual formula, not just the mechanic in isolation: (1) FERTILIZER-SKIPPING, zero downside: Green can skip Neutral Fertilizer, White can skip Metallic, Bitter can skip BOTH Acidic and Metallic at once (missing either or both of a required list is still just one 'fertilizer-required' miss, not one per item) - none of these three items carry an enrichment of their own, so skipping them (once tolerated) costs nothing. Two adjacent Dream plants can even waive each other's Elmerium Dust the same way, PROVIDED each one had it at the exact moment its own germination resolved (the tolerance is 'gated on non-seed stages' per Finding 13 - a germinating seed's own variant-selection roll doesn't get it, so the real fertilizer must be present for that one moment, and can be pulled immediately after). (2) DIAL-MISMATCH GROWTH, real but rarely worth it: Bitter/Plain/Sour can each grow on Dream's Cold-or-Temperate-or-Warm+Dark dial via a Dream neighbor even where their own gate would normally exclude that temperature - but doing so forfeits their OWN dial-triggered enrichment (Bitter's Hot-only Byproduct+40%, Plain's Temperate-only speed), so per-plant output is always worse than their own dedicated Vault. The one exception is Woolly specifically: under Warm/Hot/Temperate, Woolly needs Dream's tolerance just to grow at all (Cold has zero overlap with anything else), making a live, fully-sustainable Dream+Woolly weave a genuine alternative to Layout G for players who want both products from one farm - not a per-plant win, a diversity option, same caveat as Layout D-mix. One further, sharper case: under COLD specifically (Woolly's own native dial, needing no tolerance for temperature at all), Woolly's one tolerance slot is free to cover a DIFFERENT miss instead - its own 'no Putrescent neighbor' restriction - letting it sit directly next to Sour or Bitter and hand over its +20% Byproduct quantity live, no parking required. Verified per-plant numbers for this: White gains a Bitter neighbor's Putrescent-mult trade AND a Woolly neighbor's quantity bonus simultaneously (both fit on one plot without conflicting, since neither is Reclusive/Putrescent to the other) - harvest byproduct 152 -> 166 (+9%); Sour gains a Woolly neighbor the same way - harvest byproduct 20 -> 22 (+10%). NEITHER is reflected in goal_presets: both require sacrificing real plot space to Dream and Woolly cells that would otherwise be more White/Sour, and per_slot_vs_per_farm above already demonstrated on Plain that a smaller-but-boosted plot count usually loses the farm total outright once counted - these two cases have not been re-verified at the full-grid level the way Plain's was (the tiling constraint-satisfaction problem, fitting enough Dream+Woolly coverage to enhance most or all of a variant's plots while keeping Reclusive/Putrescent restrictions intact across a 15-cell grid, was judged too easy to get subtly wrong by hand and was not attempted). Treat these two numbers as verified-per-plot, NOT verified-per-farm, and not in-game tested at all - logically derived from Findings 13/16/18/19/20 together, not independently re-checked against fresh disassembly the way each of those individually was.",
     "harvest_mechanism": "Corrected 2026-07-25 (Finding 18): fruit and byproduct are NOT repeating post-maturity drips. Both accumulate invisibly WHILE the plant grows (only during ticks its requirements pass - stalled time contributes nothing) and pay out ONCE, in a single lump sum, when the mature plant is harvested - after which the plot resets to empty and needs replanting. 'fruit_cycle_hours'/'byproduct_cycle_hours' below are the game's real per-item timers (each rolled once per planting, uniform in its range): the harvest yields ceil(accumulated_hours / per_item_hours) of each product. With no modifiers, accumulated hours = the growth duration, so base yield per harvest = growth_hours / cycle_hours (e.g. Spacekorn Plain: 36-40h growth, 4-6h per Plain Pulp = roughly 6-10 Pulp per harvest). Exact game formula: yield = ceil(growth_duration * (1 + quantity_bonuses) / (per_item_duration * productive_metabolic_speed)) - see _meta.effects for how each modifier slots in.",
     "dial_mechanics": "Verified from raw disassembly (Finding 18): dial changes take effect INSTANTLY (next server tick) while the farm is powered - there is no transition/ramp time. The four Temperature positions are the same canonical targets on every planet; only their power cost differs (30 power per 'step' of distance from the planet's ambient band - the position nearest ambient is free, e.g. Temperate is free on a Temperate planet, Cold is free on a Frozen one, Warm is free on a Hot planet). The UV light position costs a flat 20 power; Natural and Dark are free. A farm deployed at a spot with no natural light (the game checks the deploy site's light level) has NO Natural position at all - selecting it just sets Dark; only UV lamps or Dark are possible there. When unpowered, both dials snap to the ambient defaults (nearest-ambient temperature; Natural if the site is lit, else Dark) and every plant stalls regardless (see growth_death_mechanism). A neighboring Rockwood Glow forces a plot to be treated as UV-lit for ALL light checks - bonuses AND requirements (it would e.g. break a Dark-requiring plant's gate) - replacing, not stacking with, the farm's actual light dial.",
     "enrichment_trigger": "An enrichment entry's optional 'trigger' field ({kind: 'temp'|'light'|'neighbor_tag', values: [...]}) marks the ones frontend/js/farming.js can render as a pill instead of plain text: 'temp'/'light' are gated by the SAME shared Temperature/Light dial as the variant's own grow-gate, rendered as the same dial chips used in Requirements; 'neighbor_tag' names a bio-tag (see each variant's own 'bio_tag' and 'neighbor_restriction_tag') a neighbor plant must carry, rendered as the same pill used for the bio-tag badge and the Requirements Neighbor line. Fertilizer conditions carry no trigger - there's no established pill style for those.",
     "unreachable": "A variant's optional 'unreachable: true' (+ 'unreachable_note', the player-facing explanation frontend/js/farming.js shows in a warning banner) means its grow-gate can NEVER pass in normal play, confirmed by both raw disassembly and a direct in-game test - it is not just rare or hard, it's a dead branch of pickVariant. Only Rockwood Glow (Glowwood) is marked this way: its 'temperature'/'light' fields are present with a literal integer 0 in the source data rather than being absent, and hasMinRequirement only skips the dial check on an ABSENT field - a present 0 always fails the bitwise-AND test, every tick, no matter the farm's dial position. This is the opposite of every other 'unconstrained' variant in Findings 13/14 (which all use an absent key), so Glowwood's empty temperature/light arrays here do NOT mean 'any dial position works' the way they do for other variants - see this field's own presence as the disambiguator, and always check it before treating an empty temperature/light list as unconstrained. A theorized loophole (stacking Dreamwood neighbors' allowMissing tolerance to cover both misses) was investigated and ruled out - it caps at 1, Glow needs 2. The only way to place it at all is a debug/admin-only function, not normal play.",
     "fertilizer_forbidden_any_removed": "An earlier revision marked Rockwood Glow 'fertilizer_forbidden_any: true' (no fertilizer of ANY kind may be present) based on a live-play impression, explicitly flagged for follow-up against raw disassembly. That follow-up happened (2026-07-25, Finding 18): the game's requirement checker has no such branch at all - a variant can only require or forbid SPECIFIC supplements, and Glowwood's game-data gate carries neither list. The flag was wrong and has been removed; Glowwood's fertilizer cell is simply unconstrained (academic anyway, since its temperature/light gate is unreachable - see 'unreachable').",
     "effects": "Replaces the earlier 'speed_effect' model (2026-07-25, Findings 17/18) - the old model treated fruit/byproduct numbers as cycle TIMES, which the game does not do (see harvest_mechanism). An enrichment's or neighbor_effect's optional 'effects' array ([{attr, value}]) uses the game's own attribute semantics: 'all_speed' (additive; speeds growth AND product accumulation equally - harvest comes sooner, yield per harvest UNCHANGED - the game calls it Growth and Production Speed), 'growth_speed_mult' (multiplicative on growth progress only - the game's Productive Metabolic Speed; a value below 1 grows SLOWER but yields MORE per harvest by exactly 1/value, since products keep accumulating over the longer growth - the game's own description spells out this tradeoff), 'fruit_qty' / 'byproduct_qty' (additive quantity bonuses: multiply that product's yield by (1+sum), no effect on any time). Frontend math (all verified against the disassembled formulas): growth_time = growth_hours / ((1+sum all_speed) * (1+sum growth_speed... there is no additive growth_speed in current data) * product growth_speed_mult); fruit_yield = ceil(growth_hours * (1+sum fruit_qty) / (fruit_cycle_hours * product growth_speed_mult)); byproduct likewise. Note all_speed cancels out of the yield formulas entirely. Entries sharing a 'dial_group' (temp/light) are mutually exclusive in the UI (the farm holds one Temperature and one Light position at a time); entries with no dial_group toggle independently. neighbor_effects entries carry the same 'effects' array plus their own 'effect' prose line, rendered identically to enrichment rows (condition -> effect) so no toggle is ever description-less. Either kind of entry may also carry an 'effect_note': a longer aside (dead-code caveats, stacking rules, the why behind a slower-but-richer tradeoff) shown as a hover tooltip on the effect text rather than inline - keep 'effect' itself to one readable line; a long inline effect used to wrap onto its own full-width line, visually detaching from its row. The game data also defines multiplicative fruit/byproduct-quantity attrs, but they are DEAD CODE in the current build (computed then discarded, confirmed at raw-opcode level) - the one place they appear (Spacekorn's UV entry, a would-be -20% byproduct malus) is described in prose but carries no effect entry. Every togglable entry (any enrichment or neighbor_effect carrying 'effects') also carries a stable 'id', added so per-variant 'goal_presets' below can reference exactly which toggles a recommended setup implies without duplicating numbers - the id is a slug, unique within that variant, not global.",
-    "goal_presets_and_layouts": "Added alongside the Layouts reference view (frontend/js/farming.js): each variant's 'goal_presets' names, for each of the 'rate' (items/hour) and 'harvest' (items/harvest) framings, which of that SAME variant's own toggle ids to check for an 'overall' (both products), 'fruit_only', or 'byproduct_only' goal - deliberately not precomputed numbers, so the Layouts view drives the exact same live calculator as the Reference view and can never drift from it. A goal's preset always includes every toggle genuinely part of that setup (including pure-speed ones), not just the ones touching the target product - the only toggles ever dropped for a *_only goal are fertilizer-only bonuses that contribute nothing to the wanted product, since spending a supplement slot for zero benefit is waste, not a neutral choice (a bonus that's free either way - i.e. costs no fertilizer, most neighbor effects - is always kept). Where no single setup dominates both products (Spacekorn Plain's rate table only), 'overall' is an {no_dominant: true, options: [...]} shape instead of a single preset - a real Pareto trade-off, not an oversight. Each preset also names a 'layout' (a key into the top-level 'layouts' object) - some variants use the same layout across both framings (Green, Dream, Sour, Woolly, Plain's harvest table), others switch layout by framing because the metabolic-slowdown tradeoff genuinely reverses which physical pairing wins (White: Layout C-alt for rate, Layout C for harvest; Spacekorn Plain: Layout D for byproduct-rate specifically, Layout D-mix everywhere else). Discovered while building this: Rockwood Green, White, and Dream were all missing a 'Neighboring Woolly Spacekorn' neighbor_effect - Woolly's own +20% Byproduct quantity to 'any neighbor' (see ChillyEinkorn's adjacency line) had only ever been recorded as what Woolly does to others, never mirrored onto the receiving variants' own cards the way Rockwood Glow's UV-lit effect already was - so it was real but untoggleable. Fixed here since it directly changed which pairing is actually optimal for White (see Layout C-alt)."
+    "goal_presets_and_layouts": "Added alongside the Layouts reference view (frontend/js/farming.js): each variant's 'goal_presets' names, for each of the 'rate' (items/hour) and 'harvest' (items/harvest) framings, which of that SAME variant's own toggle ids to check for an 'overall' (both products), 'fruit_only', or 'byproduct_only' goal - deliberately not precomputed numbers, so the Layouts view drives the exact same live calculator as the Reference view and can never drift from it. A goal's preset always includes every toggle genuinely part of that setup (including pure-speed ones), not just the ones touching the target product - the only toggles ever dropped for a *_only goal are fertilizer-only bonuses that contribute nothing to the wanted product, since spending a supplement slot for zero benefit is waste, not a neutral choice (a bonus that's free either way - i.e. costs no fertilizer, most neighbor effects - is always kept). The {no_dominant: true, options: [...]} shape (for a genuine Pareto trade-off with no single winner) is defined but currently unused - the one case it was built for (Spacekorn Plain's rate table) turned out not to be a real trade-off once measured correctly, see _meta.per_slot_vs_per_farm - kept in the schema since a future finding could still produce a genuine one. Each preset also names a 'layout' (a key into the top-level 'layouts' object) - most variants use the same layout across both framings (Green, Dream, Sour, Woolly, Bitter, Plain), White is the one exception, switching layout by framing because the metabolic-slowdown tradeoff genuinely reverses which physical pairing wins its farm total (Layout C-alt for rate, Layout C for harvest - both verified by total, not just per-plant, see _meta.per_slot_vs_per_farm). Discovered while building this: Rockwood Green, White, and Dream were all missing a 'Neighboring Woolly Spacekorn' neighbor_effect - Woolly's own +20% Byproduct quantity to 'any neighbor' (see ChillyEinkorn's adjacency line) had only ever been recorded as what Woolly does to others, never mirrored onto the receiving variants' own cards the way Rockwood Glow's UV-lit effect already was - so it was real but untoggleable. Fixed here since it directly changed which pairing is actually optimal for White (see Layout C-alt).",
+    "one_way_neighbor_pairings": "Corrected 2026-07-27: three checkerboard/weave layouts (B, C, D-mix) pair a Reclusive-or-lonely variant (Green, White, Plain) with a companion (Woolly, Bitter, Sour respectively) that genuinely helps it - but the companion's own goal_presets had wrongly pointed back at that SAME shared layout, implying the pairing helps both sides equally. It doesn't: Bitter's own perk (-50% neighbor supplement consumption) and Green's own perk (neighbor SEED germination/death-timer speed) aren't among the four attrs (all_speed/growth_speed_mult/fruit_qty/byproduct_qty) this app's calculator tracks at all, and Sour has no neighbor_tag enrichment of its own to receive anything through in the first place - so Bitter, Woolly, and Sour each get nothing measurable back from their half of the pairing. Layouts E/E-alt (Bitter), F (Sour), and G (Woolly) are solid monocultures added so each variant's OWN goal_presets recommend packing every plot with itself (more total plants, since the companion crop was doing nothing for it) rather than wasting half the farm on a neighbor it doesn't benefit from. The paired layouts (B/C/C-alt/D-mix) remain correct - they're just the answer for the BENEFICIARY (Green/White/Plain), not the companion. One theoretically-real pairing that still can't happen: Woolly's blanket byproduct bonus is crop-agnostic, so it would help Sour too if they were neighbors - but Sour's gate (Warm/Hot) and Woolly's gate (Cold only) can never both be satisfied by one farm's single shared Temperature dial, same conflict that already rules out Bitter+Woolly.",
+    "per_slot_vs_per_farm": "Corrected 2026-07-27, superseding the reasoning (not the conclusions) in one_way_neighbor_pairings above. Every goal_preset here is chosen by FARM TOTAL - per-plant yield multiplied by how many plots of that variant the layout's own grid actually contains - not by per-plant yield alone. The two aren't the same thing whenever the candidate layouts differ in plot count, and trusting per-plant numbers alone produced one real wrong answer before this pass: Spacekorn Plain's rate table was documented as a genuine Pareto trade-off between Layout D (monoculture, 15 plots) and Layout D-mix (Sour-neighbor stripe, 9 plots) - D-mix's per-plant numbers ARE individually higher (0.349 vs 0.302 fruit/hr, 1.105 vs 1.207 byproduct/hr - byproduct was already D's per-plant win, fruit wasn't). But farm totals tell a different story on every axis: fruit 4.53/hr (D) vs 3.14/hr (D-mix), byproduct 18.1/hr (D) vs 9.95/hr (D-mix), fruit harvest 60 vs 54, byproduct harvest 240 vs 171. D-mix's 9-plot ceiling loses to D's 15-plot ceiling every time, once counted - there was never a real trade-off, only a per-plot one. Plain's goal_presets now point at Layout D universally; the no_dominant shape that used to model this trade-off is unused but kept in the schema (see goal_presets_and_layouts). Every other variant's assignment was re-checked the same way and already held: White has no monoculture alternative to compare against (Reclusive forces the checkerboard), and for Dream/Bitter/Sour/Woolly, packing solid wins by such a wide margin (e.g. Dream: 15x50=750 vs an 8-Dream/7-Woolly checkerboard's 8x54=432, even though the checkerboard gives Dream a real +8% per-plant boost from a Woolly neighbor) that no layout in this dataset was close. The general rule this establishes: a per-plant improvement only matters if (new plot count / old plot count) x (new per-plant / old per-plant) > 1 - a large per-plant gain on a much smaller plot count almost never clears that bar in a 15-plot grid, which is why solid monocultures dominate this dataset's farm totals whenever they're mechanically available at all."
   },
   "layouts": {
     "A": {
@@ -28,7 +31,7 @@
       "label": "Green / Woolly Weave",
       "crop": "mixed",
       "dial": { "temperature": ["Cold"], "light": ["UV"] },
-      "note": "Checkerboard - every Green plot's neighbors are all Woolly, never another Reclusive plant, so this packs solid at 15/15 with no gate-failure risk.",
+      "note": "Green's own weave - every Green plot's neighbors are all Woolly, never another Reclusive plant, so this packs solid at 15/15 with no gate-failure risk, and Woolly's blanket byproduct bonus reaches every Green plot. Woolly itself gets nothing measurable back (Green's own perk only speeds up a neighbor's germination/death-timer while it's still a seed - not one of the four attributes CraftMap's calculator tracks) - it's grown here purely as Green's companion. If Woolly is the actual goal, see the Woolly Vault layout instead.",
       "grid": [
         ["Rockwood", "ChillyEinkorn", "Rockwood", "ChillyEinkorn", "Rockwood"],
         ["ChillyEinkorn", "Rockwood", "ChillyEinkorn", "Rockwood", "ChillyEinkorn"],
@@ -39,7 +42,7 @@
       "label": "Bitter / White Checkerboard",
       "crop": "rockwood",
       "dial": { "temperature": ["Hot"], "light": ["Dark"] },
-      "note": "White's harvest-optimal pairing - the Putrescent-neighbor metabolic-slowdown trade grows bigger (not faster) hauls of both of White's products, which is why this layout is only the right call for the items/harvest framing, not items/hour (see Layout C-alt).",
+      "note": "White's harvest-optimal pairing - the Putrescent-neighbor metabolic-slowdown trade grows bigger (not faster) hauls of both of White's products, which is why this layout is only the right call for the items/harvest framing, not items/hour (see Layout C-alt). Bitter itself gets nothing measurable back (its own perk, -50% neighbor supplement consumption, isn't one of the four attributes CraftMap's calculator tracks) - it's grown here purely as White's companion. If Bitter is the actual goal, see the Bitter Vault layouts instead.",
       "grid": [
         ["Sulfwood", "Whitewood", "Sulfwood", "Whitewood", "Sulfwood"],
         ["Whitewood", "Sulfwood", "Whitewood", "Sulfwood", "Whitewood"],
@@ -61,7 +64,7 @@
       "label": "Plain Vault",
       "crop": "spacekorn",
       "dial": { "temperature": ["Temperate"], "light": ["UV"] },
-      "note": "Byproduct-rate-optimal only - Temperate's own speed-only enrichment pays off best on Plain Pulp's short cycle specifically. Strictly worse than Layout D-mix for fruit rate and for harvest size on both products, since Temperate's bonus is pure growth speed and does nothing once time isn't being measured.",
+      "note": "Plain's own universal setup, every goal and both framings. Per-plant, D-mix's Sour-neighbor quantity bonus individually beats this on fruit rate and on harvest size - but D-mix only fits 9 Plain plots to this layout's 15, and that plot-count gap outweighs the per-plant edge on every single metric once you total the farm (see farming.json's own _meta.per_slot_vs_per_farm for the worked numbers). Grow Sour separately (Layout F) if you want both products - mixing them on one farm costs Plain more than the pairing ever gives back.",
       "grid": [
         ["Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn"],
         ["Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn", "Plainkorn"],
@@ -72,11 +75,55 @@
       "label": "Plain / Sour Stripe",
       "crop": "spacekorn",
       "dial": { "temperature": ["Warm"], "light": ["UV"] },
-      "note": "Fruit-rate-optimal and harvest-optimal (all goals) for both Plain and Sour. Column stripes, not a checkerboard: every Plain plot touches a Sour column horizontally and another Plain vertically within its own column, so both of Plain's own adjacency bonuses land at once.",
+      "note": "A real, mechanically-verified layout - but not the farm-total-optimal choice for EITHER crop grown here. Plain's own per-plant numbers are higher than in Layout D, but D fits 15 Plain to this layout's 9, and wins the farm total regardless (see Layout D's own note and _meta.per_slot_vs_per_farm). Sour gets nothing measurable from Plain either (see Layout F's own note) and has its own farm-total-dominant monoculture. This layout's real use case is growing BOTH Spacekorn Seed lines' worth of diversity (Plain Pulp and Sour Pulp) from a single farm - not maximizing either one alone.",
       "grid": [
         ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"],
         ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"],
         ["Plainkorn", "SourEinkorn", "Plainkorn", "SourEinkorn", "Plainkorn"]
+      ]
+    },
+    "E": {
+      "label": "Bitter Vault",
+      "crop": "rockwood",
+      "dial": { "temperature": ["Hot"], "light": ["Dark"] },
+      "note": "Bitter's own harvest-optimal setup. Bitter gets nothing measurable back from a White (or any) neighbor, so a solid monoculture beats the Layout C checkerboard for Bitter's own total output - same plant count doing useful work either way, but here every plot is Bitter instead of half going to a companion crop Bitter doesn't benefit from.",
+      "grid": [
+        ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
+        ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
+        ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"]
+      ]
+    },
+    "E-alt": {
+      "label": "Bitter Vault (UV)",
+      "crop": "rockwood",
+      "dial": { "temperature": ["Hot"], "light": ["UV"] },
+      "note": "Bitter's own rate-optimal setup - same monoculture as Layout E, UV instead of Dark since UV wins on speed with no yield tradeoff (see Bitter's own Light-dial fork). Only the dial differs from Layout E; the grid is identical.",
+      "grid": [
+        ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
+        ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"],
+        ["Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood", "Sulfwood"]
+      ]
+    },
+    "F": {
+      "label": "Sour Vault",
+      "crop": "spacekorn",
+      "dial": { "temperature": ["Warm", "Hot"], "light": ["UV"] },
+      "note": "Sour's own setup, all goals and both framings - Sour has no neighbor_tag enrichment of its own (its fruit and byproduct numbers never depend on what's next to it), so a solid monoculture beats the Layout D-mix stripe for Sour's own total output. Warm/Hot are equally valid, matching Sour's own gate (no dial-triggered enrichment differs between them for Sour specifically).",
+      "grid": [
+        ["SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn"],
+        ["SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn"],
+        ["SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn", "SourEinkorn"]
+      ]
+    },
+    "G": {
+      "label": "Woolly Vault",
+      "crop": "spacekorn",
+      "dial": { "temperature": ["Cold"], "light": ["UV"] },
+      "note": "Woolly's own setup, all goals and both framings - Woolly has no neighbor_tag enrichment of its own, and Green's perk (the one thing a Layout B neighbor would give it) only ever touches a neighbor's transient seed-stage timers, not any of the four attributes this app tracks. A solid monoculture beats the Layout B weave for Woolly's own total output.",
+      "grid": [
+        ["ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn"],
+        ["ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn"],
+        ["ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn", "ChillyEinkorn"]
       ]
     }
   },
@@ -374,16 +421,17 @@
           ],
           "goal_presets": {
             "rate": {
-              "overall": { "layout": "C", "toggle_ids": ["hot_qty", "uv_speed"] },
-              "fruit_only": { "layout": "C", "toggle_ids": ["hot_qty", "uv_speed"] },
-              "byproduct_only": { "layout": "C", "toggle_ids": ["hot_qty", "uv_speed"] }
+              "overall": { "layout": "E-alt", "toggle_ids": ["hot_qty", "uv_speed"] },
+              "fruit_only": { "layout": "E-alt", "toggle_ids": ["hot_qty", "uv_speed"] },
+              "byproduct_only": { "layout": "E-alt", "toggle_ids": ["hot_qty", "uv_speed"] }
             },
             "harvest": {
-              "overall": { "layout": "C", "toggle_ids": ["hot_qty", "dark_mult"] },
-              "fruit_only": { "layout": "C", "toggle_ids": ["hot_qty", "dark_mult"] },
-              "byproduct_only": { "layout": "C", "toggle_ids": ["hot_qty", "dark_mult"] }
+              "overall": { "layout": "E", "toggle_ids": ["hot_qty", "dark_mult"] },
+              "fruit_only": { "layout": "E", "toggle_ids": ["hot_qty", "dark_mult"] },
+              "byproduct_only": { "layout": "E", "toggle_ids": ["hot_qty", "dark_mult"] }
             }
-          }
+          },
+          "goal_preset_note": "Bitter has no neighbor_tag enrichment of its own, so pairing with White (Layout C) buys it nothing measurable - Layout E/E-alt (a solid Bitter monoculture) is the right recommendation whenever Bitter itself is the goal. Layout C only matters if you're optimizing for White's harvest, not Bitter's."
         }
       ]
     },
@@ -476,23 +524,17 @@
           ],
           "goal_presets": {
             "rate": {
-              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor"] },
-              "byproduct_only": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] },
-              "overall": {
-                "no_dominant": true,
-                "note": "No single winner - a genuine Pareto trade-off, not a rounding artifact. D-mix's fruit-rate edge (+16% relative) is larger than D's byproduct-rate edge (+9% relative), so lean D-mix if you have no preference either way.",
-                "options": [
-                  { "label": "Lean fruit (Layout D-mix)", "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor", "neutral"] },
-                  { "label": "Lean byproduct (Layout D)", "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] }
-                ]
-              }
+              "overall": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] },
+              "fruit_only": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor"] },
+              "byproduct_only": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] }
             },
             "harvest": {
-              "overall": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor", "neutral"] },
-              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor"] },
-              "byproduct_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "plain_neighbor", "putrescent_neighbor", "neutral"] }
+              "overall": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] },
+              "fruit_only": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor"] },
+              "byproduct_only": { "layout": "D", "toggle_ids": ["temperate_speed", "uv_speed", "plain_neighbor", "neutral"] }
             }
-          }
+          },
+          "goal_preset_note": "Corrected 2026-07-27: this used to fork between Layout D (monoculture) and Layout D-mix (Sour-neighbor stripe) depending on goal, including a genuine Pareto trade-off on the rate table. That trade-off was a per-plot artifact - once weighted by how many Plain plots each layout actually fits (15 in D vs 9 in D-mix), D wins every single comparison: fruit rate 4.53 vs 3.14/hr, byproduct rate 18.1 vs 9.95/hr, fruit harvest 60 vs 54, byproduct harvest 240 vs 171 (farm totals, not per-plant). D-mix's per-plant numbers are individually higher, but it fits 40% fewer Plain plants to get there. D-mix remains the right answer only if Sour's own products are ALSO part of the goal - see Sour's own goal_presets (Layout F) for why it doesn't want that trade either."
         },
         {
           "id": "SourEinkorn",
@@ -549,17 +591,17 @@
           ],
           "goal_presets": {
             "rate": {
-              "overall": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] },
-              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed"] },
-              "byproduct_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] }
+              "overall": { "layout": "F", "toggle_ids": ["uv_speed", "neutral"] },
+              "fruit_only": { "layout": "F", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "F", "toggle_ids": ["uv_speed", "neutral"] }
             },
             "harvest": {
-              "overall": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] },
-              "fruit_only": { "layout": "D-mix", "toggle_ids": ["uv_speed"] },
-              "byproduct_only": { "layout": "D-mix", "toggle_ids": ["uv_speed", "neutral"] }
+              "overall": { "layout": "F", "toggle_ids": ["uv_speed", "neutral"] },
+              "fruit_only": { "layout": "F", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "F", "toggle_ids": ["uv_speed", "neutral"] }
             }
           },
-          "goal_preset_note": "Sour's fruit (Spacekorn Seed) has no quantity lever at all in this data - the number never moves regardless of goal, and it's the same item Plain produces at a higher ceiling, so there's no fruit-focused reason to grow Sour over Plain. Fruit-only here is purely about not spending Neutral Fertilizer on a byproduct you've decided you don't want."
+          "goal_preset_note": "Sour's fruit (Spacekorn Seed) has no quantity lever at all in this data - the number never moves regardless of goal, and it's the same item Plain produces at a higher ceiling, so there's no fruit-focused reason to grow Sour over Plain. Fruit-only here is purely about not spending Neutral Fertilizer on a byproduct you've decided you don't want. Layout F (a solid Sour monoculture), not the Plain/Sour stripe (D-mix) - Sour has no neighbor_tag enrichment of its own, so pairing with Plain buys it nothing; D-mix is the right call only when Plain is the actual goal."
         },
         {
           "id": "ChillyEinkorn",
@@ -623,17 +665,17 @@
           ],
           "goal_presets": {
             "rate": {
-              "overall": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] },
-              "fruit_only": { "layout": "B", "toggle_ids": ["uv_speed"] },
-              "byproduct_only": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] }
+              "overall": { "layout": "G", "toggle_ids": ["uv_speed", "neutral", "carbonic"] },
+              "fruit_only": { "layout": "G", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "G", "toggle_ids": ["uv_speed", "neutral", "carbonic"] }
             },
             "harvest": {
-              "overall": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] },
-              "fruit_only": { "layout": "B", "toggle_ids": ["uv_speed"] },
-              "byproduct_only": { "layout": "B", "toggle_ids": ["uv_speed", "neutral", "carbonic"] }
+              "overall": { "layout": "G", "toggle_ids": ["uv_speed", "neutral", "carbonic"] },
+              "fruit_only": { "layout": "G", "toggle_ids": ["uv_speed"] },
+              "byproduct_only": { "layout": "G", "toggle_ids": ["uv_speed", "neutral", "carbonic"] }
             }
           },
-          "goal_preset_note": "Woolly's own fruit (Wooly Korn) has no quantity lever at all - neither fertilizer buys anything there, so fruit-only skips both. Its adjacency effect (+20% Byproduct quantity to 'any neighbor') is what it gives to whatever's next to it, not something it receives back from its own neighbor - it does not appear in its own goal_presets."
+          "goal_preset_note": "Woolly's own fruit (Wooly Korn) has no quantity lever at all - neither fertilizer buys anything there, so fruit-only skips both. Its adjacency effect (+20% Byproduct quantity to 'any neighbor') is what it gives to whatever's next to it, not something it receives back from its own neighbor - it does not appear in its own goal_presets. Layout G (a solid Woolly monoculture), not the Green/Woolly weave (Layout B) - Woolly gets nothing measurable back from a Green neighbor either, so B is the right call only when Green is the actual goal."
         }
       ]
     }

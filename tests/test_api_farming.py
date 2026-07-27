@@ -273,7 +273,18 @@ def test_get_farming_layouts_returns_expected_layout_ids():
     api = Api()
     layouts = api.get_farming_layouts()
     json.dumps(layouts)
-    assert set(layouts.keys()) == {"A", "B", "C", "C-alt", "D", "D-mix"}
+    assert set(layouts.keys()) == {
+        "A",
+        "B",
+        "C",
+        "C-alt",
+        "D",
+        "D-mix",
+        "E",
+        "E-alt",
+        "F",
+        "G",
+    }
 
 
 def test_every_layout_grid_is_a_valid_5x3_board_of_real_variant_ids():
@@ -407,6 +418,112 @@ def test_variants_with_goal_presets_cover_every_non_unreachable_variant():
     }
     assert without_presets == {"Glowwood"}
     assert "Glowwood" not in with_presets
+
+
+def _mid(rng):
+    return (rng[0] + rng[1]) / 2
+
+
+def _collect_effects(variant, toggle_ids):
+    acc = {"all_speed": 0.0, "growth_speed_mult": 1.0, "fruit_qty": 0.0, "byproduct_qty": 0.0}
+    for e in list(variant["enrichments"]) + variant.get("neighbor_effects", []):
+        if e.get("id") in toggle_ids:
+            for eff in e["effects"]:
+                if eff["attr"] == "growth_speed_mult":
+                    acc["growth_speed_mult"] *= eff["value"]
+                else:
+                    acc[eff["attr"]] += eff["value"]
+    return acc
+
+
+def _yields(variant, acc):
+    import math
+
+    g = _mid(variant["growth_hours"])
+    fruit = math.ceil(g * (1 + acc["fruit_qty"]) / (_mid(variant["fruit_cycle_hours"]) * acc["growth_speed_mult"]))
+    byprod = math.ceil(
+        g * (1 + acc["byproduct_qty"]) / (_mid(variant["byproduct_cycle_hours"]) * acc["growth_speed_mult"])
+    )
+    return fruit, byprod
+
+
+def _rates(variant, acc, germ_hours):
+    fruit, byprod = _yields(variant, acc)
+    growth_time = _mid(variant["growth_hours"]) / ((1 + acc["all_speed"]) * acc["growth_speed_mult"])
+    cycle = germ_hours + growth_time
+    return fruit / cycle, byprod / cycle
+
+
+def _grid_count(layout, variant_id):
+    return sum(row.count(variant_id) for row in layout["grid"])
+
+
+def test_plain_layout_d_beats_d_mix_on_every_farm_total_axis():
+    """Regression guard for the 2026-07-27 per-slot-vs-per-farm correction
+    (see farming.json's own _meta.per_slot_vs_per_farm): Layout D-mix's
+    per-plant numbers are individually higher than Layout D's, but D-mix
+    only fits 9 Plain plots to D's 15 - and once multiplied through, D
+    wins every comparison, not just some. If this ever flips back, Plain's
+    goal_presets need to fork again (or worse, someone reverted the fix
+    without reverting the recommendation)."""
+    api = Api()
+    crops = {c["id"]: c for c in api.get_farming_crops()}
+    layouts = api.get_farming_layouts()
+    plain = next(v for v in crops["spacekorn"]["variants"] if v["id"] == "Plainkorn")
+    germ = _mid(crops["spacekorn"]["germination_hours"])
+
+    d_count = _grid_count(layouts["D"], "Plainkorn")
+    dmix_count = _grid_count(layouts["D-mix"], "Plainkorn")
+    assert d_count > dmix_count, "test assumption broken: D no longer has more Plain plots than D-mix"
+
+    d_acc = _collect_effects(plain, {"temperate_speed", "uv_speed", "plain_neighbor", "neutral"})
+    dmix_acc = _collect_effects(plain, {"uv_speed", "plain_neighbor", "putrescent_neighbor", "neutral"})
+
+    d_fruit, d_byprod = _yields(plain, d_acc)
+    dmix_fruit, dmix_byprod = _yields(plain, dmix_acc)
+    assert d_fruit * d_count > dmix_fruit * dmix_count, "D should win farm-total fruit harvest"
+    assert d_byprod * d_count > dmix_byprod * dmix_count, "D should win farm-total byproduct harvest"
+
+    d_frate, d_brate = _rates(plain, d_acc, germ)
+    dmix_frate, dmix_brate = _rates(plain, dmix_acc, germ)
+    assert d_frate * d_count > dmix_frate * dmix_count, "D should win farm-total fruit rate"
+    assert d_brate * d_count > dmix_brate * dmix_count, "D should win farm-total byproduct rate"
+
+
+def test_plain_goal_presets_never_reference_d_mix():
+    """Layout D-mix remains real, mechanically-valid data (see its own
+    note - it's a legitimate 'grow both crops from one farm' option) but
+    is no longer farm-total-optimal for Plain on any axis - Plain's own
+    goal_presets should never point at it (see the preceding test for the
+    numbers)."""
+    api = Api()
+    crops = api.get_farming_crops()
+    plain = next(
+        v for crop in crops for v in crop["variants"] if v["id"] == "Plainkorn"
+    )
+    for metric in ("rate", "harvest"):
+        for goal in ("overall", "fruit_only", "byproduct_only"):
+            assert plain["goal_presets"][metric][goal]["layout"] == "D"
+
+
+def test_no_dominant_shape_is_currently_unused():
+    """The {no_dominant: true, options: [...]} shape exists in the schema
+    for a genuine Pareto trade-off with no single farm-total winner - the
+    one case it was built for (Spacekorn Plain's rate table) turned out
+    not to be real once measured by farm total instead of per-plant (see
+    _meta.per_slot_vs_per_farm). Nothing currently uses the shape; this
+    just documents that fact so it's obviously intentional if it's ever
+    seen failing rather than a silently reintroduced bug."""
+    api = Api()
+    crops = api.get_farming_crops()
+    for crop in crops:
+        for variant in crop["variants"]:
+            presets = variant.get("goal_presets")
+            if not presets:
+                continue
+            for metric in ("rate", "harvest"):
+                for goal in ("overall", "fruit_only", "byproduct_only"):
+                    assert not presets[metric][goal].get("no_dominant"), (variant["id"], metric, goal)
 
 
 def test_only_rockwood_glow_is_marked_unreachable():

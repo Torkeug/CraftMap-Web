@@ -828,6 +828,60 @@
     return box;
   }
 
+  function countInGrid(layout, variantId) {
+    let n = 0;
+    for (const row of layout.grid) {
+      for (const cell of row) {
+        if (cell === variantId) n++;
+      }
+    }
+    return n;
+  }
+
+  // The whole reason this feature exists: a layout is picked by FARM
+  // TOTAL (per-plant yield times how many plots of this variant the grid
+  // actually fits), never by per-plant yield alone - see farming.json's
+  // own _meta.per_slot_vs_per_farm for the worked example (Spacekorn
+  // Plain) where trusting per-plant numbers alone gave the wrong answer.
+  // This box makes that arithmetic visible instead of asking the reader
+  // to trust the recommendation blindly - same per-plant range math as
+  // renderPresetHarvestBox, just multiplied through by the grid's own
+  // plot count for this variant. Growth time has no farm-total analogue
+  // (every plot grows in parallel on its own clock), so only fruit/
+  // byproduct appear here.
+  function renderFarmTotalBox(variant, toggleIds, layout) {
+    const count = countInGrid(layout, variant.id);
+    const acc = collectEffectsForIds(variant, toggleIds);
+    const fruitRange = yieldRange(variant, "fruit_cycle_hours", acc.fruit_qty, acc);
+    const byproductRange = yieldRange(variant, "byproduct_cycle_hours", acc.byproduct_qty, acc);
+
+    const box = document.createElement("div");
+    box.className = "farming-timing-box farming-farm-total-box";
+    const labelEl = document.createElement("div");
+    labelEl.className = "farming-timing-label";
+    labelEl.textContent = `Farm total (${count} of 15 plots)`;
+    box.appendChild(labelEl);
+
+    const rows = [
+      ["Fruit, whole farm", fmtCount(fruitRange.map((v) => v * count))],
+      ["Byproduct, whole farm", fmtCount(byproductRange.map((v) => v * count))],
+    ];
+    for (const [label, text] of rows) {
+      const row = document.createElement("div");
+      row.className = "farming-timing-row";
+      const statEl = document.createElement("span");
+      statEl.className = "farming-timing-stat";
+      statEl.textContent = label;
+      row.appendChild(statEl);
+      const valueEl = document.createElement("span");
+      valueEl.className = "farming-timing-value";
+      valueEl.textContent = text;
+      row.appendChild(valueEl);
+      box.appendChild(row);
+    }
+    return box;
+  }
+
   // Required fertilizer (always on, regardless of goal) plus whichever
   // optional fertilizer-granting enrichments THIS preset actually turns on
   // (matched by fertilizer_item - see farming.json's own _meta.effects) -
@@ -905,6 +959,7 @@
     panel.appendChild(renderLayoutBoard(layout));
     panel.appendChild(renderLayoutLegend(layout));
     panel.appendChild(renderPresetHarvestBox(variant, presetEntry.toggle_ids));
+    panel.appendChild(renderFarmTotalBox(variant, presetEntry.toggle_ids, layout));
 
     if (layout.note) {
       const noteEl = document.createElement("div");

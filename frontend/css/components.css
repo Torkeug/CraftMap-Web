@@ -2105,6 +2105,19 @@
   background: var(--accent-soft);
 }
 
+/* Farm total (Layouts view only) is the number the layout was actually
+   picked by - see farming.json's own _meta.per_slot_vs_per_farm - but it
+   still reads as a secondary/derived figure next to the per-plot box
+   above it, not a second primary number competing for attention. */
+.farming-farm-total-box {
+  border-color: var(--line);
+  background: var(--panel-2);
+}
+
+.farming-farm-total-box .farming-timing-label {
+  color: var(--muted);
+}
+
 .farming-timing-label {
   font-size: 9px;
   font-weight: 600;
