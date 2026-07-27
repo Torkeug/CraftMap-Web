@@ -1026,6 +1026,29 @@ def test_sour_vault_dial_excludes_plain_contamination():
     assert layouts["F"]["dial"]["temperature"] == ["Hot"]
 
 
+def test_sour_vault_warm_plus_metallic_is_a_genuinely_equal_alternative():
+    """Regression guard for the 2026-07-27 correction: dropping Warm from
+    Layout F's own dial field was right (it can't be listed as a second
+    always-equal position the way Dream's Cold/Temperate pair is, since
+    it needs an extra fertilizer item Hot doesn't), but Warm remains a
+    real, equally-good alternative once Metallic Fertilizer is added on
+    top (Plain forbids Metallic, so its presence excludes Plain the same
+    way Hot's own dial mismatch does; Sour has no opinion on Metallic
+    either way). This is documented in Layout F's own note, not the
+    structured dial field - this test guards the underlying claim itself,
+    so the note doesn't silently go stale if the gate data ever changes."""
+    api = Api()
+    crops = api.get_farming_crops()
+    variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
+    sour = variants_by_id["SourEinkorn"]
+    plain = variants_by_id["Plainkorn"]
+    woolly = variants_by_id["ChillyEinkorn"]
+    ferts = {"Carbonic Fertilizer", "Metallic Fertilizer"}
+    assert _gate_passes(sour, "Warm", "UV", ferts)
+    assert not _gate_passes(plain, "Warm", "UV", ferts)
+    assert not _gate_passes(woolly, "Warm", "UV", ferts)
+
+
 def test_d_mix_dial_is_documented_as_mutually_ambiguous():
     """Regression guard: Layout D-mix's own Warm dial lets BOTH
     Plainkorn's and SourEinkorn's gates pass at every cell (Plain has no
