@@ -884,3 +884,163 @@ def test_battery_cells_are_exactly_the_dial_incompatible_companions():
         "F": set(),
         "G": set(),
     }
+
+
+def _gate_passes(variant, dt, dl, ferts_present):
+    """Python port of the germination-ambiguity audit script (2026-07-27,
+    not checked into this repo - see farming.json's own
+    _meta.germination_ambiguity): does variant's OWN grow-gate pass under
+    this dial position and fertilizer set? Mirrors hasMinRequirement's
+    five independent checks (mechanism/growth_death_mechanism) minus the
+    neighbor-tag one, which doesn't matter for the same-crop-sibling
+    question these tests ask (a sibling's neighbor_restriction_tag is
+    checked against ITS OWN neighbors, not shared with the target)."""
+    if variant.get("unreachable"):
+        return False
+    if variant["temperature"] and dt not in variant["temperature"]:
+        return False
+    if variant["light"] and dl not in variant["light"]:
+        return False
+    for req in variant["fertilizer_required"]:
+        if req not in ferts_present:
+            return False
+    for forb in variant["fertilizer_forbidden"]:
+        if forb in ferts_present:
+            return False
+    return True
+
+
+def _real_fert_set(target, toggle_ids, grid, variants_by_id):
+    fert_key = {e["id"]: e.get("fertilizer_item") for e in target.get("enrichments", [])}
+    ferts = set(target["fertilizer_required"])
+    for tid in toggle_ids:
+        item = fert_key.get(tid)
+        if item:
+            ferts.add(item)
+    other_ids = {c for row in grid for c in row if c and c != target["id"]}
+    for oid in other_ids:
+        ferts |= set(variants_by_id[oid]["fertilizer_required"])
+    return ferts
+
+
+def _same_crop_contaminants(target, layout, toggle_ids, variants_by_id, crop_variant_ids):
+    dt = layout["dial"]["temperature"][0]
+    dl = layout["dial"]["light"][0]
+    ferts = _real_fert_set(target, toggle_ids, layout["grid"], variants_by_id)
+    return [
+        vid for vid in crop_variant_ids
+        if vid != target["id"] and _gate_passes(variants_by_id[vid], dt, dl, ferts)
+    ]
+
+
+def test_every_active_goal_preset_is_free_of_same_crop_germination_contamination():
+    """Regression guard for the 2026-07-27 germination_ambiguity finding:
+    'After germination, ALL variants whose gates currently pass become
+    candidates and the game picks uniformly at random among them'
+    (mechanism) applies per PLOT, not per intended layout cell - a goal
+    preset's own dial+fertilizer choice must not ALSO satisfy a different
+    variant of the SAME crop, or the grid's claimed per-cell species is a
+    lie some fraction of the time. Checked against each preset's own REAL
+    fertilizer set (target's required + optional-toggled items, plus
+    every other live companion's own required items). Rockwood Bitter's
+    own Vault (Layout E/E-alt) is the one documented, permanent exception
+    - see test_bitter_can_never_germinate_cleanly below - every other
+    active preset must come back clean."""
+    api = Api()
+    crops = api.get_farming_crops()
+    layouts = api.get_farming_layouts()
+    variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
+    crop_variant_ids = {crop["id"]: [v["id"] for v in crop["variants"]] for crop in crops}
+    crop_of = {v["id"]: crop["id"] for crop in crops for v in crop["variants"]}
+
+    def check(target, layout_key, toggle_ids, label):
+        layout = layouts[layout_key]
+        contaminants = _same_crop_contaminants(
+            target, layout, toggle_ids, variants_by_id, crop_variant_ids[crop_of[target["id"]]]
+        )
+        if target["id"] == "Sulfwood":
+            assert contaminants == ["Whitewood"], (label, contaminants)
+        else:
+            assert contaminants == [], (label, contaminants)
+
+    for crop in crops:
+        for variant in crop["variants"]:
+            presets = variant.get("goal_presets")
+            if not presets:
+                continue
+            for metric in ("rate", "harvest"):
+                for goal in ("overall", "fruit_only", "byproduct_only"):
+                    entry = presets[metric][goal]
+                    if entry.get("no_dominant"):
+                        for option in entry["options"]:
+                            check(variant, option["layout"], option["toggle_ids"], f"{variant['id']}/{metric}/{goal}/{option['label']}")
+                    else:
+                        check(variant, entry["layout"], entry["toggle_ids"], f"{variant['id']}/{metric}/{goal}")
+
+
+def test_bitter_can_never_germinate_cleanly():
+    """Regression guard: Rockwood White's own gate (unconstrained dial,
+    needs only Metallic Fertilizer, forbids nothing) is satisfied by
+    EVERY environment that also satisfies Bitter's own gate (Warm/Hot +
+    Acidic AND Metallic) - there is no dial or fertilizer choice that
+    excludes White while Bitter can still grow. Exhaustively checked over
+    every temperature x light x achievable-fertilizer-subset combination.
+    If this ever starts passing, farming.json's own _meta.
+    germination_ambiguity and Layout E/E-alt's notes need updating, not
+    just this test."""
+    import itertools
+
+    api = Api()
+    crops = api.get_farming_crops()
+    variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
+    bitter = variants_by_id["Sulfwood"]
+    white = variants_by_id["Whitewood"]
+
+    all_temps = ["Cold", "Temperate", "Warm", "Hot"]
+    all_lights = ["UV", "Natural", "Dark"]
+    all_ferts = ["Neutral Fertilizer", "Metallic Fertilizer", "Carbonic Fertilizer", "Acidic Fertilizer", "Elmerium Dust"]
+    mandatory = set(bitter["fertilizer_required"])
+    optional_pool = [f for f in all_ferts if f not in mandatory and f not in bitter["fertilizer_forbidden"]]
+
+    found_clean = False
+    for dt, dl in itertools.product(all_temps, all_lights):
+        for r in range(len(optional_pool) + 1):
+            for combo in itertools.combinations(optional_pool, r):
+                ferts = mandatory | set(combo)
+                if _gate_passes(bitter, dt, dl, ferts) and not _gate_passes(white, dt, dl, ferts):
+                    found_clean = True
+    assert not found_clean, "Bitter now HAS a clean germination path - update farming.json's notes/meta"
+
+
+def test_sour_vault_dial_excludes_plain_contamination():
+    """Regression guard for the 2026-07-27 fix: Layout F used to list
+    Warm as equally valid alongside Hot for Sour's own Vault - but Warm
+    is also inside Plainkorn's own accepted temperature range, and Plain
+    has no fertilizer requirement of its own to exclude via Sour's own
+    Carbonic Fertilizer, so a Spacekorn seed planted under Warm there had
+    a real chance of sprouting Plain instead. Hot excludes both Plain and
+    Woolly at zero cost to Sour's own numbers (no temperature-triggered
+    enrichment of its own)."""
+    api = Api()
+    layouts = api.get_farming_layouts()
+    assert layouts["F"]["dial"]["temperature"] == ["Hot"]
+
+
+def test_d_mix_dial_is_documented_as_mutually_ambiguous():
+    """Regression guard: Layout D-mix's own Warm dial lets BOTH
+    Plainkorn's and SourEinkorn's gates pass at every cell (Plain has no
+    fertilizer requirement to exclude via Sour's own mandatory Carbonic),
+    so the deterministic-looking stripe it draws is not actually
+    achievable by live growing - see its own note and _meta.
+    germination_ambiguity. This pins the underlying fact down: if a data
+    change ever makes D-mix's own pairing clean, its note (which
+    currently says the opposite) needs rewriting, not just this test."""
+    api = Api()
+    crops = api.get_farming_crops()
+    layouts = api.get_farming_layouts()
+    variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
+    lay = layouts["D-mix"]
+    dt, dl = lay["dial"]["temperature"][0], lay["dial"]["light"][0]
+    ferts = set(variants_by_id["SourEinkorn"]["fertilizer_required"])
+    assert _gate_passes(variants_by_id["Plainkorn"], dt, dl, ferts)
+    assert _gate_passes(variants_by_id["SourEinkorn"], dt, dl, ferts)
