@@ -279,6 +279,8 @@ def test_get_farming_layouts_returns_expected_layout_ids():
         "C",
         "C-alt",
         "D",
+        "D-sparse",
+        "D-sparse-rate",
         "D-mix",
         "E",
         "E-alt",
@@ -495,7 +497,10 @@ def test_plain_goal_presets_never_reference_d_mix():
     note - it's a legitimate 'grow both crops from one farm' option) but
     is no longer farm-total-optimal for Plain on any axis - Plain's own
     goal_presets should never point at it (see the preceding test for the
-    numbers)."""
+    numbers). byproduct_only stays on Layout D specifically (an exact
+    grid search found no battery placement ever beats a full Plain vault
+    for byproduct); fruit_only moved off Layout D too, onto the sparse
+    battery layouts - see test_plain_sparse_battery_layouts_beat_d_on_fruit."""
     api = Api()
     crops = api.get_farming_crops()
     plain = next(
@@ -503,17 +508,24 @@ def test_plain_goal_presets_never_reference_d_mix():
     )
     for metric in ("rate", "harvest"):
         for goal in ("overall", "fruit_only", "byproduct_only"):
-            assert plain["goal_presets"][metric][goal]["layout"] == "D"
+            assert plain["goal_presets"][metric][goal]["layout"] != "D-mix", (metric, goal)
+        assert plain["goal_presets"][metric]["byproduct_only"]["layout"] == "D"
 
 
 def test_no_dominant_shape_is_currently_unused():
-    """The {no_dominant: true, options: [...]} shape exists in the schema
-    for a genuine Pareto trade-off with no single farm-total winner - the
-    one case it was built for (Spacekorn Plain's rate table) turned out
-    not to be real once measured by farm total instead of per-plant (see
-    _meta.per_slot_vs_per_farm). Nothing currently uses the shape; this
-    just documents that fact so it's obviously intentional if it's ever
-    seen failing rather than a silently reintroduced bug."""
+    """The {no_dominant: true, options: [...]} shape is for a genuine
+    Pareto trade-off with no single winner - meant as a last resort, not
+    the answer to "overall" whenever fruit-optimal and byproduct-optimal
+    genuinely diverge. It WAS briefly used that way (2026-07-27) for
+    Plain's rate/harvest 'overall' and White's rate 'overall', each as a
+    2-option menu re-presenting the fruit_only/byproduct_only extremes -
+    but that's not actually answering "what's best if I want both", it's
+    dodging the question. Replaced same-day by a genuine combined-
+    objective grid search (each product normalized against its own
+    achievable best, summed, then re-optimized end to end) that resolves
+    'overall' to one real single answer per variant every time - see
+    _meta.exact_grid_search. Nothing should use no_dominant again unless
+    a future case can't be resolved even that way."""
     api = Api()
     crops = api.get_farming_crops()
     for crop in crops:
@@ -548,3 +560,327 @@ def test_only_rockwood_glow_is_marked_unreachable():
     # empty for that disambiguation to mean anything.
     assert glow["temperature"] == []
     assert glow["light"] == []
+
+
+def test_neighbor_effects_variant_triggers_reference_real_variant_ids():
+    """A neighbor_effects entry's optional trigger ({kind: 'neighbor_variant',
+    values: [...]}) names which actual variant id(s) grant it - added
+    2026-07-27 so frontend/js/farming.js's per-cell farm-total math
+    (collectEffectsForCell) can identify a real grid neighbor's
+    contribution without parsing the free-text 'label' (the previous
+    approach, which had a real bug: matching on a variant's own first
+    name-word false-positived on a shared crop-family word, e.g. Sulfwood
+    matching its own glow_neighbor entry on 'Rockwood' alone)."""
+    api = Api()
+    crops = api.get_farming_crops()
+    valid_variant_ids = {v["id"] for crop in crops for v in crop["variants"]}
+    seen_any = False
+    for crop in crops:
+        for variant in crop["variants"]:
+            for e in variant.get("neighbor_effects", []):
+                trigger = e.get("trigger")
+                assert trigger is not None, (variant["id"], e["id"])
+                seen_any = True
+                assert trigger["kind"] == "neighbor_variant", (variant["id"], e["id"])
+                assert trigger["values"], (variant["id"], e["id"])
+                assert set(trigger["values"]) <= valid_variant_ids, (variant["id"], e["id"])
+    assert seen_any
+
+
+def _grid_neighbor_coords(r, c, rows, cols):
+    out = []
+    if r > 0:
+        out.append((r - 1, c))
+    if r < rows - 1:
+        out.append((r + 1, c))
+    if c > 0:
+        out.append((r, c - 1))
+    if c < cols - 1:
+        out.append((r, c + 1))
+    return out
+
+
+def test_no_layout_places_two_reclusive_tagged_cells_adjacent():
+    """Structural guard for the 2026-07-27 correction: a Reclusive-tagged
+    variant's own gate requires no Reclusive-tagged neighbor, checked
+    continuously (growth_death_mechanism) AND at the moment a fresh seed
+    resolves into that variant (mechanism) - unlike Woolly's Putrescent
+    restriction, this one is NOT battery-exempt, because the exemption
+    only protects an ALREADY-mature cell's own restriction from being
+    re-triggered; it does nothing for a freshly-resolving neighbor still
+    checking what's already there. So no achievable steady state ever has
+    two Reclusive cells (Green/White/Glow) mutually adjacent, in any
+    layout, regardless of planting order - an earlier version of this
+    optimizer work briefly produced illegal 'solid Reclusive pack' layouts
+    before this was caught; this guards against that mistake returning."""
+    api = Api()
+    crops = api.get_farming_crops()
+    layouts = api.get_farming_layouts()
+    variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
+    for layout_id, layout in layouts.items():
+        grid = layout["grid"]
+        rows, cols = len(grid), len(grid[0])
+        for r, row in enumerate(grid):
+            for c, cell_id in enumerate(row):
+                if cell_id is None or variants_by_id[cell_id].get("bio_tag") != "Reclusive":
+                    continue
+                for nr, nc in _grid_neighbor_coords(r, c, rows, cols):
+                    neighbor_id = grid[nr][nc]
+                    if neighbor_id is None:
+                        continue
+                    assert variants_by_id[neighbor_id].get("bio_tag") != "Reclusive", (
+                        layout_id, r, c, cell_id, neighbor_id
+                    )
+
+
+def _collect_effects_for_cell(variant, toggle_ids, neighbor_ids, variants_by_id):
+    """Python port of frontend/js/farming.js's collectEffectsForCell - true
+    per-cell coverage (a neighbor-conditioned toggle only applies if an
+    ACTUAL grid neighbor satisfies it), unlike this file's own older
+    _collect_effects helper above (blanket - assumes every counted cell
+    gets every toggle_id, correct only for uniform-coverage layouts)."""
+    acc = {"all_speed": 0.0, "growth_speed_mult": 1.0, "fruit_qty": 0.0, "byproduct_qty": 0.0}
+    neighbor_bio_tags = [
+        variants_by_id[nid]["bio_tag"] for nid in neighbor_ids if nid in variants_by_id
+    ]
+    for e in list(variant["enrichments"]) + variant.get("neighbor_effects", []):
+        if e.get("id") not in toggle_ids:
+            continue
+        trig = e.get("trigger")
+        if trig and trig["kind"] == "neighbor_tag":
+            if trig["values"][0] not in neighbor_bio_tags:
+                continue
+        elif trig and trig["kind"] == "neighbor_variant":
+            if not (set(trig["values"]) & set(neighbor_ids)):
+                continue
+        for eff in e["effects"]:
+            if eff["attr"] == "growth_speed_mult":
+                acc["growth_speed_mult"] *= eff["value"]
+            else:
+                acc[eff["attr"]] += eff["value"]
+    return acc
+
+
+def _farm_totals_per_cell(variant, toggle_ids, layout, variants_by_id, germ_hours):
+    grid = layout["grid"]
+    rows, cols = len(grid), len(grid[0])
+    g = _mid(variant["growth_hours"])
+    fruit_h = byprod_h = fruit_r = byprod_r = 0.0
+    count = 0
+    for r, row in enumerate(grid):
+        for c, cell_id in enumerate(row):
+            if cell_id != variant["id"]:
+                continue
+            count += 1
+            neighbor_ids = [
+                grid[nr][nc] for nr, nc in _grid_neighbor_coords(r, c, rows, cols) if grid[nr][nc] is not None
+            ]
+            acc = _collect_effects_for_cell(variant, toggle_ids, neighbor_ids, variants_by_id)
+            fruit, byprod = _yields(variant, acc)
+            growth_time = g / ((1 + acc["all_speed"]) * acc["growth_speed_mult"])
+            cycle = germ_hours + growth_time
+            fruit_h += fruit
+            byprod_h += byprod
+            fruit_r += fruit / cycle
+            byprod_r += byprod / cycle
+    return fruit_h, byprod_h, fruit_r, byprod_r, count
+
+
+def test_plain_sparse_battery_layouts_beat_d_on_fruit_but_lose_on_byproduct():
+    """Regression guard for the 2026-07-27 exact-grid-search finding: a
+    sparse, parked Sour 'battery' (2 cells for harvest, 3 for rate) covers
+    most but not all of Plain's 15 plots with the Putrescent quantity
+    bonus, for free (Finding 19/20's parking technique - no dial cost).
+    Confirmed here with TRUE per-cell coverage (not the blanket model
+    test_plain_layout_d_beats_d_mix_on_every_farm_total_axis already uses
+    for D-mix, which happens to be correct there only because D-mix's
+    dense stripe genuinely does give every counted cell the same
+    neighbor - Layout D-sparse's 2 cells do NOT reach every Plain cell, so
+    the blanket model would silently over-count it)."""
+    api = Api()
+    crops = {c["id"]: c for c in api.get_farming_crops()}
+    layouts = api.get_farming_layouts()
+    variants_by_id = {v["id"]: v for crop in crops.values() for v in crop["variants"]}
+    plain = next(v for v in crops["spacekorn"]["variants"] if v["id"] == "Plainkorn")
+    germ = _mid(crops["spacekorn"]["germination_hours"])
+
+    d_ids = {"temperate_speed", "uv_speed", "plain_neighbor", "neutral"}
+    fh, bh, fr, br, count = _farm_totals_per_cell(plain, d_ids, layouts["D"], variants_by_id, germ)
+    assert (fh, bh, count) == (60, 240, 15)
+
+    sparse_ids = {"temperate_speed", "uv_speed", "plain_neighbor", "putrescent_neighbor"}
+    sfh, sbh, sfr, sbr, scount = _farm_totals_per_cell(
+        plain, sparse_ids, layouts["D-sparse"], variants_by_id, germ
+    )
+    assert scount == 13  # 15-cell grid, 2 of them Sour battery (not counted here)
+    assert sfh == 66, "sparse battery should raise fruit harvest to the verified 66"
+    assert sbh < bh, "2 lost Plain plots should still cost byproduct harvest overall"
+
+    srfh, srbh, srfr, srbr, srcount = _farm_totals_per_cell(
+        plain, sparse_ids, layouts["D-sparse-rate"], variants_by_id, germ
+    )
+    assert srcount == 12  # 15-cell grid, 3 of them Sour battery (not counted here)
+    assert srfr > fr, "3-cell sparse battery should raise fruit rate above solid D"
+    assert srbr < br, "3 lost Plain plots should still cost byproduct rate overall"
+
+
+def test_whitewood_mixed_layout_c_dominates_old_pure_bitter_checkerboard():
+    """Regression guard for the 2026-07-27 exact-grid-search finding:
+    Layout C's mixed Bitter+Woolly filler (White in the 8-cell MAJORITY
+    color - the earlier version of this layout had White backwards, in
+    the 7-cell minority) is simultaneously optimal for fruit harvest,
+    byproduct harvest, AND byproduct rate - confirmed here with true
+    per-cell coverage, not the blanket model (which happens to still be
+    accurate for this specific layout, since every White cell touches
+    both a Bitter AND a Woolly neighbor uniformly - but that uniformity
+    was verified, not assumed)."""
+    api = Api()
+    crops = {c["id"]: c for c in api.get_farming_crops()}
+    layouts = api.get_farming_layouts()
+    variants_by_id = {v["id"]: v for crop in crops.values() for v in crop["variants"]}
+    white = next(v for v in crops["rockwood"]["variants"] if v["id"] == "Whitewood")
+    germ = _mid(crops["rockwood"]["germination_hours"])
+
+    full_ids = {"carbonic", "neutral", "putrescent_neighbor", "woolly_neighbor"}
+    fh, bh, fr, br, count = _farm_totals_per_cell(white, full_ids, layouts["C"], variants_by_id, germ)
+    assert count == 8
+    assert fh == 24
+    assert bh == 1328
+    assert round(br, 3) == 12.518
+
+    calt_ids = {"carbonic", "woolly_neighbor"}
+    _, _, calt_fr, calt_br, calt_count = _farm_totals_per_cell(
+        white, calt_ids, layouts["C-alt"], variants_by_id, germ
+    )
+    assert calt_count == 8
+    assert calt_fr > fr, "C-alt should still win fruit rate specifically (why it stays fruit_only's pick)"
+    assert br > calt_br, "Layout C should win byproduct rate (why it's byproduct_only's pick instead)"
+
+
+def test_overall_goal_is_a_genuine_combined_optimum_not_a_menu():
+    """Regression guard for the 2026-07-27 correction: 'overall' briefly
+    used the {no_dominant, options: [...]} menu shape for Plain and White,
+    literally re-presenting the same fruit_only/byproduct_only answers
+    side by side - which doesn't actually answer 'what's best if I want
+    both'. Replaced by a genuine combined-objective search (each product
+    normalized against its own achievable max, summed, then the WHOLE
+    dial x fertilizer x grid space re-optimized against that combined
+    score) - so 'overall' must always resolve to exactly one {layout,
+    toggle_ids} entry, never a menu, for every variant."""
+    api = Api()
+    crops = api.get_farming_crops()
+    for crop in crops:
+        for variant in crop["variants"]:
+            presets = variant.get("goal_presets")
+            if not presets:
+                continue
+            for metric in ("rate", "harvest"):
+                entry = presets[metric]["overall"]
+                assert "no_dominant" not in entry, (variant["id"], metric)
+                assert "layout" in entry and "toggle_ids" in entry, (variant["id"], metric)
+
+
+def test_plain_overall_lands_on_the_same_setup_for_both_framings():
+    """Regression guard: the combined-objective search happened to find
+    IDENTICAL setups for Plain's rate.overall and harvest.overall (Layout
+    D-sparse + Neutral Fertilizer - two different-looking 2-cell Sour
+    placements, D-sparse and the since-removed D-sparse-overall, turned
+    out to tie exactly because both cover the same COUNT of Plain cells,
+    7 of 13, and coverage count alone determines the total here). Plain
+    now merges into a single 'same setup for items/hour and items/harvest'
+    panel like every other variant, rather than forking by framing the
+    way fruit_only/byproduct_only still legitimately do."""
+    api = Api()
+    crops = api.get_farming_crops()
+    plain = next(v for crop in crops for v in crop["variants"] if v["id"] == "Plainkorn")
+    rate_overall = plain["goal_presets"]["rate"]["overall"]
+    harvest_overall = plain["goal_presets"]["harvest"]["overall"]
+    assert rate_overall["layout"] == harvest_overall["layout"] == "D-sparse"
+    assert sorted(rate_overall["toggle_ids"]) == sorted(harvest_overall["toggle_ids"])
+
+
+def test_whitewood_rate_overall_adds_free_neutral_fertilizer_to_c_alt():
+    """Regression guard: White's rate.overall combined-objective optimum
+    reuses fruit_only's own Layout C-alt grid (pure Woolly checkerboard)
+    rather than byproduct_only's Layout C - Bitter's metabolic slowdown
+    is a net loss for rate, so the combined search never wants ANY
+    Bitter cell for 'overall' either. It does add Neutral Fertilizer on
+    top of fruit_only's own toggle set though: free byproduct (it only
+    touches byproduct_qty, never fruit_qty, so fruit rate is untouched)
+    that fruit_only itself skips only because fruit_only doesn't care
+    about byproduct at all."""
+    api = Api()
+    crops = {c["id"]: c for c in api.get_farming_crops()}
+    layouts = api.get_farming_layouts()
+    variants_by_id = {v["id"]: v for crop in crops.values() for v in crop["variants"]}
+    white = next(v for v in crops["rockwood"]["variants"] if v["id"] == "Whitewood")
+    germ = _mid(crops["rockwood"]["germination_hours"])
+
+    overall = white["goal_presets"]["rate"]["overall"]
+    assert overall["layout"] == "C-alt"
+    assert "neutral" in overall["toggle_ids"]
+
+    fr_ids = set(overall["toggle_ids"])
+    fh, bh, fr, br, count = _farm_totals_per_cell(white, fr_ids, layouts["C-alt"], variants_by_id, germ)
+    assert count == 8
+    fruit_only_ids = set(white["goal_presets"]["rate"]["fruit_only"]["toggle_ids"])
+    _, _, fo_fr, fo_br, _ = _farm_totals_per_cell(white, fruit_only_ids, layouts["C-alt"], variants_by_id, germ)
+    assert round(fr, 6) == round(fo_fr, 6), "adding neutral must not change fruit rate at all"
+    assert br > fo_br, "adding neutral must raise byproduct rate for free"
+
+
+def _is_live_compatible_with_dial(variant, dial):
+    """Python port of frontend/js/farming.js's isLiveCompatibleWithDial -
+    can this variant actually grow LIVE under a layout's own dial, or can
+    it only be there as a parked/battery plant (Finding 19/20)? Derived
+    purely from each variant's own temperature/light gate vs the layout's
+    dial - no separate 'is this a battery' field to keep in sync."""
+    temp_ok = not variant["temperature"] or any(t in variant["temperature"] for t in dial["temperature"])
+    light_ok = not variant["light"] or any(l in variant["light"] for l in dial["light"])
+    return temp_ok and light_ok
+
+
+def _battery_variant_ids_in_layout(layout, variants_by_id):
+    ids = set()
+    for row in layout["grid"]:
+        for cell_id in row:
+            if cell_id and not _is_live_compatible_with_dial(variants_by_id[cell_id], layout["dial"]):
+                ids.add(cell_id)
+    return ids
+
+
+def test_battery_cells_are_exactly_the_dial_incompatible_companions():
+    """Regression guard for the 2026-07-27 UI addition: the Layouts view
+    now visually flags a cell as a parked/'battery' plant (dashed outline
+    on the board, a badge in the legend, a callout on the card) whenever
+    its OWN temperature/light gate can't be satisfied by the layout's own
+    dial - it could never have grown to maturity live, in place, under
+    that dial. This pins down the exact set this dataset currently
+    produces, so a future layout/dial edit that silently breaks the
+    detection (or silently creates/removes a battery requirement) shows
+    up here instead of only in the UI. A layout's own TARGET variant
+    should never appear in its own battery set - the dial was chosen to
+    suit it in the first place."""
+    api = Api()
+    crops = api.get_farming_crops()
+    layouts = api.get_farming_layouts()
+    variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
+
+    found = {
+        layout_id: _battery_variant_ids_in_layout(layout, variants_by_id)
+        for layout_id, layout in layouts.items()
+    }
+    assert found == {
+        "A": set(),
+        "B": set(),
+        "C": {"ChillyEinkorn"},
+        "C-alt": set(),
+        "D": set(),
+        "D-sparse": {"SourEinkorn"},
+        "D-sparse-rate": {"SourEinkorn"},
+        "D-mix": set(),
+        "E": set(),
+        "E-alt": set(),
+        "F": set(),
+        "G": set(),
+    }

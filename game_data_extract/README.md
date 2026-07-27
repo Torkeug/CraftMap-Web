@@ -168,7 +168,24 @@ for review before you decide how to merge.
   byproduct-only) goal. Deliberately not precomputed numbers: a preset
   just names which of that variant's own toggle ids to check, so the
   Layouts view drives the same live calculator the Reference cards use
-  rather than a second calculation that could drift from it.
+  rather than a second calculation that could drift from it. As of
+  2026-07-27 every layout/preset here was re-derived by an exact,
+  exhaustive grid search rather than hand geometry (`_meta.
+  exact_grid_search`) - covering parked/battery neighbors, not just live
+  ones, which is what found Plain's new sparse "battery" layouts and
+  fixed a real color-assignment bug in White's checkerboard. An
+  `overall` goal is always resolved to one genuine combined-optimal
+  answer (each product normalized against its own achievable max,
+  summed, then the whole search re-run against that) rather than a
+  side-by-side menu of the fruit-only/byproduct-only extremes - the
+  `{no_dominant, options: [...]}` shape stayed in the schema but is
+  unused again, same as before this pass. That pass also required a
+  small frontend change: a goal_preset's farm-total math now sums each
+  matching cell's OWN real grid-neighbor adjacency
+  (`frontend/js/farming.js`'s `collectEffectsForCell`) instead of
+  multiplying one blanket per-plant number by a cell count, since the new
+  sparse layouts don't give every counted cell the same neighbor profile
+  the way every checkerboard/solid layout before them did.
 
 ## How this differs from `resources.db`'s recipe tables
 

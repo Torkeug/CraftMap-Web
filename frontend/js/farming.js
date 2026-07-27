@@ -733,9 +733,44 @@
     ChillyEinkorn: "WLY",
   };
 
+  // Does variant's OWN dial gate allow at least the position(s) this
+  // layout actually runs at? Empty means unconstrained (any position
+  // works). If not, this cell can only be there as a PARKED "battery"
+  // (Finding 19/20: grown to maturity earlier under a dial that DOES
+  // suit it, then left unharvested here - a mature plant's own gate stops
+  // being checked at all, so it keeps handing out its bonus regardless of
+  // what the farm's live dial is now) - it could never have grown to
+  // maturity live, in place, under THIS layout's own dial. No new data
+  // field needed for this: it's fully derivable from each variant's own
+  // temperature/light gate plus the layout's own dial, so it can never
+  // silently drift out of sync with either.
+  function isLiveCompatibleWithDial(variant, dial) {
+    const tempOk = !variant.temperature.length || dial.temperature.some((t) => variant.temperature.includes(t));
+    const lightOk = !variant.light.length || dial.light.some((l) => variant.light.includes(l));
+    return tempOk && lightOk;
+  }
+
+  // Every distinct variant id on this layout's board that needs the
+  // parked/battery technique to be there at all (see
+  // isLiveCompatibleWithDial) - the layout's OWN target variant(s) never
+  // land in this set, since the dial was chosen to suit them in the first
+  // place; only a companion/filler cell ever can.
+  function batteryVariantIdsInLayout(layout) {
+    const ids = new Set();
+    for (const row of layout.grid) {
+      for (const cellId of row) {
+        if (!cellId || ids.has(cellId)) continue;
+        const entry = variantById.get(cellId);
+        if (entry && !isLiveCompatibleWithDial(entry.variant, layout.dial)) ids.add(cellId);
+      }
+    }
+    return ids;
+  }
+
   function renderLayoutBoard(layout) {
     const board = document.createElement("div");
     board.className = "farming-layout-board";
+    const batteryIds = batteryVariantIdsInLayout(layout);
     for (const row of layout.grid) {
       for (const cellId of row) {
         const cell = document.createElement("div");
@@ -745,7 +780,13 @@
           if (speciesClass) cell.classList.add(speciesClass);
           const entry = variantById.get(cellId);
           cell.textContent = LAYOUT_CELL_ABBR[cellId] || cellId.slice(0, 3).toUpperCase();
-          cell.title = entry ? entry.variant.name : cellId;
+          const name = entry ? entry.variant.name : cellId;
+          if (batteryIds.has(cellId)) {
+            cell.classList.add("farming-layout-cell-battery");
+            cell.title = `${name} - parked/battery plant (grown to maturity separately, then left unharvested here - see the note below)`;
+          } else {
+            cell.title = name;
+          }
         } else {
           cell.classList.add("farming-layout-cell-empty");
         }
@@ -761,6 +802,7 @@
   function renderLayoutLegend(layout) {
     const wrap = document.createElement("div");
     wrap.className = "farming-layout-legend";
+    const batteryIds = batteryVariantIdsInLayout(layout);
     const seen = new Set();
     for (const row of layout.grid) {
       for (const cellId of row) {
@@ -776,6 +818,13 @@
         const text = document.createElement("span");
         text.textContent = `${entry.variant.name} → ${entry.variant.fruit} + ${entry.variant.byproduct}`;
         item.appendChild(text);
+        if (batteryIds.has(cellId)) {
+          const badge = document.createElement("span");
+          badge.className = "farming-battery-badge";
+          badge.textContent = "⏸ parked";
+          badge.title = `${entry.variant.name} can't grow live under this layout's own dial - shown here already mature and left unharvested, still handing out its bonus regardless (Finding 19/20).`;
+          item.appendChild(badge);
+        }
         wrap.appendChild(item);
       }
     }
@@ -828,14 +877,51 @@
     return box;
   }
 
-  function countInGrid(layout, variantId) {
-    let n = 0;
-    for (const row of layout.grid) {
-      for (const cell of row) {
-        if (cell === variantId) n++;
+  // Orthogonal, bounds-checked grid neighbors of (r, c) in a `grid.length`
+  // x `grid[0].length` board - same adjacency CraftMap's own layouts use
+  // everywhere else (Finding 19's adjacency model).
+  function gridNeighborCells(grid, r, c) {
+    const rows = grid.length;
+    const cols = grid[0].length;
+    const out = [];
+    if (r > 0) out.push(grid[r - 1][c]);
+    if (r < rows - 1) out.push(grid[r + 1][c]);
+    if (c > 0) out.push(grid[r][c - 1]);
+    if (c < cols - 1) out.push(grid[r][c + 1]);
+    return out;
+  }
+
+  // Per-CELL accumulator, unlike collectEffectsForIds' blanket one: a
+  // dial/fertilizer toggle (no trigger, or trigger.kind temp/light) always
+  // applies - the whole farm shares one dial and a fertilizer choice is
+  // uniform across every plot of a variant - but a neighbor-conditioned
+  // toggle (trigger.kind neighbor_tag or neighbor_variant) only applies if
+  // one of THIS cell's actual grid neighbors satisfies it. Needed for any
+  // layout where coverage isn't uniform across every counted cell (e.g.
+  // Layout D-sparse's 2 battery cells don't touch every Plain cell) -
+  // checkerboard/solid layouts give the same answer either way, since
+  // there every counted cell's neighbor profile is identical.
+  function collectEffectsForCell(variant, toggleIds, neighborVariantIds) {
+    const acc = { all_speed: 0, growth_speed_mult: 1, fruit_qty: 0, byproduct_qty: 0 };
+    const neighborBioTags = neighborVariantIds.map((id) => {
+      const entry = variantById.get(id);
+      return entry ? entry.variant.bio_tag : null;
+    });
+    const sources = [...(variant.enrichments || []), ...(variant.neighbor_effects || [])];
+    for (const entry of sources) {
+      if (!entry.id || !toggleIds.includes(entry.id)) continue;
+      const trig = entry.trigger;
+      if (trig && trig.kind === "neighbor_tag") {
+        if (!neighborBioTags.includes(trig.values[0])) continue;
+      } else if (trig && trig.kind === "neighbor_variant") {
+        if (!trig.values.some((vid) => neighborVariantIds.includes(vid))) continue;
+      }
+      for (const e of entry.effects || []) {
+        if (e.attr === "growth_speed_mult") acc.growth_speed_mult *= e.value;
+        else acc[e.attr] += e.value;
       }
     }
-    return n;
+    return acc;
   }
 
   // The whole reason this feature exists: a layout is picked by FARM
@@ -844,16 +930,30 @@
   // own _meta.per_slot_vs_per_farm for the worked example (Spacekorn
   // Plain) where trusting per-plant numbers alone gave the wrong answer.
   // This box makes that arithmetic visible instead of asking the reader
-  // to trust the recommendation blindly - same per-plant range math as
-  // renderPresetHarvestBox, just multiplied through by the grid's own
-  // plot count for this variant. Growth time has no farm-total analogue
-  // (every plot grows in parallel on its own clock), so only fruit/
-  // byproduct appear here.
+  // to trust the recommendation blindly. Sums each matching cell's OWN
+  // range (collectEffectsForCell, real grid adjacency) rather than
+  // multiplying one blanket per-plant number by a count - required for
+  // sparse/uneven-coverage layouts (Layout D-sparse and friends) to read
+  // correctly; gives the identical answer to the old count*single-accumulator
+  // shortcut on every uniform-coverage layout (checkerboards, solid packs).
+  // Growth time has no farm-total analogue (every plot grows in parallel
+  // on its own clock), so only fruit/byproduct appear here.
   function renderFarmTotalBox(variant, toggleIds, layout) {
-    const count = countInGrid(layout, variant.id);
-    const acc = collectEffectsForIds(variant, toggleIds);
-    const fruitRange = yieldRange(variant, "fruit_cycle_hours", acc.fruit_qty, acc);
-    const byproductRange = yieldRange(variant, "byproduct_cycle_hours", acc.byproduct_qty, acc);
+    const grid = layout.grid;
+    let count = 0;
+    let fruitLo = 0, fruitHi = 0, byproductLo = 0, byproductHi = 0;
+    for (let r = 0; r < grid.length; r++) {
+      for (let c = 0; c < grid[r].length; c++) {
+        if (grid[r][c] !== variant.id) continue;
+        count++;
+        const neighborIds = gridNeighborCells(grid, r, c).filter((id) => id != null);
+        const acc = collectEffectsForCell(variant, toggleIds, neighborIds);
+        const [fLo, fHi] = yieldRange(variant, "fruit_cycle_hours", acc.fruit_qty, acc);
+        const [bLo, bHi] = yieldRange(variant, "byproduct_cycle_hours", acc.byproduct_qty, acc);
+        fruitLo += fLo; fruitHi += fHi;
+        byproductLo += bLo; byproductHi += bHi;
+      }
+    }
 
     const box = document.createElement("div");
     box.className = "farming-timing-box farming-farm-total-box";
@@ -863,8 +963,8 @@
     box.appendChild(labelEl);
 
     const rows = [
-      ["Fruit, whole farm", fmtCount(fruitRange.map((v) => v * count))],
-      ["Byproduct, whole farm", fmtCount(byproductRange.map((v) => v * count))],
+      ["Fruit, whole farm", fmtCount([fruitLo, fruitHi])],
+      ["Byproduct, whole farm", fmtCount([byproductLo, byproductHi])],
     ];
     for (const [label, text] of rows) {
       const row = document.createElement("div");
@@ -919,6 +1019,27 @@
     return null;
   }
 
+  // Full-width callout, not a makeReqLine (that column's fixed 76px label
+  // width is sized for short words like "Fertilizer" - "this needs a
+  // parked battery" doesn't fit that shape and wants full-width prose
+  // instead) - deliberately visually LOUDER than the plain
+  // .farming-layout-note below it (accent-colored, its own icon), since
+  // this changes what the player actually has to physically do (grow a
+  // companion to maturity elsewhere FIRST) rather than just explaining
+  // a number.
+  function makeBatteryNotice(text) {
+    const box = document.createElement("div");
+    box.className = "farming-battery-notice";
+    const icon = document.createElement("span");
+    icon.className = "farming-battery-notice-icon";
+    icon.textContent = "⏸";
+    box.appendChild(icon);
+    const body = document.createElement("span");
+    body.textContent = text;
+    box.appendChild(body);
+    return box;
+  }
+
   function renderPresetPanel(heading, presetEntry, variant) {
     const panel = document.createElement("div");
     panel.className = "farming-layout-panel";
@@ -954,6 +1075,19 @@
       bonusEl.appendChild(document.createTextNode("Bonus from neighbor tagged "));
       bonusEl.appendChild(makeBioTagChip(neighborTagBonus));
       panel.appendChild(makeReqLine("Neighbor bonus", bonusEl));
+    }
+
+    const batteryIds = batteryVariantIdsInLayout(layout);
+    if (batteryIds.size) {
+      const names = [...batteryIds].map((id) => {
+        const entry = variantById.get(id);
+        return entry ? entry.variant.name : id;
+      });
+      panel.appendChild(
+        makeBatteryNotice(
+          `${names.join(", ")} can't grow live under this dial - grow it to maturity separately first (under a dial that suits IT), then leave it unharvested here. Once mature it keeps handing out its bonus regardless of the farm's current dial.`
+        )
+      );
     }
 
     panel.appendChild(renderLayoutBoard(layout));
