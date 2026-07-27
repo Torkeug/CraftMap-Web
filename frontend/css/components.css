@@ -2318,35 +2318,6 @@
   background: transparent;
 }
 
-/* A cell that can't grow LIVE under this layout's own dial - shown here
-   already mature and deliberately left unharvested (Finding 19/20's
-   "battery" technique) instead of actively growing in place. Outlined
-   (not filled) so it still reads as occupied-by-that-species at a glance,
-   plus a small corner badge as the explicit "this one's parked" signal -
-   see farming.js's isLiveCompatibleWithDial for how a cell earns this. */
-.farming-layout-cell-battery {
-  outline: 2px dashed var(--accent);
-  outline-offset: 1px;
-}
-
-.farming-layout-cell-battery::after {
-  content: "⏸";
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--panel);
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  font-size: 7px;
-  line-height: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .farming-layout-legend {
   display: flex;
   flex-direction: column;
@@ -2369,47 +2340,10 @@
   background: var(--panel-2);
 }
 
-.farming-battery-badge {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 0 6px;
-  white-space: nowrap;
-}
-
 .farming-layout-note {
   font-size: 10px;
   color: var(--faint);
   line-height: 1.4;
-}
-
-/* Louder than .farming-layout-note above (accent border/text, not faint
-   grey) - this isn't background context, it's a physical setup step the
-   player has to do BEFORE this layout works at all (grow a companion to
-   maturity elsewhere first, then leave it unharvested here). */
-.farming-battery-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 10px;
-  line-height: 1.4;
-  color: var(--text);
-  background: var(--panel-2);
-  /* rgb(31, 111, 235) is --accent - literal triplet since background-image
-     can't consume a hex custom property directly, same technique as the
-     species-tint gradients above. */
-  background-image: linear-gradient(rgba(31, 111, 235, 0.14), rgba(31, 111, 235, 0.14));
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-
-.farming-battery-notice-icon {
-  flex: 0 0 auto;
-  color: var(--accent);
-  font-weight: 700;
 }
 
 .farming-layout-unavailable {

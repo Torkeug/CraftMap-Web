@@ -279,8 +279,6 @@ def test_get_farming_layouts_returns_expected_layout_ids():
         "C",
         "C-alt",
         "D",
-        "D-sparse",
-        "D-sparse-rate",
         "D-mix",
         "E",
         "E-alt",
@@ -494,13 +492,14 @@ def test_plain_layout_d_beats_d_mix_on_every_farm_total_axis():
 
 def test_plain_goal_presets_never_reference_d_mix():
     """Layout D-mix remains real, mechanically-valid data (see its own
-    note - it's a legitimate 'grow both crops from one farm' option) but
-    is no longer farm-total-optimal for Plain on any axis - Plain's own
-    goal_presets should never point at it (see the preceding test for the
-    numbers). byproduct_only stays on Layout D specifically (an exact
-    grid search found no battery placement ever beats a full Plain vault
-    for byproduct); fruit_only moved off Layout D too, onto the sparse
-    battery layouts - see test_plain_sparse_battery_layouts_beat_d_on_fruit."""
+    note - the grid IS a legal state to end up in) but isn't achievable
+    as a controlled pairing at all (germination_ambiguity) and isn't
+    farm-total-optimal for Plain even in principle - Plain's own
+    goal_presets should never point at it. Corrected 2026-07-28 (Finding
+    21): Plain has no usable LIVE companion at all (Sour/Bitter need
+    Warm/Hot, Woolly needs Cold, none compatible with Plain's own
+    Temperate/Warm range), so every goal on both framings now uses Layout
+    D's solid monoculture - see test_plain_has_no_live_companion_and_uses_solid_d_for_every_goal."""
     api = Api()
     crops = api.get_farming_crops()
     plain = next(
@@ -600,19 +599,22 @@ def _grid_neighbor_coords(r, c, rows, cols):
     return out
 
 
-def test_no_layout_places_two_reclusive_tagged_cells_adjacent():
-    """Structural guard for the 2026-07-27 correction: a Reclusive-tagged
-    variant's own gate requires no Reclusive-tagged neighbor, checked
-    continuously (growth_death_mechanism) AND at the moment a fresh seed
-    resolves into that variant (mechanism) - unlike Woolly's Putrescent
-    restriction, this one is NOT battery-exempt, because the exemption
-    only protects an ALREADY-mature cell's own restriction from being
-    re-triggered; it does nothing for a freshly-resolving neighbor still
-    checking what's already there. So no achievable steady state ever has
-    two Reclusive cells (Green/White/Glow) mutually adjacent, in any
-    layout, regardless of planting order - an earlier version of this
-    optimizer work briefly produced illegal 'solid Reclusive pack' layouts
-    before this was caught; this guards against that mistake returning."""
+def test_no_layout_violates_any_cells_own_neighbor_restriction_tag():
+    """Structural guard, generalized 2026-07-28 (Finding 21) from an
+    earlier Reclusive-only version: EVERY occupied cell must now be
+    genuinely LIVE to be on the board at all (there is no 'battery'
+    exemption for a companion cell's own restriction anymore - a
+    companion is only ever placed if it's actively growing, same as the
+    target), so a cell's own neighbor_restriction_tag (Reclusive for
+    Green/White/Glow, Putrescent for Woolly) must be checked against its
+    real grid neighbors regardless of whether it's the layout's target or
+    its companion. Checked continuously (growth_death_mechanism) AND at
+    the moment a fresh seed resolves into that variant (mechanism), so no
+    achievable steady state ever has two same-restricted cells mutually
+    adjacent, in any layout, regardless of planting order - an earlier
+    version of this optimizer work briefly produced illegal 'solid
+    Reclusive pack' layouts before this was caught; this guards against
+    that mistake returning, for any restriction tag, not just Reclusive."""
     api = Api()
     crops = api.get_farming_crops()
     layouts = api.get_farming_layouts()
@@ -622,14 +624,17 @@ def test_no_layout_places_two_reclusive_tagged_cells_adjacent():
         rows, cols = len(grid), len(grid[0])
         for r, row in enumerate(grid):
             for c, cell_id in enumerate(row):
-                if cell_id is None or variants_by_id[cell_id].get("bio_tag") != "Reclusive":
+                if cell_id is None:
+                    continue
+                restriction = variants_by_id[cell_id].get("neighbor_restriction_tag")
+                if restriction is None:
                     continue
                 for nr, nc in _grid_neighbor_coords(r, c, rows, cols):
                     neighbor_id = grid[nr][nc]
                     if neighbor_id is None:
                         continue
-                    assert variants_by_id[neighbor_id].get("bio_tag") != "Reclusive", (
-                        layout_id, r, c, cell_id, neighbor_id
+                    assert variants_by_id[neighbor_id].get("bio_tag") != restriction, (
+                        layout_id, r, c, cell_id, neighbor_id, restriction
                     )
 
 
@@ -686,17 +691,18 @@ def _farm_totals_per_cell(variant, toggle_ids, layout, variants_by_id, germ_hour
     return fruit_h, byprod_h, fruit_r, byprod_r, count
 
 
-def test_plain_sparse_battery_layouts_beat_d_on_fruit_but_lose_on_byproduct():
-    """Regression guard for the 2026-07-27 exact-grid-search finding: a
-    sparse, parked Sour 'battery' (2 cells for harvest, 3 for rate) covers
-    most but not all of Plain's 15 plots with the Putrescent quantity
-    bonus, for free (Finding 19/20's parking technique - no dial cost).
-    Confirmed here with TRUE per-cell coverage (not the blanket model
-    test_plain_layout_d_beats_d_mix_on_every_farm_total_axis already uses
-    for D-mix, which happens to be correct there only because D-mix's
-    dense stripe genuinely does give every counted cell the same
-    neighbor - Layout D-sparse's 2 cells do NOT reach every Plain cell, so
-    the blanket model would silently over-count it)."""
+def test_plain_has_no_live_companion_and_uses_solid_d_for_every_goal():
+    """Regression guard for the 2026-07-28 correction (Finding 21,
+    shipbuilder/tools/game_logic_notes.md): a previous version of this
+    dataset modeled a mature, unharvested Sour as a static 'battery' that
+    kept handing out its Putrescent quantity bonus to Plain regardless of
+    the farm's live dial (Layout D-sparse, since removed). That doesn't
+    work - a plant's row swaps to an empty-adjacency '_Gather' variant the
+    instant it finishes growing, so a parked companion gives nothing.
+    Plain has no dial position compatible with any live companion (Sour/
+    Bitter need Warm/Hot, Woolly needs Cold, neither overlaps Plain's own
+    Temperate/Warm range), so solid Layout D wins every goal on both
+    framings - not just byproduct_only."""
     api = Api()
     crops = {c["id"]: c for c in api.get_farming_crops()}
     layouts = api.get_farming_layouts()
@@ -708,32 +714,27 @@ def test_plain_sparse_battery_layouts_beat_d_on_fruit_but_lose_on_byproduct():
     fh, bh, fr, br, count = _farm_totals_per_cell(plain, d_ids, layouts["D"], variants_by_id, germ)
     assert (fh, bh, count) == (60, 240, 15)
 
-    sparse_ids = {"temperate_speed", "uv_speed", "plain_neighbor", "putrescent_neighbor"}
-    sfh, sbh, sfr, sbr, scount = _farm_totals_per_cell(
-        plain, sparse_ids, layouts["D-sparse"], variants_by_id, germ
-    )
-    assert scount == 13  # 15-cell grid, 2 of them Sour battery (not counted here)
-    assert sfh == 66, "sparse battery should raise fruit harvest to the verified 66"
-    assert sbh < bh, "2 lost Plain plots should still cost byproduct harvest overall"
-
-    srfh, srbh, srfr, srbr, srcount = _farm_totals_per_cell(
-        plain, sparse_ids, layouts["D-sparse-rate"], variants_by_id, germ
-    )
-    assert srcount == 12  # 15-cell grid, 3 of them Sour battery (not counted here)
-    assert srfr > fr, "3-cell sparse battery should raise fruit rate above solid D"
-    assert srbr < br, "3 lost Plain plots should still cost byproduct rate overall"
+    for metric in ("rate", "harvest"):
+        for goal in ("overall", "fruit_only", "byproduct_only"):
+            assert plain["goal_presets"][metric][goal]["layout"] == "D", (metric, goal)
 
 
-def test_whitewood_mixed_layout_c_dominates_old_pure_bitter_checkerboard():
-    """Regression guard for the 2026-07-27 exact-grid-search finding:
-    Layout C's mixed Bitter+Woolly filler (White in the 8-cell MAJORITY
-    color - the earlier version of this layout had White backwards, in
-    the 7-cell minority) is simultaneously optimal for fruit harvest,
-    byproduct harvest, AND byproduct rate - confirmed here with true
-    per-cell coverage, not the blanket model (which happens to still be
-    accurate for this specific layout, since every White cell touches
-    both a Bitter AND a Woolly neighbor uniformly - but that uniformity
-    was verified, not assumed)."""
+def test_whitewood_layout_c_is_harvest_optimal_and_c_alt_is_rate_optimal():
+    """Regression guard for the 2026-07-28 correction (Finding 21): Layout
+    C used to mix a live Bitter/Woolly filler alongside a battery-parked
+    companion, which no longer works - a companion must now be genuinely
+    LIVE, and Sour (Warm/Hot) and Woolly (Cold) can never both be live on
+    one shared dial. Layout C is now a pure 8-White/7-Sour checkerboard
+    (White in the 8-cell MAJORITY color - an independent, still-valid fix
+    from before Finding 21: the original version of this layout had White
+    backwards, in the 7-cell minority) - harvest-optimal on every axis,
+    since Sour's metabolic-slowdown trade yields more per harvest. Layout
+    C-alt (White/Woolly, Cold dial) is rate-optimal on every axis instead,
+    since rate never wants a bigger-but-slower harvest - re-run against
+    the corrected exact-grid-search (farm_optimizer.py) confirms C-alt's
+    byproduct RATE (not just fruit rate) now beats Layout C's, unlike the
+    pre-Finding-21 dataset where Layout C's own mixed filler used to win
+    byproduct rate too."""
     api = Api()
     crops = {c["id"]: c for c in api.get_farming_crops()}
     layouts = api.get_farming_layouts()
@@ -741,20 +742,20 @@ def test_whitewood_mixed_layout_c_dominates_old_pure_bitter_checkerboard():
     white = next(v for v in crops["rockwood"]["variants"] if v["id"] == "Whitewood")
     germ = _mid(crops["rockwood"]["germination_hours"])
 
-    full_ids = {"carbonic", "neutral", "putrescent_neighbor", "woolly_neighbor"}
+    full_ids = {"carbonic", "neutral", "putrescent_neighbor"}
     fh, bh, fr, br, count = _farm_totals_per_cell(white, full_ids, layouts["C"], variants_by_id, germ)
     assert count == 8
     assert fh == 24
-    assert bh == 1328
-    assert round(br, 3) == 12.518
+    assert bh == 1216
+    assert round(br, 3) == 11.463
 
-    calt_ids = {"carbonic", "woolly_neighbor"}
+    calt_ids = {"carbonic", "neutral", "woolly_neighbor"}
     _, _, calt_fr, calt_br, calt_count = _farm_totals_per_cell(
         white, calt_ids, layouts["C-alt"], variants_by_id, germ
     )
     assert calt_count == 8
-    assert calt_fr > fr, "C-alt should still win fruit rate specifically (why it stays fruit_only's pick)"
-    assert br > calt_br, "Layout C should win byproduct rate (why it's byproduct_only's pick instead)"
+    assert calt_fr > fr, "C-alt should win fruit rate (why it's fruit_only's/overall's rate pick)"
+    assert calt_br > br, "C-alt should win byproduct rate too (why it's byproduct_only's rate pick as well)"
 
 
 def test_overall_goal_is_a_genuine_combined_optimum_not_a_menu():
@@ -780,23 +781,27 @@ def test_overall_goal_is_a_genuine_combined_optimum_not_a_menu():
                 assert "layout" in entry and "toggle_ids" in entry, (variant["id"], metric)
 
 
-def test_plain_overall_lands_on_the_same_setup_for_both_framings():
-    """Regression guard: the combined-objective search happened to find
-    IDENTICAL setups for Plain's rate.overall and harvest.overall (Layout
-    D-sparse + Neutral Fertilizer - two different-looking 2-cell Sour
-    placements, D-sparse and the since-removed D-sparse-overall, turned
-    out to tie exactly because both cover the same COUNT of Plain cells,
-    7 of 13, and coverage count alone determines the total here). Plain
-    now merges into a single 'same setup for items/hour and items/harvest'
-    panel like every other variant, rather than forking by framing the
-    way fruit_only/byproduct_only still legitimately do."""
+def test_plain_every_goal_lands_on_the_same_setup_for_both_framings():
+    """Regression guard: Plain's rate/harvest tables match exactly for
+    EVERY goal, since Finding 21 (2026-07-28) removed Plain's only
+    companion option entirely (the previously-documented parked-Sour
+    'battery,' Layout D-sparse, doesn't work - a mature, unharvested
+    plant gives its neighbors nothing). With no companion to trade off
+    against, every goal on both framings resolves to the same solid
+    Layout D. Plain merges into a single 'same setup for items/hour and
+    items/harvest' panel for every goal, unlike White (whose rate/harvest
+    genuinely differ for byproduct_only, since Sour's metabolic slowdown
+    is a real yield-vs-speed trade, and White's live companion options
+    actually differ by dial - see
+    test_whitewood_layout_c_is_harvest_optimal_and_c_alt_is_rate_optimal)."""
     api = Api()
     crops = api.get_farming_crops()
     plain = next(v for crop in crops for v in crop["variants"] if v["id"] == "Plainkorn")
-    rate_overall = plain["goal_presets"]["rate"]["overall"]
-    harvest_overall = plain["goal_presets"]["harvest"]["overall"]
-    assert rate_overall["layout"] == harvest_overall["layout"] == "D-sparse"
-    assert sorted(rate_overall["toggle_ids"]) == sorted(harvest_overall["toggle_ids"])
+    for goal in ("overall", "fruit_only", "byproduct_only"):
+        rate_entry = plain["goal_presets"]["rate"][goal]
+        harvest_entry = plain["goal_presets"]["harvest"][goal]
+        assert rate_entry["layout"] == harvest_entry["layout"], goal
+        assert sorted(rate_entry["toggle_ids"]) == sorted(harvest_entry["toggle_ids"]), goal
 
 
 def test_whitewood_rate_overall_adds_free_neutral_fertilizer_to_c_alt():
@@ -830,60 +835,43 @@ def test_whitewood_rate_overall_adds_free_neutral_fertilizer_to_c_alt():
 
 
 def _is_live_compatible_with_dial(variant, dial):
-    """Python port of frontend/js/farming.js's isLiveCompatibleWithDial -
-    can this variant actually grow LIVE under a layout's own dial, or can
-    it only be there as a parked/battery plant (Finding 19/20)? Derived
-    purely from each variant's own temperature/light gate vs the layout's
-    dial - no separate 'is this a battery' field to keep in sync."""
+    """Does this variant's own temperature/light gate accept the layout's
+    own dial - i.e. could it actually grow LIVE, in place, under it?
+    Check (1) of the corrected live-companion model (see farm_optimizer.py
+    and farming.json's own _meta.exact_grid_search): every occupied cell
+    in every layout must pass this now, target or companion alike, since
+    Finding 21 (2026-07-28) established there is no 'battery' exemption -
+    a companion cell that can't grow live under a layout's own dial simply
+    can't be there at all."""
     temp_ok = not variant["temperature"] or any(t in variant["temperature"] for t in dial["temperature"])
     light_ok = not variant["light"] or any(l in variant["light"] for l in dial["light"])
     return temp_ok and light_ok
 
 
-def _battery_variant_ids_in_layout(layout, variants_by_id):
-    ids = set()
-    for row in layout["grid"]:
-        for cell_id in row:
-            if cell_id and not _is_live_compatible_with_dial(variants_by_id[cell_id], layout["dial"]):
-                ids.add(cell_id)
-    return ids
-
-
-def test_battery_cells_are_exactly_the_dial_incompatible_companions():
-    """Regression guard for the 2026-07-27 UI addition: the Layouts view
-    now visually flags a cell as a parked/'battery' plant (dashed outline
-    on the board, a badge in the legend, a callout on the card) whenever
-    its OWN temperature/light gate can't be satisfied by the layout's own
-    dial - it could never have grown to maturity live, in place, under
-    that dial. This pins down the exact set this dataset currently
-    produces, so a future layout/dial edit that silently breaks the
-    detection (or silently creates/removes a battery requirement) shows
-    up here instead of only in the UI. A layout's own TARGET variant
-    should never appear in its own battery set - the dial was chosen to
-    suit it in the first place."""
+def test_every_occupied_cell_in_every_layout_is_live_compatible_with_its_own_dial():
+    """Regression guard for the 2026-07-28 correction (Finding 21): a
+    previous version of this dataset allowed a companion cell to be
+    dial-incompatible with its own layout, modeled as a static 'parked
+    battery' left unharvested (visually flagged in the old UI with a
+    dashed outline and a badge - now removed, since it should never
+    happen under the corrected model). A mature, unharvested plant's row
+    swaps to an empty-adjacency '_Gather' variant the instant it finishes
+    growing, so a dial-incompatible cell would just be dead weight, not a
+    working companion - every layout in this dataset should now place
+    only genuinely LIVE, dial-compatible cells."""
     api = Api()
     crops = api.get_farming_crops()
     layouts = api.get_farming_layouts()
     variants_by_id = {v["id"]: v for crop in crops for v in crop["variants"]}
 
-    found = {
-        layout_id: _battery_variant_ids_in_layout(layout, variants_by_id)
-        for layout_id, layout in layouts.items()
-    }
-    assert found == {
-        "A": set(),
-        "B": set(),
-        "C": {"ChillyEinkorn"},
-        "C-alt": set(),
-        "D": set(),
-        "D-sparse": {"SourEinkorn"},
-        "D-sparse-rate": {"SourEinkorn"},
-        "D-mix": set(),
-        "E": set(),
-        "E-alt": set(),
-        "F": set(),
-        "G": set(),
-    }
+    for layout_id, layout in layouts.items():
+        for row in layout["grid"]:
+            for cell_id in row:
+                if cell_id is None:
+                    continue
+                assert _is_live_compatible_with_dial(variants_by_id[cell_id], layout["dial"]), (
+                    layout_id, cell_id
+                )
 
 
 def _gate_passes(variant, dt, dl, ferts_present):

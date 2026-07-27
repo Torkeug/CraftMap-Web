@@ -142,7 +142,7 @@ for review before you decide how to merge.
 - **`farming.json`** — Xenic Farm crop/variant reference data (the "Farming"
   tab, `backend/farming.py` + `frontend/js/farming.js`). Unlike the files
   above it is **hand-transcribed, not script-regenerated** — sourced from
-  `shipbuilder/tools/game_logic_notes.md` Findings 13/14/16/17/18/19
+  `shipbuilder/tools/game_logic_notes.md` Findings 13/14/16/17/18/19/20/21
   (decompiled `ent.b.Farm`/`ent.b.PlotZone` logic plus `data.cdb`'s `farm`/
   `attribute`/`constant` sheets), so a new/corrected finding there means
   updating this file by hand to match. Per grown variant: grow-gate
@@ -156,36 +156,37 @@ for review before you decide how to merge.
   repeating timer), `effects` (the modifier math the frontend computes
   with), `dial_mechanics` (instant dial switching, per-planet energy
   costs, the no-Natural-light-in-dark-sites rule), and `adjacency_timing`
-  (Finding 19: a neighbor's own grow stage never gates its adjacency
-  effect — only whether a grown-variant row is assigned to its plot at
-  all does, so a companion buffs its neighbor for its whole
-  post-germination lifetime, including while mature and unharvested, not
-  just while both are still actively growing). A top-level `layouts`
-  object plus each variant's own `goal_presets` (see `_meta.
+  (Finding 21, corrected 2026-07-28: a neighbor's adjacency effects are
+  live ONLY while it is actively, currently growing — the instant a plant
+  finishes growing its plot swaps to a `_Gather` row with an EMPTY
+  adjacency array and no bio_tag, so a mature, unharvested plant gives its
+  neighbors nothing. This retracts Finding 19's opposite claim and the
+  "parked battery" technique built on it — a companion must be genuinely
+  live, continuously replanted, to contribute anything). A top-level
+  `layouts` object plus each variant's own `goal_presets` (see `_meta.
   goal_presets_and_layouts`) back the Farming tab's Layouts sub-mode - 5x3
   plot grids for the Xenic Farm's real neighbor mechanics, picked per
   variant and per (items/hour vs items/harvest, overall vs fruit-only vs
   byproduct-only) goal. Deliberately not precomputed numbers: a preset
   just names which of that variant's own toggle ids to check, so the
   Layouts view drives the same live calculator the Reference cards use
-  rather than a second calculation that could drift from it. As of
-  2026-07-27 every layout/preset here was re-derived by an exact,
-  exhaustive grid search rather than hand geometry (`_meta.
-  exact_grid_search`) - covering parked/battery neighbors, not just live
-  ones, which is what found Plain's new sparse "battery" layouts and
-  fixed a real color-assignment bug in White's checkerboard. An
-  `overall` goal is always resolved to one genuine combined-optimal
-  answer (each product normalized against its own achievable max,
-  summed, then the whole search re-run against that) rather than a
-  side-by-side menu of the fruit-only/byproduct-only extremes - the
-  `{no_dominant, options: [...]}` shape stayed in the schema but is
-  unused again, same as before this pass. That pass also required a
-  small frontend change: a goal_preset's farm-total math now sums each
-  matching cell's OWN real grid-neighbor adjacency
-  (`frontend/js/farming.js`'s `collectEffectsForCell`) instead of
-  multiplying one blanket per-plant number by a cell count, since the new
-  sparse layouts don't give every counted cell the same neighbor profile
-  the way every checkerboard/solid layout before them did.
+  rather than a second calculation that could drift from it. Every layout/
+  preset here is derived by an exact, exhaustive grid search rather than
+  hand geometry (`_meta.exact_grid_search`) — a companion cell only
+  counts as usable if it's LIVE and passes four checks: dial
+  compatibility, fertilizer compatibility (shared per 3x5 group, `_meta.
+  fertilizer_scope`), restriction compatibility in both directions, and
+  germination cleanliness on both sides (`_meta.germination_ambiguity`).
+  An `overall` goal is always resolved to one genuine combined-optimal
+  answer (each product normalized against its own achievable max, summed,
+  then the whole search re-run against that) rather than a side-by-side
+  menu of the fruit-only/byproduct-only extremes - the `{no_dominant,
+  options: [...]}` shape stays in the schema but is unused. A
+  goal_preset's farm-total math sums each matching cell's OWN real
+  grid-neighbor adjacency (`frontend/js/farming.js`'s
+  `collectEffectsForCell`) rather than multiplying one blanket per-plant
+  number by a cell count, so any future non-uniform-coverage layout would
+  still read correctly.
 
 ## How this differs from `resources.db`'s recipe tables
 
