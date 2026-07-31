@@ -1328,16 +1328,15 @@ def _resource_family(resource_name):
     return sorted(family)
 
 
-# Decay applied to the 2nd, 3rd, ... exact-confirmed POI when combining
-# multiple confirmed POIs' densities in get_galaxy_sources_for_resource -
-# see that function's own inline comment for the full derivation. Not a
-# value derivable from any game data (unlike density_per_node's exact
-# unit-conversion elsewhere in that same function) - a genuinely subjective
-# tuning knob for "how much does a 2nd/3rd good spot matter relative to the
-# best one", picked as a reasonable, easy-to-reason-about starting point
-# (each additional confirmed POI is worth half of the previous one) rather
-# than derived from anything - retune this single constant directly if it
-# doesn't feel right once used against real data.
+# Decay applied to the 2nd, 3rd, ... confirmed/estimated POI slot when
+# combining a row's POI-anchored contributions in get_galaxy_sources_for_resource
+# - see that function's own inline comment for the full derivation. Not a
+# value derivable from any game data - a genuinely subjective tuning knob
+# for "how much does a 2nd/3rd good spot matter relative to the best one",
+# picked as a reasonable, easy-to-reason-about starting point (each
+# additional spot is worth half of the previous one) rather than derived
+# from anything - retune this single constant directly if it doesn't feel
+# right once used against real data.
 POI_DENSITY_DECAY_WEIGHT = 0.5
 
 
@@ -1351,65 +1350,101 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     density is linearly proportional to count for a fixed planet, see
     tools/backfill_galaxy_resources.py, so summing densities equals summing
     counts then rescaling once), poi_tags is the union of every
-    contributing row's tags. poi_area_density is only re-combined (summed)
-    when every contributing row shares the EXACT same poi_tags string (same
-    POI footprint, so the same area denominator) - otherwise it's left None
-    and the combined row falls back to combined density, same as any other
-    genuinely mixed-portion row.
+    contributing row's tags.
 
-    poi_area_density is then upgraded from that generation-quota ESTIMATE to
-    a REAL one wherever poi_resource_nodes (exact, on-planet-confirmed
-    per-POI counts - see the sibling spacecraft-memory-research repo's
-    wreck_tracker.py) has an exact count AND a known galaxy_poi_landmarks.area
-    for at least one actual POI this row's poi_tags declares (excluding the
-    "general" label itself). Each declared, individually-confirmed POI's own
-    density is computed separately (never depends on any sibling POI's own
-    stats, so the row only needs ONE of them confirmed, not every one), then
-    combined via a weighted, rank-decayed sum - see POI_DENSITY_DECAY_WEIGHT
-    and this override's own inline comment for the full derivation and why
-    plain summing or taking only the single best POI were both tried and
-    both wrong. Each individual density is converted into the SAME units as
-    density/poi_area_density via this same row's own density/node_count
-    ratio (an EXACT reconstruction of compute_display_density's per-planet
-    scale constant, not an approximation), so an exact-backed row stays
-    directly comparable to every estimate-backed row in the ranking below -
-    not just displayed as a separate "confirmed" annotation (see
-    Api.get_galaxy_sources' own exact_poi_counts field for that raw, per-POI
-    display data; poi_area_density_is_exact/poi_area_density_poi_index,
-    appended at the end of this function's own return tuple, identify the
-    SINGLE best-ranked confirmed POI once this upgrade applies - even when
-    others also contributed to the score - so the frontend can point the
-    player at the one spot worth visiting first, rather than making them
-    cross-reference exact_poi_counts by hand).
+    RANKING: split into two separately-scored components rather than one
+    "effective density" number, because a POI-bounded stop and an
+    open-planet spread genuinely aren't the same kind of value and
+    conflating them (the area-adjusted `poi_area_density` this function used
+    to compute) was actively misleading - see the design discussion this
+    replaced for the full reasoning. compute_display_density (the
+    decompiled, UI-verified source of `density` - see
+    dump_planet_resources.py) is `node_count * const * planet_scale^2`: it
+    scales UP with a planet's physical size for a fixed count, which is
+    exactly backwards for judging a small bounded POI (visiting one nets you
+    its full count regardless of the POI's or planet's area - there's no
+    extra "more walking" cost the way there is for scattered nodes across an
+    entire planet), and can just as easily bury a real POI stash on a
+    physically small planet behind an arbitrary scale penalty.
 
-    This upgrade applies to MIXED rows too ("general,poiN" - poi_area_density
-    was previously always None for these, an estimate-only limitation - see
-    "RANKING LIMITATION" above the final sort), computed the same way from
-    just the row's confirmed POI-anchored sub-portion - the "general" share
-    needs no confirmation of its own. The weighted sum is then floored at
-    the row's own plain `density` (`max(weighted_sum, density)`, not
-    weighted_sum alone): concentrating a count into a smaller area doesn't
-    ALWAYS beat the row's total (only when the confirmed POI share is large
-    relative to the still-unconfirmed general share - see the override's
-    own inline comment for the exact inequality), so taking weighted_sum
-    unconditionally could silently underrank a planet with abundant bonus
-    supply beyond its POI(s) - backwards for what this upgrade is for. The
-    floor is a no-op for a pure-POI row with only one declared POI (there
-    the confirmed density always already exceeds plain density, nothing is
-    held back as "general"), so this only changes behavior for the mixed
-    case. poi_area_density_is_exact is only True when the weighted sum is
-    what actually won this floor - if the floor won instead, the ranking
-    value is just the already-known plain density, not a newly-confirmed
-    number, so poi_area_density_poi_index is left None in that case too
-    (there's no single POI to point at).
+    - `poi_value`: how much this row is worth as a POI-anchored, one-stop
+      visit. Raw node counts, never area-divided - see below for how the
+      count is assembled per pure-vs-mixed row.
+    - `general_value`: how much this row is worth as open-planet, walk-the-
+      whole-surface gathering. Plain `density` (still the right tool here -
+      unlike a bounded POI, covering more of a bigger planet genuinely costs
+      more, which is exactly what compute_display_density's scale^2 factor
+      is compensating for), minus whatever's already credited to a
+      confirmed POI sub-portion (see the mixed-row case below), so the same
+      nodes are never counted in both components.
 
-    Sorted by "effective density" descending: `poi_area_density` (estimate
-    or exact, per above) when set, otherwise plain `density` - all on the
-    same scale, so this is a fair single ranking, not an arbitrary
-    pure-POI-first override. Each row is also annotated with pure_poi (True
-    if poi_tags is set with no "general" entry). include_asteroids=False
-    filters out ent.Asteroid debris fields, keeping only regular numbered
-    planets.
+    Each row's `effective_score` is poi_ratio + general_ratio, where each
+    ratio is that row's own component divided by the MAX of that same
+    component across every row returned for this resource (both components
+    normalized independently, then summed - not multiplied like the
+    frontend's "combined" sort mode, since these are two additive value
+    sources you collect on the SAME visit, not two competing descriptions of
+    one quantity). This is what the final sort orders by. A pure-POI row
+    naturally has general_value=0 (ranks purely on poi_ratio); a pure-
+    general row has poi_value=0 (ranks purely on general_ratio, in the same
+    relative order plain density always gave, since dividing every row by
+    the same max is order-preserving).
+
+    poi_value's raw-count assembly, per row shape:
+    - No real POI tag at all ("general" only, or no poi_tags): poi_value=0,
+      general_value=plain density. Same as this function's old fallback.
+    - Pure POI row (poi_tags has no "general" entry), single tag: poi_value
+      is just this row's own node_count - resourceCounts (what node_count is
+      built from, see tools/backfill_galaxy_resources.py) is the exact,
+      live placed-node count read straight from the game's own exploration
+      memory, NOT a generation-quota estimate needing an on-planet visit to
+      confirm - so this is already exact with zero poi_resource_nodes data.
+    - Pure POI row, multiple tags (e.g. "poi0,poi1"): the dump gives an
+      exact TOTAL across the tags but never how it splits between them.
+      Wherever poi_resource_nodes (an actual on-planet visit - see the
+      sibling spacecraft-memory-research repo's wreck_tracker.py) has
+      confirmed one or more of those specific tags, each confirmed count is
+      a real individual data point; the STILL-unconfirmed remainder
+      (node_count minus whatever's confirmed) is folded in as one more
+      synthetic slot in the same list, at whatever rank its own size earns,
+      rather than assumed to be zero - both extremes (nothing confirmed
+      -> the remainder IS the whole node_count, ranks first, gets full
+      weight, so an entirely unconfirmed multi-POI row still ranks on its
+      full honest total; everything confirmed -> no remainder, purely
+      individual counts) fall out of the same formula, no special-casing
+      needed. The full list (confirmed counts + at most one remainder slot)
+      is sorted descending and combined via POI_DENSITY_DECAY_WEIGHT-decayed
+      rank weighting (score = c1 + w*c2 + w^2*c3 + ...) - this is what
+      correctly prefers "one POI with most of the total" over "several
+      roughly-equal POIs" for the same total count, since reaching an equal
+      total via more separate stops on the same planet genuinely costs more
+      (real inter-POI travel), not nothing. poi_value_is_exact is True
+      whenever at least one tag is actually confirmed (even if a remainder
+      slot still also contributes); poi_value_poi_index names the single
+      rank-1 tag ONLY when that top slot is a real confirmed tag, not a
+      synthetic remainder (there's nothing to point the player at yet if the
+      biggest chunk is still unvisited).
+    - Mixed row ("general,poiN", at least one real POI tag AND a general
+      share): unlike the pure case, an unconfirmed leftover here can't
+      safely be assumed to be more POI - it might just be "general" - so
+      ONLY actually-confirmed tags feed poi_value's decayed sum (no
+      synthetic remainder slot). general_value then backs out whatever WAS
+      confirmed from the row's own density (via density_per_node = density
+      / node_count, an exact reconstruction of compute_display_density's
+      per-planet scale constant from this same row's own already-stored
+      pair - not an approximation), so a confirmed POI's nodes are credited
+      once, not twice. With nothing confirmed this degenerates to
+      poi_value=0, general_value=plain density - the same conservative
+      fallback an unconfirmed row always had; this row's true POI
+      concentration stays invisible to ranking until someone visits and
+      confirms it, a known, accepted data limitation of the no-travel dump
+      (it never records how a mixed row's total splits between general and
+      POI to begin with), not something this formula can work around
+      without that visit.
+
+    Each row is also annotated with pure_poi (True if poi_tags is set with
+    no "general" entry). include_asteroids=False filters out ent.Asteroid
+    debris fields, keeping only regular numbered planets.
 
     Also annotated with poi_landmarks (list of {poi_index, name,
     indicator_id, sun_side, light_value} dicts, one per POI this row's own
@@ -1425,16 +1460,18 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     js/galaxy.js's chipsForRow).
 
     Returns (system_name, planet, sector, node_count, density, poi_tags,
-    pure_poi, poi_area_density, is_asteroid, temperature, temperature_name,
-    attributes, attribute_names, poi_landmarks, poi_sun_states,
-    poi_area_density_is_exact, poi_area_density_poi_index) tuples."""
+    pure_poi, is_asteroid, temperature, temperature_name, attributes,
+    attribute_names, poi_landmarks, poi_sun_states, poi_value, general_value,
+    effective_score, poi_value_is_exact, poi_value_poi_index) tuples,
+    already sorted by effective_score descending (node_count descending as a
+    tiebreak)."""
     family = _resource_family(resource_name)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     placeholders = ",".join("?" for _ in family)
     query = (
         "SELECT system_name, planet, sector, node_count, density, poi_tags,"
-        " poi_area_density, is_asteroid, temperature, temperature_name,"
+        " is_asteroid, temperature, temperature_name,"
         f" attributes, attribute_names FROM galaxy_resources WHERE resource IN ({placeholders})"
     )
     params = list(family)
@@ -1462,10 +1499,8 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
         }
 
     # Exact, on-planet-confirmed per-POI counts (poi_resource_nodes) - used
-    # below to REPLACE the generation-quota-estimated poi_area_density with
-    # a real one wherever coverage is complete, rather than just displayed
-    # informationally. Small table, same "load whole, combine in Python"
-    # style as landmarks_by_planet above.
+    # below to build poi_value's raw-count assembly. Small table, same
+    # "load whole, combine in Python" style as landmarks_by_planet above.
     c.execute(
         f"SELECT system_name, planet, poi_index, node_count"
         f" FROM poi_resource_nodes WHERE resource IN ({placeholders})",
@@ -1483,32 +1518,23 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     combined = {}
     for (
         system_name, planet, sector, node_count, density, poi_tags,
-        poi_area_density, is_asteroid, temperature, temperature_name,
+        is_asteroid, temperature, temperature_name,
         attributes, attribute_names,
     ) in rows:
         entry = combined.setdefault((system_name, planet), {
             "sector": sector, "node_count": 0, "density": 0.0,
-            "poi_tag_labels": set(), "poi_tags_seen": set(),
-            "poi_area_densities": [], "is_asteroid": is_asteroid,
+            "poi_tag_labels": set(), "is_asteroid": is_asteroid,
             "temperature": temperature, "temperature_name": temperature_name,
             "attributes": attributes, "attribute_names": attribute_names,
         })
         entry["node_count"] += node_count or 0
         entry["density"] += density or 0.0
-        entry["poi_tags_seen"].add(poi_tags)
         if poi_tags:
             entry["poi_tag_labels"].update(poi_tags.split(","))
-        if poi_area_density is not None:
-            entry["poi_area_densities"].append(poi_area_density)
 
-    annotated = []
+    rows_data = []
     for (system_name, planet), entry in combined.items():
         poi_tags = ",".join(sorted(entry["poi_tag_labels"])) if entry["poi_tag_labels"] else None
-        poi_area_density = (
-            sum(entry["poi_area_densities"])
-            if len(entry["poi_tags_seen"]) == 1 and entry["poi_area_densities"]
-            else None
-        )
         planet_landmarks = landmarks_by_planet.get((system_name, planet), {})
         poi_landmarks = [
             planet_landmarks[tag] for tag in sorted(entry["poi_tag_labels"])
@@ -1516,129 +1542,90 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
         ]
         poi_sun_states = sorted({lm["sun_side"] for lm in poi_landmarks if lm["sun_side"]})
 
-        # Prefer a REAL poi_area_density over the generation-quota estimate
-        # above (or over None, for a mixed row - see below), wherever we
-        # have an exact on-planet count (poi_resource_nodes) AND a known
-        # area (galaxy_poi_landmarks) for at least one actual POI this row's
-        # poi_tags declares (excluding "general" itself, which has no area
-        # of its own). Converts the exact raw count into the SAME units as
-        # density/poi_area_density (which are generation-time count * a
-        # per-planet scale constant, see dump_planet_resources.py's
-        # compute_display_density) via density_per_node = entry["density"] /
-        # entry["node_count"] - an EXACT reconstruction of that per-planet
-        # constant from this same row's own already-stored count/density
-        # pair, not an approximation, so the result stays on the same scale
-        # as every other row's density/poi_area_density and is safe to rank
-        # against them directly.
-        #
-        # Deliberately NOT gated on is_pure_poi: a MIXED row ("general,poiN")
-        # gets this too, computed from just its POI-anchored sub-portion -
-        # the "general" share needs no confirmation of its own. This is
-        # exactly the "RANKING LIMITATION" fix below wants (a mixed row's
-        # real walkable-POI advantage was previously invisible to ranking,
-        # always None, identical to a pure-"general" row of equal total
-        # density).
-        #
-        # Each declared POI is evaluated INDIVIDUALLY, not summed together -
-        # two earlier, wrong versions of this override summed every
-        # declared POI's count/area into one blended density, which dilutes
-        # the best single spot (e.g. a rich poi0 combined with a sparse poi1
-        # averages down to something worse than poi0 alone would give - a
-        # player would just go to poi0, not "visit both to average out").
-        #
-        # But taking ONLY the single best individual POI (a THIRD earlier,
-        # also-wrong version) has its own bug: it makes a planet with
-        # several good confirmed POIs (e.g. two at 40/41) rank BELOW a
-        # planet with just one slightly-better POI (e.g. one at 42), even
-        # though genuinely having multiple good options is worth something
-        # - a straight max() gives zero credit for every POI past the best
-        # one. So: sort this row's individually-confirmed POI densities
-        # descending, then sum them with POI_DENSITY_DECAY_WEIGHT applied
-        # per rank after the first (score = d1 + w*d2 + w^2*d3 + ...) - the
-        # best POI counts in full, each additional confirmed POI still adds
-        # real but shrinking credit rather than none at all. w=0 would
-        # reduce this to the old "best individual only" behavior; w=1 would
-        # reduce it to a plain (undiluting) sum - see POI_DENSITY_DECAY_WEIGHT's
-        # own comment for why 0.5 was picked and how to retune it. The row
-        # only needs ONE declared POI confirmed, not all of them, since each
-        # individual density never depends on any sibling POI's own stats.
-        #
-        # This weighted sum is then floored at the row's own plain total
-        # density (`max(weighted_sum, entry["density"])`, not weighted_sum
-        # alone) - concentrating a count into a smaller area does NOT always
-        # beat the row's total (algebra, single-POI case: poi_sub_density >
-        # total_density iff poi_count*(1-area) > general_count*area). For a
-        # PURE-POI row with only one declared POI this floor is moot (the
-        # "confirmed" POI IS the row's entire count, nothing held back as
-        # "general", so it's mathematically guaranteed to already exceed -
-        # concentrating a full count into a smaller area can only raise the
-        # local density). But for a MIXED row where the "general" share
-        # dominates whichever POI(s) got confirmed, the weighted sum alone
-        # can come out LOWER than the plain total - taking it unconditionally
-        # would silently underrank a planet with abundant bonus supply
-        # beyond its POI(s), backwards for "improve ranking accuracy".
-        # poi_area_density_is_exact (returned alongside, for the frontend's
-        # "confirmed" indicator) is only True when the weighted sum is what
-        # actually won - if the floor won instead, the ranking value is just
-        # the already-known plain density, not a newly-confirmed number.
-        # poi_area_density_poi_index still names just the SINGLE best (rank
-        # 1) confirmed POI, even when others also contributed to the score -
-        # that's the one spot worth pointing the player at first.
         poi_only_labels = entry["poi_tag_labels"] - {"general"}
+        has_general = "general" in entry["poi_tag_labels"]
         exact_counts = exact_counts_by_planet.get((system_name, planet), {})
-        poi_area_density_is_exact = False
-        poi_area_density_poi_index = None
-        if entry["node_count"] and poi_only_labels:
-            density_per_node = entry["density"] / entry["node_count"]
-            individual_densities = []
-            for tag in poi_only_labels:
-                if tag not in exact_counts:
-                    continue
-                area = planet_landmarks.get(tag, {}).get("area")
-                if not area:
-                    continue
-                individual_densities.append((exact_counts[tag] * density_per_node / area, tag))
-            if individual_densities:
-                individual_densities.sort(key=lambda pair: -pair[0])
-                weighted_sum = sum(
-                    density * (POI_DENSITY_DECAY_WEIGHT ** rank)
-                    for rank, (density, _tag) in enumerate(individual_densities)
-                )
-                if weighted_sum > entry["density"]:
-                    poi_area_density = weighted_sum
-                    poi_area_density_is_exact = True
-                    poi_area_density_poi_index = individual_densities[0][1]
-                else:
-                    poi_area_density = entry["density"]
+        confirmed = sorted(
+            ((exact_counts[tag], tag) for tag in poi_only_labels if tag in exact_counts),
+            key=lambda pair: -pair[0],
+        )
+        confirmed_sum = sum(count for count, _tag in confirmed)
 
-        annotated.append((
-            system_name, planet, entry["sector"], entry["node_count"],
-            entry["density"], poi_tags, is_pure_poi(poi_tags), poi_area_density,
-            bool(entry["is_asteroid"]), entry["temperature"], entry["temperature_name"],
-            entry["attributes"], entry["attribute_names"], poi_landmarks, poi_sun_states,
-            poi_area_density_is_exact, poi_area_density_poi_index,
-        ))
+        poi_value = 0.0
+        general_value = 0.0
+        poi_value_is_exact = bool(confirmed)
+        poi_value_poi_index = None
 
-    # RANKING LIMITATION, now resolved ONLY for exact-confirmed mixed rows:
-    # a "general,poiN" (mixed) row and a pure-"general" row of equal plain
-    # `density` still rank IDENTICALLY whenever poi_area_density can't be
-    # computed for the mixed row - which is ALWAYS true for an estimate-only
-    # mixed row (the no-travel dump never records how a planet's total
-    # density splits between its general and POI portions, only THAT a POI
-    # is involved, via poi_tags - see tools/backfill_galaxy_resources.py's
-    # load_rows) - that half of this limitation remains a hard ceiling of
-    # the coarse dump itself, not something fixable here. Once
-    # poi_resource_nodes has exact-confirmed the mixed row's own POI
-    # sub-portion, though, the loop above now DOES compute a real
-    # poi_area_density for it (see its own comment for why using just the
-    # POI sub-portion, not a blended average, is the fair number) - so a
-    # mixed row with real on-planet confirmation properly outranks an
-    # equal-density pure-general row, crediting its genuine walkable-POI
-    # advantage rather than treating both as identical. js/galaxy.js's
-    # poiState ◐/· marks remain the only signal for the still-unresolved
-    # estimate-only case.
-    annotated.sort(key=lambda r: -((r[7] if r[7] is not None else r[4]) or 0))
-    return annotated
+        if poi_only_labels and not has_general:
+            # Pure POI row: any leftover after confirmed counts MUST be more
+            # (still-unconfirmed) POI, since there's no general share to
+            # attribute it to - fold it in as one synthetic slot at whatever
+            # rank its size earns, rather than assuming it's zero. See this
+            # function's own docstring for why this degenerates correctly at
+            # both ends (nothing confirmed -> ranks on the full honest
+            # node_count; everything confirmed -> pure per-POI counts).
+            remainder = entry["node_count"] - confirmed_sum
+            ranked = list(confirmed)
+            if remainder > 0:
+                ranked.append((remainder, None))
+            ranked.sort(key=lambda pair: -pair[0])
+            poi_value = sum(
+                count * (POI_DENSITY_DECAY_WEIGHT ** rank)
+                for rank, (count, _tag) in enumerate(ranked)
+            )
+            if ranked and ranked[0][1] is not None:
+                poi_value_poi_index = ranked[0][1]
+        elif poi_only_labels and has_general:
+            # Mixed row: only ACTUALLY confirmed tags count toward poi_value
+            # (an unconfirmed leftover here could just be "general", unlike
+            # the pure case above) - general_value backs out whatever was
+            # confirmed so the same nodes aren't credited twice.
+            poi_value = sum(
+                count * (POI_DENSITY_DECAY_WEIGHT ** rank)
+                for rank, (count, _tag) in enumerate(confirmed)
+            )
+            if confirmed:
+                poi_value_poi_index = confirmed[0][1]
+            density_per_node = (
+                entry["density"] / entry["node_count"] if entry["node_count"] else 0.0
+            )
+            general_value = max(entry["node_count"] - confirmed_sum, 0) * density_per_node
+        else:
+            # No real POI tag at all.
+            general_value = entry["density"]
+            poi_value_is_exact = False
+
+        rows_data.append({
+            "system_name": system_name, "planet": planet, "sector": entry["sector"],
+            "node_count": entry["node_count"], "density": entry["density"],
+            "poi_tags": poi_tags, "pure_poi": is_pure_poi(poi_tags),
+            "is_asteroid": bool(entry["is_asteroid"]), "temperature": entry["temperature"],
+            "temperature_name": entry["temperature_name"], "attributes": entry["attributes"],
+            "attribute_names": entry["attribute_names"], "poi_landmarks": poi_landmarks,
+            "poi_sun_states": poi_sun_states, "poi_value": poi_value,
+            "general_value": general_value, "poi_value_is_exact": poi_value_is_exact,
+            "poi_value_poi_index": poi_value_poi_index,
+        })
+
+    max_poi_value = max((r["poi_value"] for r in rows_data), default=0.0)
+    max_general_value = max((r["general_value"] for r in rows_data), default=0.0)
+    for r in rows_data:
+        poi_ratio = (r["poi_value"] / max_poi_value) if max_poi_value > 0 else 0.0
+        general_ratio = (r["general_value"] / max_general_value) if max_general_value > 0 else 0.0
+        r["effective_score"] = poi_ratio + general_ratio
+
+    rows_data.sort(key=lambda r: (-r["effective_score"], -r["node_count"]))
+
+    return [
+        (
+            r["system_name"], r["planet"], r["sector"], r["node_count"], r["density"],
+            r["poi_tags"], r["pure_poi"], r["is_asteroid"], r["temperature"],
+            r["temperature_name"], r["attributes"], r["attribute_names"],
+            r["poi_landmarks"], r["poi_sun_states"], r["poi_value"], r["general_value"],
+            r["effective_score"], r["poi_value_is_exact"], r["poi_value_poi_index"],
+        )
+        for r in rows_data
+    ]
 
 
 # ---- Galaxy systems (jump-hop distance - tools/backfill_galaxy_resources.py) ----

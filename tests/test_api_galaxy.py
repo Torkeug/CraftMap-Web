@@ -60,7 +60,6 @@ def test_get_galaxy_sources_shapes_rows_as_dicts(api):
             "density": 0.29,
             "poi_tags": "poi0,poi1",
             "pure_poi": True,
-            "poi_area_density": 4.96,
             "is_asteroid": False,
             "temperature": "PlanetTemperate",
             "temperature_name": "Temperate",
@@ -69,8 +68,15 @@ def test_get_galaxy_sources_shapes_rows_as_dicts(api):
             "poi_landmarks": [],
             "poi_sun_states": [],
             "exact_poi_counts": [],
-            "poi_area_density_is_exact": False,
-            "poi_area_density_poi_index": None,
+            # No poi_resource_nodes data at all - the whole node_count
+            # becomes one synthetic "remainder" slot (see
+            # get_galaxy_sources_for_resource's own docstring), so poi_value
+            # is just the row's honest total, no visit needed.
+            "poi_value": 36,
+            "general_value": 0.0,
+            "effective_score": 1.0,
+            "poi_value_is_exact": False,
+            "poi_value_poi_index": None,
         }
     ]
 
@@ -111,10 +117,10 @@ def test_get_galaxy_sources_surfaces_which_poi_is_driving_the_ranking(api):
     ])
     rows = api.get_galaxy_sources("Aquamarine")
     json.dumps(rows)
-    # poi0 (50/0.05) is a far better individual spot than poi1 (2/0.20) -
-    # the API should point directly at poi0, not just list both counts.
-    assert rows[0]["poi_area_density_is_exact"] is True
-    assert rows[0]["poi_area_density_poi_index"] == "poi0"
+    # poi0 (50) is a far bigger confirmed spot than poi1 (2) - the API
+    # should point directly at poi0, not just list both counts.
+    assert rows[0]["poi_value_is_exact"] is True
+    assert rows[0]["poi_value_poi_index"] == "poi0"
 
 
 def test_get_galaxy_sources_exact_poi_counts_empty_when_never_visited(api):

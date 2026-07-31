@@ -393,20 +393,22 @@ class Api:
         spacecraft-memory-research repo's wreck_tracker.py, extended to
         aggregate ordinary resource nodes by POI membership while the
         player is on a planet (see that repo's CRAFTMAP_INTEGRATION.md).
-        Strictly better ground truth than this same row's own poi_tags/
-        poi_area_density (which can only say WHICH POI(s) a resource is
-        tied to, never split its count per POI) but only available for
-        planets actually visited - a row for a never-visited planet simply
-        gets exact_poi_counts: [], not a missing key, so the frontend can
-        treat it uniformly.
+        Strictly better ground truth than this same row's own poi_tags
+        (which can only say WHICH POI(s) a resource is tied to, never split
+        its count per POI on its own) but only available for planets
+        actually visited - a row for a never-visited planet simply gets
+        exact_poi_counts: [], not a missing key, so the frontend can treat
+        it uniformly.
 
-        poi_area_density_is_exact/poi_area_density_poi_index pass through
-        db.get_galaxy_sources_for_resource's own same-named return fields -
-        when poi_area_density_is_exact is True, poi_area_density_poi_index
-        names the SINGLE POI (of possibly several exact_poi_counts entries)
-        that's actually driving this row's poi_area_density/ranking value,
-        so the frontend can point the player at that one spot directly
-        rather than making them cross-reference exact_poi_counts by hand."""
+        poi_value/general_value/effective_score/poi_value_is_exact/
+        poi_value_poi_index pass through db.get_galaxy_sources_for_resource's
+        own same-named return fields (see its docstring for the full
+        ranking derivation) - when poi_value_is_exact is True,
+        poi_value_poi_index names the SINGLE POI (of possibly several
+        exact_poi_counts entries) that's actually driving this row's
+        poi_value, so the frontend can point the player at that one spot
+        directly rather than making them cross-reference exact_poi_counts by
+        hand."""
         exact_by_planet = {}
         for system_name, planet, poi_index, node_count, observed_at in (
             db.get_poi_resource_node_counts_for_resource(node_name)
@@ -423,7 +425,6 @@ class Api:
                 "density": density,
                 "poi_tags": poi_tags,
                 "pure_poi": pure_poi,
-                "poi_area_density": poi_area_density,
                 "is_asteroid": is_asteroid,
                 "temperature": temperature,
                 "temperature_name": temperature_name,
@@ -432,15 +433,19 @@ class Api:
                 "poi_landmarks": poi_landmarks,
                 "poi_sun_states": poi_sun_states,
                 "exact_poi_counts": exact_by_planet.get((system_name, planet), []),
-                "poi_area_density_is_exact": poi_area_density_is_exact,
-                "poi_area_density_poi_index": poi_area_density_poi_index,
+                "poi_value": poi_value,
+                "general_value": general_value,
+                "effective_score": effective_score,
+                "poi_value_is_exact": poi_value_is_exact,
+                "poi_value_poi_index": poi_value_poi_index,
             }
             for (
                 system_name, planet, sector, node_count, density, poi_tags,
-                pure_poi, poi_area_density, is_asteroid, temperature,
+                pure_poi, is_asteroid, temperature,
                 temperature_name, attributes, attribute_names,
                 poi_landmarks, poi_sun_states,
-                poi_area_density_is_exact, poi_area_density_poi_index,
+                poi_value, general_value, effective_score,
+                poi_value_is_exact, poi_value_poi_index,
             ) in db.get_galaxy_sources_for_resource(
                 node_name, include_asteroids=not exclude_asteroids
             )

@@ -1221,8 +1221,8 @@
   cursor: help;
 }
 
-/* The single confirmed POI actually driving this row's ranking value
-   (poi_area_density_poi_index) - distinct from the plain "confirmed" badge
+/* The single confirmed POI actually driving this row's poi_value
+   (poi_value_poi_index) - distinct from the plain "confirmed" badge
    above (which just means SOME exact data exists for this planet): this
    marks WHICH of possibly several listed POIs is the one worth going to. */
 .galaxy-poi-exact-best {

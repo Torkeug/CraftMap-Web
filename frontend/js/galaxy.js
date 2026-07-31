@@ -5,25 +5,24 @@
  * populated entirely from a live galaxy-wide dump, see
  * tools/backfill_galaxy_resources.py).
  *
- * Ranked by "effective density" (poi_area_density when set, else plain
- * density - both already on the same scale server-side, see
- * backend.db.get_galaxy_sources_for_resource) - shown here as a relative
- * bar/multiplier against the best row CURRENTLY shown, re-baselining
- * whenever a filter changes, since the raw number has no meaning in
- * isolation. A 3-way mark (poiState) shows ◆ for a purely POI-anchored
- * planet (its rank IS area-adjusted - a real, honest number), ◐ for one
- * where the resource is BOTH at a POI and scattered elsewhere, and a plain
- * · for one where it's scattered with no POI at all. The ◐/· distinction
- * is display-only, NOT priced into the rank - both fall back to identical
- * plain-density ranking (the live-memory dump only ever gives a per-planet
- * TOTAL, never split between a resource's general and POI portions, so a
- * mixed row's POI-anchored slice can't be area-adjusted out from its
- * general slice - see get_galaxy_sources_for_resource's own docstring). So
- * a ◐ row and a · row of equal density tie in rank despite the ◐ one
- * having a genuine practical edge (part of it IS walkable-POI-concentrated)
- * - the mark is what surfaces that, since the number can't. Climate/water
- * chips only render for non-default attributes - a plain Temperate row
- * gets no chip at all.
+ * Ranked by effective_score = poi_ratio + general_ratio (already computed
+ * server-side, see backend.db.get_galaxy_sources_for_resource's own
+ * docstring for the full derivation) - a row's poi_value (raw, never area-
+ * divided, node counts at its POI(s)) and general_value (plain density for
+ * its open-planet spread) are each normalized against the max of that same
+ * component across every row for this resource, then summed, since a
+ * bounded POI stop and an open-planet walk are two ADDITIVE value sources
+ * you collect on the same visit, not two competing descriptions of the same
+ * quantity. Shown here as a relative bar/multiplier against the best row
+ * CURRENTLY shown, re-baselining whenever a filter changes, since the raw
+ * number has no meaning in isolation. A 3-way mark (poiState) shows ◆ for a
+ * purely POI-anchored planet (ranked entirely on poi_ratio), ◐ for one
+ * where the resource is BOTH at a POI and scattered elsewhere (ranked on
+ * both components - poi_ratio only picks up whatever's been exact-confirmed
+ * on-planet, see poi_value's own docstring), and a plain · for one where
+ * it's scattered with no POI at all (ranked entirely on general_ratio).
+ * Climate/water chips only render for non-default attributes - a plain
+ * Temperate row gets no chip at all.
  *
  * Day/Night/Twilight POI chips (sunChips) are a separate filter dimension
  * from climate/water, driven by poi_landmarks - every in-game POI turns out
@@ -36,15 +35,14 @@
  * the same planet), so this filter is OR-within-category (passesSunFilter):
  * unchecking "Night POI" only hides a row that's night-side EVERYWHERE it
  * has a landmark, not one that still has an unchecked-off Day POI. The
- * moment any lighting chip is unchecked, ranking for the WHOLE list
- * switches from poi_area_density's rate to an estimated surviving quantity
- * (density * area-weighted survival fraction, see densityFor/
- * survivingAreaFraction) - a rate can't honestly shrink from excluding
- * part of its own footprint (mathematically invariant under the uniform-
- * density assumption it relies on), so only a quantity estimate, applied
- * consistently to every row at once, can actually respond to the filter.
- * Real, stable per-POI data (planets don't rotate
- * in this game) - not a "goes stale" snapshot. Per-planet-accurate POI
+ * moment any lighting chip is unchecked, poi_ratio for the WHOLE list is
+ * recomputed with the excluded POI(s)' own exact-confirmed counts dropped
+ * out of poi_value's decayed sum (see poiValueFor) - a still-unconfirmed
+ * portion of a row's total is never attributed to any specific sun state
+ * (there's nothing to exclude it BY), so it's left in, same conservative
+ * treatment backend/db.py gives an entirely-unconfirmed row. Real, stable
+ * per-POI data (planets don't rotate in this game) - not a "goes stale"
+ * snapshot. Per-planet-accurate POI
  * marker COLOR (poiMarkerColor) IS reproduced now - reverse-engineered
  * from the game's own bytecode (ui.comp.ResourceIcon's constructor): a
  * POI's color is purely (its ordinal position in the planet's own POI
@@ -135,32 +133,90 @@
   let currentSystemName = null;
   let hopDistances = null; // {system_name: hop_count} for currentSystemName, or null
   const hopDistancesCache = new Map(); // system_name -> already-fetched hop dict
-  let sortMode = "rank"; // "rank" (density) | "distance" (hop count) | "combined" (density+qty)
+  let sortMode = "rank"; // "rank" (poi_value+general_value) | "distance" (hop count) | "combined" (density+qty)
 
-  // isLightingFilterNarrowed/survivingAreaFraction are declared further
-  // below (function hoisting) - see densityFor's own comment for the full
-  // reasoning on why the ranking basis switches entirely, for every row,
-  // the moment any lighting chip is unchecked, rather than only adjusting
-  // the specific rows that have an excluded POI.
-  function densityFor(row) {
-    if (!isLightingFilterNarrowed()) return row.poi_area_density ?? row.density;
+  // Mirrors backend/db.py's POI_DENSITY_DECAY_WEIGHT exactly (same decayed
+  // rank-weighting - full weight for the best POI slot, half for the 2nd,
+  // quarter for the 3rd, ...) - only needed client-side to recompute
+  // poi_value under the lighting filter's exclusions (see poiValueFor);
+  // when the filter is untouched, the backend's own poi_value is used
+  // as-is, no client recomputation at all. Keep this in sync if
+  // backend/db.py's constant is ever retuned.
+  const POI_DENSITY_DECAY_WEIGHT = 0.5;
+
+  // SUN_CHIPS is declared further below (function hoisting doesn't apply to
+  // this const, but it's only ever called from render time, by which point
+  // the whole module has finished evaluating).
+  //
+  // Recomputes poi_value (see backend.db.get_galaxy_sources_for_resource's
+  // own docstring for the full assembly this mirrors) with whichever
+  // confirmed POI(s) the lighting filter currently excludes dropped out of
+  // the decayed sum. When the filter is untouched, just returns the
+  // backend-supplied row.poi_value directly - re-deriving it here would be
+  // redundant (and floating-point-fragile) since nothing's actually
+  // excluded yet.
+  function poiValueFor(row) {
+    if (!isLightingFilterNarrowed()) return row.poi_value;
+    const tags = row.poi_tags ? row.poi_tags.split(",").filter((t) => t !== "general") : [];
+    if (!tags.length) return 0;
+    const hasGeneral = row.poi_tags && row.poi_tags.split(",").includes("general");
+    const isExcluded = (poiIndex) => {
+      const lm = (row.poi_landmarks || []).find((l) => l.poi_index === poiIndex);
+      const chip = lm && SUN_CHIPS[lm.sun_side];
+      return !!(chip && sunFilterState.get(chip.label) === false);
+    };
+    const confirmedByTag = new Map(
+      (row.exact_poi_counts || []).map((e) => [e.poi_index, e.node_count])
+    );
+    const ranked = tags
+      .filter((t) => confirmedByTag.has(t) && !isExcluded(t))
+      .map((t) => confirmedByTag.get(t));
+    if (!hasGeneral) {
+      // Pure POI row: any still-unconfirmed leftover can't be attributed to
+      // any specific sun state, so it's never excluded by this filter -
+      // same conservative treatment as an entirely-unconfirmed row.
+      const confirmedSum = tags
+        .filter((t) => confirmedByTag.has(t))
+        .reduce((sum, t) => sum + confirmedByTag.get(t), 0);
+      const remainder = row.node_count - confirmedSum;
+      if (remainder > 0) ranked.push(remainder);
+    }
+    ranked.sort((a, b) => b - a);
+    return ranked.reduce((sum, count, rank) => sum + count * POI_DENSITY_DECAY_WEIGHT ** rank, 0);
+  }
+
+  // general_value isn't affected by the lighting filter at all (it's not
+  // POI-anchored to begin with), so this is just the backend-supplied
+  // value - kept as its own function so callers read symmetrically with
+  // poiValueFor rather than reaching into row.general_value directly.
+  function generalValueFor(row) {
+    return row.general_value;
+  }
+
+  // "combined" sort mode's own density input - unlike poiValueFor/
+  // generalValueFor above, this stays the OLD area-weighted estimate
+  // (survivingAreaFraction) rather than the new poi_value/general_value
+  // split, since "combined" mode blends plain density with node_count as a
+  // deliberately simpler, POI-agnostic alternative to the default rank (see
+  // this file's own header comment) - it was never meant to be as precise
+  // about POI concentration as the default sort now is.
+  function combinedDensityFor(row) {
+    if (!isLightingFilterNarrowed()) return row.density;
     return row.density * survivingAreaFraction(row);
   }
 
-  // Describes ranking with the lighting filter at its default (fully
-  // checked) state - see densityFor for how this changes once it's
-  // narrowed. "pure" (poi_tags set, no "general") ranks on
-  // poi_area_density - a real area-adjusted figure. "none" (no poi_tags,
-  // or only "general") ranks on plain density with nothing else
-  // contributing. "mixed" (poi_tags has BOTH a real POI and "general")
-  // ALSO ranks on plain density - see
-  // backend.db.get_galaxy_sources_for_resource's own docstring for why
-  // (the dump never splits a planet's total density between its general
-  // and POI portions, so there's no honest denominator to area-adjust
-  // with) - meaning a mixed row ties with a "none" row of equal density
-  // even though it has a real advantage (part of it IS at a walkable POI).
-  // The ranking number can't reflect that; this mark exists so the row
-  // itself still shows it.
+  // "pure" (poi_tags set, no "general") ranks entirely on poi_ratio - a
+  // real, honest raw-count figure (see poi_value's own docstring in
+  // backend/db.py). "none" (no poi_tags, or only "general") ranks entirely
+  // on general_ratio. "mixed" (poi_tags has BOTH a real POI and "general")
+  // ranks on BOTH components - but poi_ratio there only ever reflects
+  // whatever's been exact-confirmed on-planet (poi_resource_nodes); an
+  // unconfirmed mixed row's real POI advantage stays invisible to ranking
+  // until someone visits and confirms it, a known, accepted data limitation
+  // of the no-travel dump (it never records how a mixed row's total splits
+  // between general and POI to begin with) - this mark exists so the row
+  // itself still shows the POI presence even when the number can't yet
+  // credit it.
   function poiState(row) {
     if (!row.poi_tags) return "none";
     const tags = row.poi_tags.split(",");
@@ -354,32 +410,26 @@
   }
 
   // True once ANY lighting checkbox has been unchecked (regardless of
-  // which rows that actually affects) - densityFor uses this to switch
-  // ranking basis for the WHOLE visible list at once, not just rows with
-  // an excluded POI. Necessary because poi_area_density is a RATE (density
-  // per unit area) that's mathematically invariant to which subset of a
-  // row's own footprint you look at (under the uniform-density-per-area
-  // assumption it already relies on: excluding part of the footprint
-  // shrinks the numerator and denominator by the same proportion, leaving
-  // the ratio unchanged) - so there's no way to shrink JUST the affected
-  // rows' numbers while leaving everyone else on the rate scale; that
-  // would compare two different kinds of numbers in one sort. So instead
-  // every row moves to the same (density * survivingAreaFraction) scale
-  // together the moment filtering starts, and back once it stops.
+  // which rows that actually affects) - poiValueFor uses this to decide
+  // whether to recompute poi_value at all (backend's own value otherwise),
+  // and combinedDensityFor uses it the same way survivingAreaFraction
+  // always has, for "combined" mode's own density input.
   function isLightingFilterNarrowed() {
     return [...sunFilterState.values()].some((v) => v === false);
   }
 
-  // Estimate of how much of a row's density is still "reachable" once
-  // some of its POIs are excluded by the lighting filter, weighted by
-  // each POI's own AREA (galaxy_poi_landmarks.area - see
-  // import_galaxy_poi_landmarks's own docstring) rather than assuming
-  // every POI on a planet is equally sized: a night POI that's 90% of a
-  // resource's combined POI footprint should demote the row far more than
-  // one that's a sliver of it. Returns 1 (no reduction) for a row with no
-  // area data to weight by, or with nothing currently excluded - so an
-  // unaffected row's density stays exactly its own density, same scale as
-  // an affected row's reduced estimate.
+  // "combined" sort mode's own lighting-filter estimate (see
+  // combinedDensityFor) - how much of a row's plain density is still
+  // "reachable" once some of its POIs are excluded, weighted by each POI's
+  // own AREA (galaxy_poi_landmarks.area - see import_galaxy_poi_landmarks's
+  // own docstring) rather than assuming every POI on a planet is equally
+  // sized: a night POI that's 90% of a resource's combined POI footprint
+  // should demote the row far more than one that's a sliver of it. Returns
+  // 1 (no reduction) for a row with no area data to weight by, or with
+  // nothing currently excluded - so an unaffected row's density stays
+  // exactly its own density, same scale as an affected row's reduced
+  // estimate. NOT used by the default rank sort - see poiValueFor for why
+  // that one works off exact per-POI counts instead of area weighting.
   function survivingAreaFraction(row) {
     const landmarks = (row.poi_landmarks || []).filter((lm) => lm.area != null);
     if (!landmarks.length) return 1;
@@ -498,16 +548,16 @@
       .sort((a, b) => b.node_count - a.node_count)
       .forEach((entry, i) => {
         if (i > 0) el.appendChild(document.createTextNode(", "));
-        // poi_area_density_poi_index (backend/db.py's get_galaxy_sources_for_resource)
-        // is the ONE confirmed POI actually driving this row's ranking
-        // number (the best individual spot, not a sum/average across every
+        // poi_value_poi_index (backend/db.py's get_galaxy_sources_for_resource)
+        // is the ONE confirmed POI actually driving this row's poi_value
+        // (the best individual spot, not a sum/average across every
         // confirmed POI) - highlighted here so the player can go straight
         // to it instead of having to compare every listed count by hand.
-        const isBest = row.poi_area_density_is_exact && entry.poi_index === row.poi_area_density_poi_index;
+        const isBest = row.poi_value_is_exact && entry.poi_index === row.poi_value_poi_index;
         const seg = document.createElement("span");
         if (isBest) {
           seg.className = "galaxy-poi-exact-best";
-          seg.title = "This POI's confirmed density is what's driving this row's ranking - your best bet for this resource.";
+          seg.title = "This POI's confirmed count is what's driving this row's ranking - your best bet for this resource.";
           seg.appendChild(document.createTextNode("★ "));
         }
         if (entry.poi_index === "general") {
@@ -532,9 +582,8 @@
     const statsLine = document.createElement("div");
     statsLine.className = "galaxy-row-stats";
     const parts = [`node_count ${row.node_count}`, `density ${row.density.toFixed(4)}`];
-    if (row.poi_area_density !== null && row.poi_area_density !== undefined) {
-      parts.push(`poi_area_density ${row.poi_area_density.toFixed(4)}`);
-    }
+    if (row.poi_value) parts.push(`poi_value ${row.poi_value.toFixed(2)}`);
+    if (row.general_value) parts.push(`general_value ${row.general_value.toFixed(4)}`);
     statsLine.textContent = parts.join(" · ");
     el.appendChild(statsLine);
 
@@ -654,10 +703,10 @@
     markEl.textContent = MARK_TEXT[state];
     markEl.title =
       state === "pure"
-        ? "Purely POI-anchored - ranked by area-adjusted density"
+        ? "Purely POI-anchored - ranked by raw node count at the POI"
         : state === "mixed"
-        ? "Partly POI-anchored, partly scattered - ranked by plain density (can't be area-adjusted, see docs)"
-        : "Scattered planet-wide, no POI anchor";
+        ? "Partly POI-anchored, partly scattered - ranked by both, but the POI share only counts once confirmed by a visit"
+        : "Scattered planet-wide, no POI anchor - ranked by density";
     top.appendChild(markEl);
 
     const planetEl = document.createElement("span");
@@ -810,15 +859,27 @@
       if (!depositByKey.has(key)) depositByKey.set(key, d);
     }
     // Normalize each dimension to its own max among the CURRENTLY shown
-    // rows first (0-1 ratio) - density and node_count are on unrelated
-    // scales (a resource-dependent raw count vs. an already-area-rescaled
-    // density), so only their ratios-to-best are comparable, not the raw
-    // numbers themselves.
-    const maxDensity = Math.max(...visible.map(densityFor));
+    // rows first (0-1 ratio) - these are all on unrelated scales, so only
+    // their ratios-to-best are comparable, not the raw numbers themselves.
+    const maxDensity = Math.max(...visible.map(combinedDensityFor));
     const maxQuantity = Math.max(...visible.map(quantityFor));
+    const maxPoiValue = Math.max(...visible.map(poiValueFor));
+    const maxGeneralValue = Math.max(...visible.map(generalValueFor));
+    // Default rank's own effective score - trusts the backend's own
+    // effective_score (already poi_ratio+general_ratio over the FULL
+    // resource population, not just what's currently visible) whenever the
+    // lighting filter is untouched, and only recomputes against the
+    // visible-only maxes above once it's narrowed (the backend has no
+    // notion of which sun-state chips are currently unchecked).
+    const rankEffectiveFor = (row) => {
+      if (!isLightingFilterNarrowed()) return row.effective_score;
+      const poiRatio = maxPoiValue > 0 ? poiValueFor(row) / maxPoiValue : 0;
+      const generalRatio = maxGeneralValue > 0 ? generalValueFor(row) / maxGeneralValue : 0;
+      return poiRatio + generalRatio;
+    };
     const effectiveFor = (row) => {
-      if (sortMode !== "combined") return densityFor(row);
-      const dRatio = maxDensity > 0 ? densityFor(row) / maxDensity : 0;
+      if (sortMode !== "combined") return rankEffectiveFor(row);
+      const dRatio = maxDensity > 0 ? combinedDensityFor(row) / maxDensity : 0;
       const qRatio = maxQuantity > 0 ? quantityFor(row) / maxQuantity : 0;
       return Math.sqrt(dRatio * qRatio);
     };
@@ -840,16 +901,17 @@
         const db = hb === null ? Infinity : hb;
         return da - db;
       });
-    } else {
-      // "rank" and "combined" both re-sort by effectiveFor client-side,
-      // rather than trusting currentRows' existing backend-provided order,
-      // because effectiveFor/densityFor can now differ from the backend's
-      // own poi_area_density/density whenever the lighting filter is
-      // narrowed (isLightingFilterNarrowed) - the backend has no notion of
-      // which sun-state chips are currently unchecked, only the frontend
-      // does. Re-sorting here (not just adjusting the displayed bar width)
-      // is what actually moves a demoted row down in rank position.
+    } else if (sortMode === "combined") {
       visible.sort((a, b) => effectiveFor(b) - effectiveFor(a));
+    } else if (isLightingFilterNarrowed()) {
+      // Default "rank": currentRows (and so `visible`, which only ever
+      // .filter()s it) already arrives in the backend's own effective_score
+      // order, so no resort is needed UNLESS the lighting filter has
+      // narrowed - the backend has no notion of which sun-state chips are
+      // unchecked, so only the client-recomputed rankEffectiveFor reflects
+      // that, and only an actual resort (not just a changed displayed
+      // number) moves a demoted row down in position.
+      visible.sort((a, b) => rankEffectiveFor(b) - rankEffectiveFor(a));
     }
 
     let highlightEl = null;
