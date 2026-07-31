@@ -437,6 +437,7 @@ const BreakdownTree = (function () {
       const row = document.createElement("div");
       row.className = "step-option" + (selected ? " selected" : "");
       row.textContent = (selected ? "●  " : "    ") + label;
+      row.title = label;
       row.addEventListener("mousedown", (e) => {
         e.preventDefault();
         onPick();

@@ -89,6 +89,7 @@
       const label = document.createElement("span");
       label.className = "queue-job-label";
       label.textContent = job.output_name;
+      label.title = job.output_name;
       row.appendChild(label);
 
       const qtyInput = document.createElement("input");

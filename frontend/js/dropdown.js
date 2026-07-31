@@ -56,6 +56,7 @@ class LiveDropdown {
       const item = document.createElement("div");
       item.className = "dropdown-item";
       item.textContent = v;
+      item.title = v;
       item.addEventListener("mousedown", (e) => {
         e.preventDefault();
         this._choose(v);
