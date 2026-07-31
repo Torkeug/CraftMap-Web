@@ -1719,6 +1719,10 @@
   color: var(--warn);
 }
 
+#wrecks-live-status.error {
+  color: var(--danger);
+}
+
 #wrecks-live-stats.scroll-rows {
   flex: 1 1 auto;
   min-height: 50px;
@@ -2423,8 +2427,9 @@
    raw distance. No titlebar (removed per user request) - the whole
    window is draggable instead (see wreck-tracker.html's DragResize.attach
    call, which passes #app itself as dragbarEl) and there's no close
-   button - closing is handled by js/wrecks.js's toggleTracking as part
-   of "Stop Live Tracking" instead of a manual per-window action. Only
+   button - the tracker subprocess runs for the app's whole session (see
+   main.py's on_loaded), so this window just hides along with the main
+   window instead of a manual per-window close. Only
    #error-banner/#resize-grip come free from theme.css the way the queue
    window's chrome does - #pin-btn needs its OWN styling below, since the
    shared .icon-btn base rules in theme.css/components.css are scoped to

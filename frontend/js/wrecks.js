@@ -411,14 +411,18 @@
     const scriptPathInput = document.getElementById("wrecks-live-script-path");
     const pythonPathInput = document.getElementById("wrecks-live-python-path");
     const saveSettingsBtn = document.getElementById("wrecks-live-save-settings-btn");
-    const toggleBtn = document.getElementById("wrecks-live-toggle-btn");
+    const showOverlayBtn = document.getElementById("wrecks-live-show-overlay-btn");
     const statusEl = document.getElementById("wrecks-live-status");
     const statsEl = document.getElementById("wrecks-live-stats");
     const statsGroupRadios = document.querySelectorAll('input[name="wrecks-stats-group"]');
 
     const POLL_MS = 3000;
     let pollTimer = null;
-    let tracking = false; // this tab's own belief that a start was requested
+    // The tracker subprocess now starts on its own with the app (see
+    // main.py's on_loaded) instead of via a button here - this just
+    // tracks this tab's own belief of whether it's running, for status
+    // display and to know when it's died unexpectedly.
+    let tracking = false;
     let sawFirstSnapshot = false;
 
     function fmtTime(iso) {
@@ -531,8 +535,11 @@
         // wrong, etc.) - reflect that rather than keep claiming "starting".
         tracking = false;
         sawFirstSnapshot = false;
-        setStatus("Tracker stopped unexpectedly - check the script path and that the game is running.", "");
-        toggleBtn.textContent = "Activate Live Tracking";
+        setStatus(
+          status.last_error ||
+            "Tracker stopped unexpectedly - check the script path and that the game is running.",
+          "error"
+        );
         stopPolling();
       }
       await renderStats();
@@ -551,28 +558,24 @@
       }
     }
 
-    async function toggleTracking() {
-      if (tracking) {
-        await CraftMapApi.call("stop_wreck_tracking");
-        tracking = false;
-        sawFirstSnapshot = false;
-        stopPolling();
-        setStatus("Not running.", "");
-        toggleBtn.textContent = "Activate Live Tracking";
-        // The Wreck Tracker window has no close button of its own (see
-        // wreck-tracker.html's own comment) - its lifecycle is tied
-        // 1:1 to tracking state, so stopping tracking is what closes it.
-        CraftMapApi.call("hide_wreck_tracker_window");
-        return;
-      }
+    // The tracker subprocess itself now starts automatically with the app
+    // (see main.py's on_loaded) rather than from a button here - this
+    // just makes sure it's running (start_wreck_tracking is a no-op if it
+    // already is, e.g. the normal case) and opens the HUD window, doubling
+    // as the manual retry when auto-start failed or wasn't configured yet.
+    async function showOverlay() {
       try {
         await CraftMapApi.call("start_wreck_tracking");
       } catch (e) {
-        return; // error banner already shown by CraftMapApi.call
+        // The transient error-banner toast already covers this (see
+        // CraftMapApi.call), but also pin the reason in the tab's own
+        // status line since that one doesn't auto-hide after 6s.
+        const status = await CraftMapApi.call("get_wreck_tracking_status");
+        setStatus(status.last_error || (e.message || String(e)), "error");
+        return;
       }
       tracking = true;
       sawFirstSnapshot = false;
-      toggleBtn.textContent = "Stop Live Tracking";
       setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
       startPolling();
       // Opens (never hides) the separate Wreck Tracker HUD window - same
@@ -589,6 +592,24 @@
         scriptPathInput.value.trim(),
         pythonPathInput.value.trim()
       );
+      // Re-launch with the new path so it takes effect right away -
+      // there's no separate "Activate" button anymore to do this
+      // manually now that tracking auto-starts at app launch.
+      await CraftMapApi.call("stop_wreck_tracking");
+      sawFirstSnapshot = false;
+      try {
+        await CraftMapApi.call("start_wreck_tracking");
+        tracking = true;
+        setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
+        startPolling();
+      } catch (e) {
+        tracking = false;
+        stopPolling();
+        // Transient error-banner toast already covers this (see
+        // CraftMapApi.call) - also pin it in the tab's own status line.
+        const status = await CraftMapApi.call("get_wreck_tracking_status");
+        setStatus(status.last_error || (e.message || String(e)), "error");
+      }
     }
 
     async function loadSettings() {
@@ -601,11 +622,11 @@
       const status = await CraftMapApi.call("get_wreck_tracking_status");
       tracking = status.running;
       if (tracking) {
-        toggleBtn.textContent = "Stop Live Tracking";
         startPolling();
+      } else if (status.last_error) {
+        setStatus(status.last_error, "error");
       } else {
-        toggleBtn.textContent = "Activate Live Tracking";
-        setStatus("Not running.", "");
+        setStatus("Not running - set a script path above, then click Show Wreck Overlay to start it.", "");
       }
       await renderStats();
     }
@@ -617,7 +638,7 @@
     function init() {
       loadSettings();
       saveSettingsBtn.addEventListener("click", saveSettings);
-      toggleBtn.addEventListener("click", toggleTracking);
+      showOverlayBtn.addEventListener("click", showOverlay);
       for (const r of statsGroupRadios) r.addEventListener("change", renderStats);
     }
 

@@ -263,6 +263,12 @@ class App:
         # that external window instead of Windows defaulting to the
         # still-visible pinned companion.
         self.pre_focus_hwnd = None
+        # Whichever of our own windows (main/queue/wreck tracker) last held
+        # OS foreground focus, kept current by sync_input_passthrough's
+        # poll - so toggle()'s show branch can restore focus (and therefore
+        # topmost stacking order, since all three are WS_EX_TOPMOST) to the
+        # window the user was actually last using instead of always main.
+        self.last_own_focused_hwnd = None
 
     # ----- main window -----
 
@@ -317,14 +323,29 @@ class App:
                     return
             self.window.show()
             self.visible = True
-            win32util.force_foreground_window(hwnd)
-            self.sync_input_passthrough()
             if not self.queue_pinned and self.queue_was_visible:
                 self._set_queue_visible(True)
                 self.queue_window.show()
             if not self.wreck_tracker_pinned and self.wreck_tracker_was_visible:
                 self.wreck_tracker_visible = True
                 self.wreck_tracker_window.show()
+            # Restore focus to whichever of our own windows was last
+            # focused (see last_own_focused_hwnd) if it's actually visible
+            # again now, rather than always defaulting to main.
+            restore_hwnd = hwnd
+            if self.last_own_focused_hwnd is not None:
+                if self.queue_visible and self.last_own_focused_hwnd == win32util.pywebview_hwnd(
+                    self.queue_window
+                ):
+                    restore_hwnd = self.last_own_focused_hwnd
+                elif (
+                    self.wreck_tracker_visible
+                    and self.last_own_focused_hwnd
+                    == win32util.pywebview_hwnd(self.wreck_tracker_window)
+                ):
+                    restore_hwnd = self.last_own_focused_hwnd
+            win32util.force_foreground_window(restore_hwnd)
+            self.sync_input_passthrough()
             return
 
         focused = win32util.hwnd_is_foreground(hwnd)
@@ -382,15 +403,20 @@ class App:
         # focused, so all of them toggle click-through together - matches
         # craftmap/overlay.py's Overlay._sync_all_input_passthrough.
         hwnd = win32util.pywebview_hwnd(self.window)
-        focused = win32util.hwnd_is_foreground(hwnd)
-        if not focused and self.queue_visible:
-            focused = win32util.hwnd_is_foreground(
-                win32util.pywebview_hwnd(self.queue_window)
-            )
-        if not focused and self.wreck_tracker_visible:
-            focused = win32util.hwnd_is_foreground(
-                win32util.pywebview_hwnd(self.wreck_tracker_window)
-            )
+        focused_hwnd = None
+        if win32util.hwnd_is_foreground(hwnd):
+            focused_hwnd = hwnd
+        elif self.queue_visible and win32util.hwnd_is_foreground(
+            win32util.pywebview_hwnd(self.queue_window)
+        ):
+            focused_hwnd = win32util.pywebview_hwnd(self.queue_window)
+        elif self.wreck_tracker_visible and win32util.hwnd_is_foreground(
+            win32util.pywebview_hwnd(self.wreck_tracker_window)
+        ):
+            focused_hwnd = win32util.pywebview_hwnd(self.wreck_tracker_window)
+        focused = focused_hwnd is not None
+        if focused_hwnd:
+            self.last_own_focused_hwnd = focused_hwnd
 
         if self.visible and self.passthrough != (not focused):
             self.passthrough = not focused
@@ -834,6 +860,32 @@ def main():
             # into a page that isn't there yet - push the Queue tab's
             # button state now that it safely can.
             app._set_queue_visible(True)  # pylint: disable=protected-access
+
+        try:
+            # Auto-start the wreck tracker poller with the app itself now
+            # that its data is accurate enough to rely on continuously,
+            # rather than requiring a manual "Activate Live Tracking" click
+            # every session (see frontend/js/wrecks.js's showOverlay, which
+            # both retries this and shows the HUD window). Every failure
+            # mode here (no script path configured yet, no interpreter, or
+            # the interpreter itself failing to launch) raises ValueError.
+            api.start_wreck_tracking()
+        except ValueError as e:
+            # A silently-failed auto-start would only ever surface once the
+            # user happened to open the Wrecks tab (Api.get_wreck_tracking_
+            # status's last_error) - push it into the main window's own
+            # error banner right away instead, the same dismissible,
+            # non-focus-stealing banner frontend/js/api.js's CraftMapApi.
+            # call already shows for a failed JS-triggered call, so a
+            # failed *this* call reads the same way to the user.
+            # CraftMapApi is declared `const` in api.js - unlike screens.js's
+            # explicit window.QueueTab assignment, a top-level const never
+            # becomes a window property, so a `window.CraftMapApi` guard
+            # here would always be false; `typeof` against the bare
+            # identifier is the correct existence check for it instead.
+            window.evaluate_js(
+                f"typeof CraftMapApi !== 'undefined' && CraftMapApi._showError({json.dumps(str(e))})"
+            )
 
         if HOTKEY_AVAILABLE:
             app.toggle_key = toggle_key

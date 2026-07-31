@@ -78,9 +78,11 @@
       // pointerdown handler already ignores clicks on .icon-btn elements
       // (see that module's own comment), so passing #app itself here
       // doesn't break clicking the pin button regardless of where it
-      // sits in the layout. Closing is no longer a manual action on this
-      // window at all - see js/wrecks.js's toggleTracking, which hides
-      // this window as part of "Stop Live Tracking" instead.
+      // sits in the layout. This window has no manual close of its own -
+      // it hides along with the main window (unless pinned, see
+      // main.py's App.hide) since the tracker subprocess itself now runs
+      // continuously for the app's whole session (see main.py's
+      // on_loaded) rather than being started/stopped from here.
       DragResize.attach({
         dragbarEl: document.getElementById("app"),
         gripEl: document.getElementById("resize-grip"),

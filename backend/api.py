@@ -77,6 +77,13 @@ class Api:
         # for the same pywebview dir()-walk reason as every other Api
         # internal-state attribute (see this module's own docstring).
         self._wreck_tracker_proc = None
+        # Reason the last start_wreck_tracking call failed (None if it
+        # hasn't failed, or hasn't been tried yet) - see that method's own
+        # docstring for why this exists separately from the exception it
+        # raises: get_wreck_tracking_status needs to surface it too, for
+        # callers (the Wrecks tab's status polling) that didn't make the
+        # failing call themselves, e.g. a failed auto-start at launch.
+        self._wreck_tracker_last_error = None
         # Set by main.py's _create_wreck_tracker_window the first time the
         # Wreck Tracker window is actually opened (lazy-created, like the
         # queue window) - underscore-prefixed for the same reason.
@@ -574,29 +581,48 @@ class Api:
         """Launches wreck_tracker.py as a detached subprocess. Raises
         ValueError (surfaced to the user via frontend/js/api.js's inline
         error banner - see that module's own try/catch wrapper) rather
-        than failing silently if the script path isn't configured yet or
-        no usable Python interpreter is available (frozen builds need an
-        explicit python_path - see wreck_tracking.python_executable)."""
+        than failing silently if the script path isn't configured yet, no
+        usable Python interpreter is available (frozen builds need an
+        explicit python_path - see wreck_tracking.python_executable), or
+        the interpreter itself fails to launch (e.g. a stale/bad
+        python_path - Popen raises OSError for that, wrapped here into the
+        same ValueError so every failure mode is one consistent type for
+        callers to catch).
+
+        Called automatically at every app launch (see main.py's on_loaded)
+        as well as manually from frontend/js/wrecks.js's Show Wreck
+        Overlay button (a no-op here if already running, so that button
+        doubles as a retry when auto-start failed or hasn't been
+        configured yet) - self._wreck_tracker_last_error records the
+        reason for the last failure either way, for get_wreck_tracking_
+        status to surface regardless of which path called this."""
         if self._wreck_tracker_proc is not None and self._wreck_tracker_proc.poll() is None:
             return True  # already running
         cfg = config.load_config()
         script_path = cfg.get("wreck_tracker_script_path")
         if not script_path or not os.path.exists(script_path):
-            raise ValueError(
+            self._wreck_tracker_last_error = (
                 "Set a valid wreck tracker script path first (Live Tracking settings)."
             )
+            raise ValueError(self._wreck_tracker_last_error)
         python_path = wreck_tracking.python_executable(cfg.get("wreck_tracker_python_path"))
         if not python_path:
-            raise ValueError(
+            self._wreck_tracker_last_error = (
                 "No Python interpreter configured to run the tracker"
                 " (required for a built/frozen CraftMap.exe) - set one in Live Tracking settings."
             )
+            raise ValueError(self._wreck_tracker_last_error)
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        self._wreck_tracker_proc = subprocess.Popen(
-            [python_path, script_path],
-            cwd=str(Path(script_path).resolve().parent),
-            creationflags=creationflags,
-        )
+        try:
+            self._wreck_tracker_proc = subprocess.Popen(
+                [python_path, script_path],
+                cwd=str(Path(script_path).resolve().parent),
+                creationflags=creationflags,
+            )
+        except OSError as e:
+            self._wreck_tracker_last_error = f"Failed to launch '{python_path}': {e}"
+            raise ValueError(self._wreck_tracker_last_error) from e
+        self._wreck_tracker_last_error = None
         return True
 
     def stop_wreck_tracking(self):
@@ -607,7 +633,10 @@ class Api:
 
     def get_wreck_tracking_status(self):
         running = self._wreck_tracker_proc is not None and self._wreck_tracker_proc.poll() is None
-        return {"running": running}
+        return {
+            "running": running,
+            "last_error": None if running else self._wreck_tracker_last_error,
+        }
 
     def get_live_wreck_snapshot(self):
         """The poller's current-planet snapshot, read straight from its
@@ -667,9 +696,10 @@ class Api:
 
     def show_wreck_tracker_window(self):
         """Always shows (never hides) - called by frontend/js/wrecks.js's
-        Activate Live Tracking button right after start_wreck_tracking
-        succeeds, mirroring show_queue_window's own '+ Queue'-button
-        semantics."""
+        Show Wreck Overlay button right after start_wreck_tracking
+        succeeds (a no-op if the tracker is already running, the normal
+        case since it auto-starts with the app - see main.py's on_loaded),
+        mirroring show_queue_window's own '+ Queue'-button semantics."""
         if self._app_ctrl is not None:
             self._app_ctrl.show_wreck_tracker_window()
         return True
