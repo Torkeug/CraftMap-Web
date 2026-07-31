@@ -257,6 +257,12 @@ class App:
         self.wreck_tracker_passthrough = False
         self.wreck_tracker_pinned = bool(config.load_config().get("wreck_tracker_pinned", False))
         self.wreck_tracker_was_visible = False
+        # The hwnd that owned OS focus right before this app last grabbed it
+        # from outside (see toggle()'s show branch) - so that if hide()
+        # leaves a pinned companion window up, focus can be handed back to
+        # that external window instead of Windows defaulting to the
+        # still-visible pinned companion.
+        self.pre_focus_hwnd = None
 
     # ----- main window -----
 
@@ -291,6 +297,12 @@ class App:
                 )
             )
             if not companion_focused:
+                # About to pull focus into CraftMap from whatever currently
+                # has it (the game, or an unfocused-but-visible pinned
+                # companion) - remember it so hide() can hand focus back to
+                # it later instead of leaving Windows to default to a
+                # pinned companion that's staying up.
+                self.pre_focus_hwnd = win32util.get_foreground_window()
                 if self.queue_pinned and self.queue_visible:
                     win32util.force_foreground_window(
                         win32util.pywebview_hwnd(self.queue_window)
@@ -346,6 +358,23 @@ class App:
             if not self.wreck_tracker_pinned:
                 self.wreck_tracker_window.hide()
                 self.wreck_tracker_visible = False
+        # If a pinned companion is staying up, Windows would otherwise hand
+        # it OS focus by default since it's the next visible topmost window
+        # in line - hand focus back to whatever was focused before CraftMap
+        # grabbed it instead (see toggle()'s pre_focus_hwnd capture). Must
+        # happen before sync_input_passthrough() below, so that call's
+        # focused/unfocused click-through decision reflects where focus
+        # actually ends up rather than the stale pre-redirect state.
+        pinned_companion_visible = (self.queue_pinned and self.queue_visible) or (
+            self.wreck_tracker_pinned and self.wreck_tracker_visible
+        )
+        if (
+            pinned_companion_visible
+            and self.pre_focus_hwnd
+            and win32util.is_window_visible(self.pre_focus_hwnd)
+        ):
+            win32util.force_foreground_window(self.pre_focus_hwnd)
+
         self.sync_input_passthrough()
 
     def sync_input_passthrough(self):

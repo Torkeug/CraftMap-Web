@@ -68,6 +68,18 @@ def set_window_alpha(hwnd, alpha: int):
     _user32.SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)
 
 
+def get_foreground_window():
+    """Raw GetForegroundWindow() - the hwnd currently owning OS focus,
+    whatever process it belongs to. Used to remember what was focused
+    right before this app grabs focus, so it can be handed back later
+    instead of leaving Windows to pick a new foreground window on its
+    own (see main.py's App.pre_focus_hwnd)."""
+    try:
+        return _user32.GetForegroundWindow()
+    except Exception:
+        return None
+
+
 def hwnd_is_foreground(hwnd) -> bool:
     """True if hwnd currently owns the OS foreground/keyboard focus.
 
