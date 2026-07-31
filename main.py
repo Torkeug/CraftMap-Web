@@ -263,11 +263,19 @@ class App:
         # that external window instead of Windows defaulting to the
         # still-visible pinned companion.
         self.pre_focus_hwnd = None
-        # Whichever of our own windows (main/queue/wreck tracker) last held
-        # OS foreground focus, kept current by sync_input_passthrough's
-        # poll - so toggle()'s show branch can restore focus (and therefore
-        # topmost stacking order, since all three are WS_EX_TOPMOST) to the
-        # window the user was actually last using instead of always main.
+        # Whichever of our own windows (main/queue/wreck tracker) had OS
+        # focus at the exact moment hide() last ran - so toggle()'s show
+        # branch can restore focus (and therefore topmost stacking order,
+        # since all three are WS_EX_TOPMOST) to the window the user was
+        # actually last using instead of always main. Captured once, at
+        # hide() itself, rather than continuously via the click-through
+        # poll: a pinned companion that's still visible while hidden can
+        # receive OS focus for reasons that aren't genuine user intent
+        # (e.g. toggle()'s own "first hotkey press while hidden hands the
+        # pinned companion focus" reveal step) - tracking it live would
+        # pick that up and then keep favoring the companion on every
+        # later restore, even when the window actually focused right
+        # before the app was hidden was main.
         self.last_own_focused_hwnd = None
 
     # ----- main window -----
@@ -367,6 +375,17 @@ class App:
         self.hide()
 
     def hide(self):
+        # Snapshot which of our own windows genuinely has focus right now,
+        # before hiding anything - see last_own_focused_hwnd's own comment
+        # for why this must happen here and only here, rather than via the
+        # continuous click-through poll. hide() is only ever called from
+        # toggle()'s "one of our own windows is currently focused" branch,
+        # so this should always find one - the None fallback (leaving the
+        # previous value alone) is just defensive.
+        focused_hwnd = self._focused_own_hwnd()
+        if focused_hwnd is not None:
+            self.last_own_focused_hwnd = focused_hwnd
+
         self.window.hide()
         self.visible = False
         if self.queue_visible:
@@ -398,25 +417,32 @@ class App:
 
         self.sync_input_passthrough()
 
+    def _focused_own_hwnd(self):
+        """Whichever of our own three windows currently holds OS
+        foreground focus, or None if it's none of them - shared by
+        sync_input_passthrough (per-tick click-through decision) and
+        hide() (one-off last_own_focused_hwnd snapshot, see its own
+        comment on why that one must NOT be driven by the continuous
+        poll)."""
+        hwnd = win32util.pywebview_hwnd(self.window)
+        if win32util.hwnd_is_foreground(hwnd):
+            return hwnd
+        if self.queue_visible and win32util.hwnd_is_foreground(
+            win32util.pywebview_hwnd(self.queue_window)
+        ):
+            return win32util.pywebview_hwnd(self.queue_window)
+        if self.wreck_tracker_visible and win32util.hwnd_is_foreground(
+            win32util.pywebview_hwnd(self.wreck_tracker_window)
+        ):
+            return win32util.pywebview_hwnd(self.wreck_tracker_window)
+        return None
+
     def sync_input_passthrough(self):
         # Focusing any tracked window counts as the whole app being
         # focused, so all of them toggle click-through together - matches
         # craftmap/overlay.py's Overlay._sync_all_input_passthrough.
         hwnd = win32util.pywebview_hwnd(self.window)
-        focused_hwnd = None
-        if win32util.hwnd_is_foreground(hwnd):
-            focused_hwnd = hwnd
-        elif self.queue_visible and win32util.hwnd_is_foreground(
-            win32util.pywebview_hwnd(self.queue_window)
-        ):
-            focused_hwnd = win32util.pywebview_hwnd(self.queue_window)
-        elif self.wreck_tracker_visible and win32util.hwnd_is_foreground(
-            win32util.pywebview_hwnd(self.wreck_tracker_window)
-        ):
-            focused_hwnd = win32util.pywebview_hwnd(self.wreck_tracker_window)
-        focused = focused_hwnd is not None
-        if focused_hwnd:
-            self.last_own_focused_hwnd = focused_hwnd
+        focused = self._focused_own_hwnd() is not None
 
         if self.visible and self.passthrough != (not focused):
             self.passthrough = not focused
