@@ -257,11 +257,13 @@ class App:
         self.wreck_tracker_passthrough = False
         self.wreck_tracker_pinned = bool(config.load_config().get("wreck_tracker_pinned", False))
         self.wreck_tracker_was_visible = False
-        # The hwnd that owned OS focus right before this app last grabbed it
-        # from outside (see toggle()'s show branch) - so that if hide()
-        # leaves a pinned companion window up, focus can be handed back to
-        # that external window instead of Windows defaulting to the
-        # still-visible pinned companion.
+        # The last EXTERNAL (non-CraftMap) hwnd to own OS focus - kept
+        # current by sync_input_passthrough's poll (any tick none of our
+        # own windows has focus) plus a precise same-instant capture in
+        # toggle()'s show branch - so that if hide() leaves a pinned
+        # companion window up, focus can be handed back to that external
+        # window instead of Windows defaulting to the still-visible pinned
+        # companion.
         self.pre_focus_hwnd = None
         # Whichever of our own windows (main/queue/wreck tracker) was last
         # genuinely focused - so toggle()'s two "bring focus back to us"
@@ -470,6 +472,23 @@ class App:
         # hide()-only snapshot would otherwise miss entirely).
         if self.visible and focused_hwnd is not None:
             self.last_own_focused_hwnd = focused_hwnd
+
+        # Continuously track the last EXTERNAL (non-CraftMap) foreground
+        # window too - whatever hide() hands focus back to when a pinned
+        # companion stays up (see its own comment). Previously only
+        # captured once, in toggle()'s hidden->visible branch, at the
+        # moment focus was pulled in from outside - which meant it stayed
+        # None for a whole session if the app never actually went through
+        # that exact transition before its first hide (e.g. it starts
+        # already visible), so that first hide with a pinned companion up
+        # had nothing valid to redirect back to and Windows defaulted to
+        # the pinned companion instead of the game. Any tick where none of
+        # our own windows has focus means focus is on something external -
+        # capture it every time, not just at that one transition.
+        if focused_hwnd is None:
+            current_fg = win32util.get_foreground_window()
+            if current_fg:
+                self.pre_focus_hwnd = current_fg
 
         if self.visible and self.passthrough != (not focused):
             self.passthrough = not focused
