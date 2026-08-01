@@ -1,6 +1,6 @@
 """Tests for backend.db's poi_resource_nodes table - exact, on-planet-
 confirmed per-POI resource node counts (see backend/poi_resource_import.py
-and the sibling spacecraft-memory-research repo's wreck_tracker.py). Same
+and the sibling spacecraft-memory-research repo's live_tracker.py). Same
 isolated-temp-DB approach as test_db_galaxy_resources.py."""
 
 import os

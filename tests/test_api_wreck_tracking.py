@@ -27,7 +27,7 @@ def api(tmp_path, monkeypatch):
     # A script path just needs to look plausible enough to get past
     # get_live_wreck_snapshot's own "not configured yet" early return -
     # the script itself is never actually launched by this method.
-    script_path = tmp_path / "wreck_tracker.py"
+    script_path = tmp_path / "live_tracker.py"
     script_path.write_text("", encoding="utf-8")
     api.set_wreck_tracker_settings(str(script_path))
     return api

@@ -1,5 +1,5 @@
 """Shared logic for importing the sibling spacecraft-memory-research repo's
-wreck_tracker.py JSONL event log into resources.db's wreck_events table -
+live_tracker.py JSONL event log into resources.db's wreck_events table -
 used both by tools/import_wreck_events.py (manual CLI run) and
 backend/api.py (periodic auto-import while live tracking is active, see
 Api.get_live_wreck_snapshot).
@@ -38,7 +38,7 @@ def _parse_lines(text):
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
-        # planet is NOT NULL in wreck_events (db.init_db) - wreck_tracker.py's
+        # planet is NOT NULL in wreck_events (db.init_db) - live_tracker.py's
         # own planet-name resolution can transiently fail (returns null in
         # the JSONL, e.g. mid-travel/loading) and DOES still log the event
         # when that happens, but `INSERT OR IGNORE` against a NOT NULL

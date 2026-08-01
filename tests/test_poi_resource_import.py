@@ -1,5 +1,5 @@
 """Tests for backend.poi_resource_import - reads the sibling
-spacecraft-memory-research repo's wreck_tracker.py per-POI resource-count
+spacecraft-memory-research repo's live_tracker.py per-POI resource-count
 snapshot file and upserts it into resources.db's poi_resource_nodes table.
 Whole-file read every call (no cursor, unlike wreck_import.py) - see that
 module's own docstring for why."""

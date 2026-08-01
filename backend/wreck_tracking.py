@@ -1,5 +1,5 @@
 """Helpers for launching/reading the sibling spacecraft-memory-research
-repo's wreck_tracker.py as a subprocess ("Activate live tracking" button,
+repo's live_tracker.py as a subprocess ("Activate live tracking" button,
 frontend/js/wrecks.js). Subprocess lifecycle (the Popen handle itself)
 lives on Api as an underscore-prefixed attribute (see api.py's own
 docstring on why) - this module only holds the pure path/IO helpers
@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def resolve_paths(script_path):
-    """(live_out, events_out, state_file) paths matching wreck_tracker.py's
+    """(live_out, events_out, state_file) paths matching live_tracker.py's
     own argparse defaults (all alongside the script itself, see its
     module docstring) - CraftMap and the poller agree on where to look
     with zero extra config beyond the one script_path setting."""
@@ -31,7 +31,7 @@ def resolve_paths(script_path):
 
 
 def resolve_poi_counts_path(script_path):
-    """poi_resource_counts.json path matching wreck_tracker.py's own
+    """poi_resource_counts.json path matching live_tracker.py's own
     --poi-out default (alongside the script) - same zero-config-agreement
     convention resolve_paths already established for the other three
     output files. Kept as its own function rather than folded into
@@ -41,7 +41,7 @@ def resolve_poi_counts_path(script_path):
 
 
 def python_executable(configured_python_path):
-    """The interpreter to launch wreck_tracker.py with. It's pure-stdlib
+    """The interpreter to launch live_tracker.py with. It's pure-stdlib
     (see its own imports), so any Python 3 install works - doesn't need
     to be the sibling repo's own venv. Falls back to sys.executable only
     when NOT frozen (running from source, where sys.executable really is
@@ -58,9 +58,9 @@ def python_executable(configured_python_path):
 
 def read_live_snapshot(live_out_path):
     """The poller's overwritten-every-cycle JSON snapshot - see
-    wreck_tracker.py's own module docstring, step 5. None if the poller
+    live_tracker.py's own module docstring, step 5. None if the poller
     has never run (file doesn't exist yet) or the file is mid-write
-    (wreck_tracker.py writes atomically via a temp-file rename, so a
+    (live_tracker.py writes atomically via a temp-file rename, so a
     torn read shouldn't normally happen, but a missing/corrupt file is
     handled the same as "not tracking yet" rather than raised)."""
     path = Path(live_out_path)

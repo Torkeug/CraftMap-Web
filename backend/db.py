@@ -252,7 +252,7 @@ def init_db():
     if "area" not in [row[1] for row in c.fetchall()]:
         c.execute("ALTER TABLE galaxy_poi_landmarks ADD COLUMN area REAL")
     # Live shipwreck-hull/crate sighting log - see the sibling
-    # spacecraft-memory-research repo's wreck_tracker.py (a long-running
+    # spacecraft-memory-research repo's live_tracker.py (a long-running
     # poller, not a one-shot dump like dump_galaxy_resources.py) and
     # tools/import_wreck_events.py, which reads its JSONL event log into
     # this table. Deliberately an EVENT LOG (one row per sighting/loot/
@@ -260,12 +260,12 @@ def init_db():
     # counts that stay true once recorded), a wreck's exact position goes
     # stale the moment it despawns or gets looted - CRAFTMAP_INTEGRATION.md
     # covers why that's the wrong shape for a durable SQLite table (the
-    # LIVE, right-now position instead lives in wreck_tracker.py's own
+    # LIVE, right-now position instead lives in live_tracker.py's own
     # overwritten JSON snapshot file, read directly, never imported here).
     # This table only ever answers "what have I seen over time" (counts/
     # stats), not "what's there right now". resource_id is one of
     # ShipWreck_Lvl0/1/2 (the wreck body/site) or
-    # ShipWreck_LootChestRare_lvl0/1/2 (crates) - see wreck_tracker.py's
+    # ShipWreck_LootChestRare_lvl0/1/2 (crates) - see live_tracker.py's
     # own scope note for why every other wreck-family resourceId (scrap/
     # junk) is deliberately never logged here. sector is NOT stored here -
     # resolved via a lookup against galaxy_resources at query time (see
@@ -286,7 +286,7 @@ def init_db():
             UNIQUE (system_name, planet, resource_id, event_type, observed_at, x, y, z)
         )
     """)
-    # Byte-offset bookmark into wreck_tracker.py's own JSONL event log, so
+    # Byte-offset bookmark into live_tracker.py's own JSONL event log, so
     # backend/wreck_import.py only ever re-parses NEWLY appended lines
     # instead of the whole file - added after the live HUD window started
     # polling get_live_wreck_snapshot (and thus this import) at 5Hz, at
@@ -301,7 +301,7 @@ def init_db():
         )
     """)
     # Exact, on-planet-confirmed per-POI resource node counts - see the
-    # sibling spacecraft-memory-research repo's wreck_tracker.py (extended
+    # sibling spacecraft-memory-research repo's live_tracker.py (extended
     # to also aggregate ordinary resource nodes by POI membership, not just
     # wreck/crate tracking - see its own module docstring's "EXACT PER-POI
     # RESOURCE NODE COUNTS" section) and CRAFTMAP_INTEGRATION.md's matching
@@ -1478,7 +1478,7 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     - Pure POI row, multiple tags (e.g. "poi0,poi1"): the dump gives an
       exact TOTAL across the tags but never how it splits between them.
       Wherever poi_resource_nodes (an actual on-planet visit - see the
-      sibling spacecraft-memory-research repo's wreck_tracker.py) has
+      sibling spacecraft-memory-research repo's live_tracker.py) has
       confirmed one or more of those specific tags, each confirmed count is
       a real individual data point; the STILL-unconfirmed remainder
       (node_count minus whatever's confirmed) is folded in as one more
@@ -1806,7 +1806,7 @@ def import_poi_resource_nodes(rows):
     (system_name, planet, poi_index, resource, node_count, observed_at)
     tuples, one per (POI, resource) pair actually observed on a visited
     planet (see backend/poi_resource_import.py, which builds these from
-    the sibling spacecraft-memory-research repo's wreck_tracker.py's
+    the sibling spacecraft-memory-research repo's live_tracker.py's
     poi_resource_counts.json snapshot). REPLACE (not IGNORE, unlike
     import_galaxy_resources) since a later, better on-planet observation of
     the same POI should supersede an earlier one - see poi_resource_nodes'
@@ -1889,10 +1889,10 @@ def get_galaxy_hop_distances(from_system):
     return dist
 
 
-# ---- Wreck events (tools/import_wreck_events.py, sibling repo's wreck_tracker.py) ----
+# ---- Wreck events (tools/import_wreck_events.py, sibling repo's live_tracker.py) ----
 
 
-# Display names/tiers for the resourceIds wreck_tracker.py ever logs -
+# Display names/tiers for the resourceIds live_tracker.py ever logs -
 # static, data.cdb-derived, same "small hardcoded table" call
 # RESOURCE_SIZE_VARIANTS/DEPOSIT_TYPE_RESOURCE_NAMES above already make for
 # similarly tiny/unlikely-to-change lookups, rather than adding a runtime
@@ -1909,7 +1909,7 @@ def get_galaxy_hop_distances(from_system):
 # Originally only had the plain Lvl0/1/2 hull ids - missed that a wreck's
 # hull can instead be built from BigPiece1/BigPiece2/SmallPiece1/
 # SmallPiece2 sibling pieces (same parentId, same data.cdb type=7
-# "Shipwreck" category, see wreck_tracker.py's WRECK_HULL_IDS for the full
+# "Shipwreck" category, see live_tracker.py's WRECK_HULL_IDS for the full
 # derivation) - any such event fell back to raw resource_id/kind=None here,
 # same underlying gap as the frontend's wreck-tracker-panel.js HULL_IDS.
 WRECK_RESOURCE_INFO = {
@@ -1927,7 +1927,7 @@ WRECK_RESOURCE_INFO = {
     "ShipWreck_LootChestRare_lvl0": {"display_name": "Precious Cargo", "kind": "crate", "level": 0},
     "ShipWreck_LootChestRare_lvl1": {"display_name": "Precious Cargo", "kind": "crate", "level": 1},
     "ShipWreck_LootChestRare_lvl2": {"display_name": "Precious Cargo", "kind": "crate", "level": 2},
-    # Added alongside wreck_tracker.py's BLACKBOX_IDS - a rare, untiered
+    # Added alongside live_tracker.py's BLACKBOX_IDS - a rare, untiered
     # walk-up pickup (data.cdb type=8, no _lvl variants), tracked by the
     # live overlay as its own on-foot-only red marker.
     "ShipWreck_BlackBox": {"display_name": "Black Box", "kind": "blackbox", "level": None},
@@ -1937,7 +1937,7 @@ WRECK_RESOURCE_INFO = {
 def import_wreck_events(rows):
     """Bulk INSERT OR IGNORE wreck_events rows - `rows` is a list of
     (system_name, planet, resource_id, event_type, x, y, z, observed_at)
-    tuples, straight from the sibling repo's wreck_tracker.py JSONL event
+    tuples, straight from the sibling repo's live_tracker.py JSONL event
     log (one line per event). `INSERT OR IGNORE` against
     UNIQUE(system_name, planet, resource_id, event_type, observed_at, x, y,
     z) - x/y/z are part of the key specifically because two DIFFERENT

@@ -1,5 +1,5 @@
 """Shared logic for importing the sibling spacecraft-memory-research repo's
-wreck_tracker.py per-POI resource-node-count snapshot into resources.db's
+live_tracker.py per-POI resource-node-count snapshot into resources.db's
 poi_resource_nodes table - used by backend/api.py (piggybacked onto the
 existing Api.get_live_wreck_snapshot poll, same as wreck_import.py's own
 event-log import).

@@ -1,6 +1,6 @@
 """
 Repeatable maintenance script: import the sibling spacecraft-memory-research
-repo's wreck_tracker.py JSONL event log into resources.db's wreck_events
+repo's live_tracker.py JSONL event log into resources.db's wreck_events
 table. Thin CLI wrapper over backend/wreck_import.py, which backend/api.py
 also calls directly for periodic auto-import while live tracking is active
 (see Api.start_wreck_tracking) - this script exists for a manual/offline

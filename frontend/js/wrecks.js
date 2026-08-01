@@ -507,7 +507,7 @@
     // returns a previous session's leftover the instant it's called,
     // well before the new poller has actually attached/written anything
     // of its own (attach alone can take 1-3 minutes cold - see
-    // wreck_tracker.py's own module docstring). Without checking the
+    // live_tracker.py's own module docstring). Without checking the
     // timestamp's actual age, that leftover reads as current ("Running -
     // updated <plausible old time>") instead of "still starting up" -
     // confirmed live: this exact confusion happened, a stale

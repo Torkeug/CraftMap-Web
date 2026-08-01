@@ -245,7 +245,7 @@ class App:
         self.queue_was_visible = False
         # Wreck Tracker window (frontend/wreck-tracker.html) - a live
         # flight-HUD-style overlay for the sibling spacecraft-memory-
-        # research repo's wreck_tracker.py poller, opened on demand from
+        # research repo's live_tracker.py poller, opened on demand from
         # the Wrecks tab's "Activate Live Tracking" button (see backend/
         # api.py's start_wreck_tracking). Participates in the same hotkey
         # show/hide cascade as the queue window (toggle()/hide() below) -

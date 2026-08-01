@@ -61,9 +61,9 @@ backend/
   win32util.py # ctypes Win32 interop: hwnd resolution, click-through, focus-forcing, single-instance mutex
   shipwreck_loot.py  # static shipwreck rare-loot-crate odds (Wrecks tab) - loads game_data_extract/shipwreck_loot.json
   farming.py         # static Xenic Farm crop/variant reference + 5x3 plot-layout data (Farming tab) - loads game_data_extract/farming.json
-  wreck_tracking.py  # subprocess launch/live-snapshot-read helpers for the sibling repo's wreck_tracker.py poller
-  wreck_import.py    # imports wreck_tracker.py's JSONL event log into db.wreck_events (see tools/import_wreck_events.py)
-  poi_resource_import.py  # imports wreck_tracker.py's per-POI resource-node-count snapshot into poi_resource_nodes (piggybacked on the live-snapshot poll)
+  wreck_tracking.py  # subprocess launch/live-snapshot-read helpers for the sibling repo's live_tracker.py poller
+  wreck_import.py    # imports live_tracker.py's JSONL event log into db.wreck_events (see tools/import_wreck_events.py)
+  poi_resource_import.py  # imports live_tracker.py's per-POI resource-node-count snapshot into poi_resource_nodes (piggybacked on the live-snapshot poll)
 frontend/
   index.html          # main window: Resource/Location/Sources/Wrecks/Farming/Recipe tabs (+ Queue-window toggle)
   queue.html          # Craft Queue window
@@ -89,7 +89,7 @@ main.py        # entrypoint: single-instance check, init_db, window creation (ma
 tools/
   backfill_recipe_metadata.py  # one-off maintenance script enriching resources.db from game_data_extract/
   backfill_galaxy_resources.py # repeatable import of the sibling repo's galaxy-wide dump into galaxy_resources/galaxy_systems/galaxy_poi_landmarks
-  import_wreck_events.py       # repeatable import of the sibling repo's wreck_tracker.py event log into wreck_events (also runnable from Api - see backend/wreck_import.py)
+  import_wreck_events.py       # repeatable import of the sibling repo's live_tracker.py event log into wreck_events (also runnable from Api - see backend/wreck_import.py)
   audit_wreck_crate_rates.py   # position-clusters wreck_events into real wreck sites (Big/Small, by hull tag) and compares observed crate counts against shipwreck_loot.json's theoretical prediction - see the sibling shipbuilder repo's game_logic_notes.md Findings 11-12 for what this analysis found (a real second loot-generation pass on wreck hull pieces, now modeled) and what's still open (Small wrecks' crate-count distribution shape still doesn't match any tested model)
 game_data_extract/  # game-authoritative recipe/item data snapshots (see its own README.md)
 ```
@@ -139,7 +139,7 @@ Same shape as the retired tkinter app's, evolved with multi-output/multi-station
 - **`recipe_station_prefs`**: `ingredient_name` (PK) → `station, mode` - user's preferred station/craft-mode per ingredient name.
 - **`craft_queue`**: `id, recipe_id, quantity, station, combine, station_mode` - `add_to_queue` merges into an existing same-recipe-and-station row rather than duplicating. `combine` gates whether a job counts toward the Totals view's combined aggregate.
 - **`galaxy_resources`** / **`galaxy_systems`** / **`galaxy_poi_landmarks`**: automated, no-travel galaxy-wide resource/system/POI data from the sibling `spacecraft-memory-research` repo's `dump_galaxy_resources.py`, imported via `tools/backfill_galaxy_resources.py` (`INSERT OR IGNORE`/`INSERT OR REPLACE`, safely re-runnable). Personal/per-Quadrant data, never committed - see that script's own docstring for the full field-by-field derivation.
-- **`wreck_events`**: an EVENT LOG (one row per sighting/loot/despawn, not a live-position table - see its own comment in `init_db()` for why), fed by the sibling repo's `wreck_tracker.py` poller via `tools/import_wreck_events.py`/`backend/wreck_import.py`. `id, system_name, planet, resource_id, event_type, x, y, z, observed_at`, `UNIQUE(system_name, planet, resource_id, event_type, observed_at, x, y, z)`. Only ever answers "what have I seen over time" (`db.get_wreck_stats`) - the actual live "what's on this planet right now" position comes from `wreck_tracker.py`'s own overwritten JSON snapshot file, read directly by `Api.get_live_wreck_snapshot` (see `backend/wreck_tracking.py`), never stored in this table.
+- **`wreck_events`**: an EVENT LOG (one row per sighting/loot/despawn, not a live-position table - see its own comment in `init_db()` for why), fed by the sibling repo's `live_tracker.py` poller via `tools/import_wreck_events.py`/`backend/wreck_import.py`. `id, system_name, planet, resource_id, event_type, x, y, z, observed_at`, `UNIQUE(system_name, planet, resource_id, event_type, observed_at, x, y, z)`. Only ever answers "what have I seen over time" (`db.get_wreck_stats`) - the actual live "what's on this planet right now" position comes from `live_tracker.py`'s own overwritten JSON snapshot file, read directly by `Api.get_live_wreck_snapshot` (see `backend/wreck_tracking.py`), never stored in this table.
 
 ## Testing this app
 

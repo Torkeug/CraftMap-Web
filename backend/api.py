@@ -72,7 +72,7 @@ class Api:
         # {queue_id: ((recipe_id, qty, station, mode), specs, root_spec)}.
         self._totals_specs_cache = {}
         # subprocess.Popen handle for the sibling spacecraft-memory-research
-        # repo's wreck_tracker.py poller, or None if not currently running -
+        # repo's live_tracker.py poller, or None if not currently running -
         # see start_wreck_tracking/stop_wreck_tracking. Underscore-prefixed
         # for the same pywebview dir()-walk reason as every other Api
         # internal-state attribute (see this module's own docstring).
@@ -417,7 +417,7 @@ class Api:
 
         Also batch-attaches exact_poi_counts from poi_resource_nodes (one
         extra query total, not one per row) - the sibling
-        spacecraft-memory-research repo's wreck_tracker.py, extended to
+        spacecraft-memory-research repo's live_tracker.py, extended to
         aggregate ordinary resource nodes by POI membership while the
         player is on a planet (see that repo's CRAFTMAP_INTEGRATION.md).
         Strictly better ground truth than this same row's own poi_tags
@@ -599,7 +599,7 @@ class Api:
         return True
 
     def start_wreck_tracking(self):
-        """Launches wreck_tracker.py as a detached subprocess. Raises
+        """Launches live_tracker.py as a detached subprocess. Raises
         ValueError (surfaced to the user via frontend/js/api.js's inline
         error banner - see that module's own try/catch wrapper) rather
         than failing silently if the script path isn't configured yet, no

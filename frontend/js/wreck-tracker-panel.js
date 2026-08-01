@@ -3,13 +3,13 @@
  * relative to the player ship's own facing - not just distance, since "how
  * far" alone doesn't tell you which way to turn. Polls backend/api.py's
  * get_live_wreck_snapshot (the sibling spacecraft-memory-research repo's
- * wreck_tracker.py poller's own overwritten-every-cycle JSON snapshot,
+ * live_tracker.py poller's own overwritten-every-cycle JSON snapshot,
  * passed through as-is) independently of whatever the main window's Wrecks
  * tab is doing - this window has its own lifecycle (see main.py's
  * App.show_wreck_tracker_window/hide_wreck_tracker_window), same as the
  * queue window keeps refreshing while the main window is hidden.
  *
- * Bearing math: ship_forward/ship_up (see wreck_tracker.py's
+ * Bearing math: ship_forward/ship_up (see live_tracker.py's
  * read_player_ship_orientation) are confirmed-live unit vectors, orthogonal
  * to each other (dot product ~0) - see that function's own docstring. right
  * = cross(up, forward) completes an orthonormal frame; a target's bearing is
@@ -34,7 +34,7 @@
   const legendShipEl = document.getElementById("wreck-tracker-legend-ship");
   const legendOnFootEl = document.getElementById("wreck-tracker-legend-onfoot");
 
-  // Matches wreck_tracker.py's own --ship-interval default (1/60s, NOT
+  // Matches live_tracker.py's own --ship-interval default (1/60s, NOT
   // --interval - that one's just the slower wreck/crate node-scan
   // cadence, decoupled from ship position/heading freshness on purpose,
   // see that script's own module docstring). Polling much slower than
@@ -44,7 +44,7 @@
   // that speedup is visible. 60Hz is right at (arguably past) the point
   // where the pywebview/pythonnet IPC bridge's own per-call cost - not
   // measured as precisely as the poller-side numbers documented in
-  // wreck_tracker.py - becomes the real unknown; drop this if it turns
+  // live_tracker.py - becomes the real unknown; drop this if it turns
   // out the bridge can't actually keep up smoothly at this rate.
   const POLL_MS = 17;
   // Visible bearing window on the strip - anything beyond this clamps to
@@ -57,7 +57,7 @@
   // shown at all, not which ones get merged into one marker).
   const ON_FOOT_MAX_DISTANCE = 1000;
 
-  // Kept in sync with wreck_tracker.py's WRECK_HULL_IDS (spacecraft-memory-
+  // Kept in sync with live_tracker.py's WRECK_HULL_IDS (spacecraft-memory-
   // research repo) - a wreck's hull isn't always a single ShipWreck_Lvl0/1/2
   // node, it can instead be built from BigPiece1/BigPiece2/SmallPiece1/
   // SmallPiece2 sibling pieces (same parentId, same data.cdb type=7
@@ -89,7 +89,7 @@
   };
 
   // A rare, untiered, walk-up-only pickup (data.cdb type=8, no _lvl
-  // variants) - kept in wreck_tracker.py's WRECK_HULL_IDS-sibling
+  // variants) - kept in live_tracker.py's WRECK_HULL_IDS-sibling
   // BLACKBOX_IDS set. Rendered as its own red marker (matching the game's
   // own data.cdb color for this resourceId, -65536 = ARGB red) rather than
   // folded into "crate" - see classifyNode/render's own on_foot filtering.
@@ -99,7 +99,7 @@
   // pieces cluster/render distinctly from crates, and black boxes now
   // distinctly again from both (see classifyNode's callers). Anything not
   // explicitly hull or blackbox falls back to "crate" - matches the prior
-  // implicit contract (wreck_tracker.py's TRACKED_IDS has only ever held
+  // implicit contract (live_tracker.py's TRACKED_IDS has only ever held
   // hull/crate/blackbox ids, so this fallback is safe, not just convenient).
   function classifyNode(resourceId) {
     if (HULL_IDS.has(resourceId)) return "hull";
@@ -185,7 +185,7 @@
   //
   // Crates and black boxes are deliberately never merged while onFoot is
   // true (see render's own use of snapshot.on_foot, sourced from
-  // wreck_tracker.py's read_player_is_on_foot) - raised directly by the
+  // live_tracker.py's read_player_is_on_foot) - raised directly by the
   // user after this clustering shipped: walking up to collect them needs
   // each one's own precise bearing/distance, and a single merged marker
   // standing in for several real pickups made them harder to actually
@@ -237,7 +237,7 @@
   // conveyed). Range recalibrated from an initial guess (50-3000) that
   // was WAY too small - confirmed live, real observed distances while
   // in-planet run from ~1000 up to ~150000-200000 units (being
-  // "in_planet" per wreck_tracker.py's own snapshot doesn't mean being
+  // "in_planet" per live_tracker.py's own snapshot doesn't mean being
   // near the surface - the ship can be far out in orbit, see this
   // repo's own read_player_ship_position derivation), so every dot was
   // clamping to the minimum size regardless of its real relative
@@ -275,7 +275,7 @@
   // recreated every call - at 60Hz that was measurably janky (confirmed
   // by the user), and it's wasted work anyway: the underlying node LIST
   // only changes every --interval seconds (3s default, see
-  // wreck_tracker.py's own slower node-scan cadence), while renderMarkers
+  // live_tracker.py's own slower node-scan cadence), while renderMarkers
   // itself gets called on every fast ship-tick poll just to update
   // bearing/distance for the SAME set of entries. Full rebuild only
   // happens when the entry count actually changes (a wreck/crate
@@ -299,7 +299,7 @@
     const { size, opacity } = markerScale(e.distance);
 
     // wreckSize/wreckTier (from the sibling spacecraft-memory-research
-    // repo's wreck_tracker.py annotate_wreck_size_tier - Big/Small and
+    // repo's live_tracker.py annotate_wreck_size_tier - Big/Small and
     // 0/1/2, resolved per-wreck via shared parentId) drive their own CSS
     // classes, independent of `size` above (that's the distance-based dot
     // SCALE, an unrelated thing that happens to share the name in the
@@ -421,7 +421,7 @@
   // get_live_wreck_snapshot immediately returns that old leftover the
   // instant it's called, well before the new poller has attached/written
   // anything of its own (attach alone can take 1-3 minutes on a cold
-  // scan - see wreck_tracker.py's own module docstring). Without this
+  // scan - see live_tracker.py's own module docstring). Without this
   // check, that leftover renders as if it were current ("Running -
   // updated <plausible-looking old time>"), which is actively misleading,
   // not just uninformative. Threshold is generous relative to normal
