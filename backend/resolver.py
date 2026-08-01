@@ -301,30 +301,37 @@ def resolve_recipe_tree(
                     _depth=_depth + 1,
                 )
                 children.append(child)
-            # Find every other recipe that produces the same output, plus a
-            # synthetic "treat as raw material" option when this output is
-            # a curated raw material (offer_raw_option below) - listed for
-            # the alt-recipe picker popup only (frontend/js/breakdown-
-            # tree.js's openStepPopup reads nothing but recipe_id/
-            # recipe_name off each entry; set_alt_pref takes it from
-            # there), so unlike the chosen recipe's own ingredients above,
-            # an alt's own ingredient tree is deliberately NOT resolved
-            # here - no consumer anywhere has ever read an alt's
-            # `children`. That used to recurse into every alternate's full
-            # ingredient tree (including THEIR alts, recursively) - fine
-            # when max_depth capped it, but unbounded and potentially
-            # exponential for a full (max_depth=None) resolve like Api.
-            # get_queue_totals_view's, which is what made the queue Totals
-            # view slow to generate.
-            alts = _build_alts(
-                actual_output,
-                recipe_id,
-                qty_needed,
-                _alts_by_output,
-                _outputs_by_recipe,
-                _stations_by_recipe,
-                offer_raw_option=actual_output in (_raw_material_names or ()),
-            )
+        # Find every other recipe that produces the same output, plus a
+        # synthetic "treat as raw material" option when this output is
+        # a curated raw material (offer_raw_option below) - listed for
+        # the alt-recipe picker popup only (frontend/js/breakdown-
+        # tree.js's openStepPopup reads nothing but recipe_id/
+        # recipe_name off each entry; set_alt_pref takes it from
+        # there), so unlike the chosen recipe's own ingredients above,
+        # an alt's own ingredient tree is deliberately NOT resolved
+        # here - no consumer anywhere has ever read an alt's
+        # `children`. That used to recurse into every alternate's full
+        # ingredient tree (including THEIR alts, recursively) - fine
+        # when max_depth capped it, but unbounded and potentially
+        # exponential for a full (max_depth=None) resolve like Api.
+        # get_queue_totals_view's, which is what made the queue Totals
+        # view slow to generate.
+        #
+        # Deliberately OUTSIDE the truncation branch above (unlike the
+        # children loop): alts describe THIS node's own alternate
+        # recipes, same as `stations` a few lines up, which is also
+        # computed unconditionally - a truncated (not-yet-expanded) node
+        # still needs its real alt list so the step popup's alt-recipe
+        # section isn't empty until the user has expanded it once.
+        alts = _build_alts(
+            actual_output,
+            recipe_id,
+            qty_needed,
+            _alts_by_output,
+            _outputs_by_recipe,
+            _stations_by_recipe,
+            offer_raw_option=actual_output in (_raw_material_names or ()),
+        )
     elif forced_raw:
         # No children to resolve (we're treating this as raw), but still
         # offer every real recipe for `name` in the picker so the user can
