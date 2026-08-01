@@ -199,6 +199,7 @@ def init_db():
             temperature_name TEXT,
             attributes TEXT,
             attribute_names TEXT,
+            planet_scale REAL,
             UNIQUE (system_name, planet, resource)
         )
     """)
@@ -218,6 +219,13 @@ def init_db():
         c.execute("ALTER TABLE galaxy_resources ADD COLUMN attributes TEXT")
     if "attribute_names" not in galaxy_cols:
         c.execute("ALTER TABLE galaxy_resources ADD COLUMN attribute_names TEXT")
+    if "planet_scale" not in galaxy_cols:
+        # planet.inf.props.scale (see tools/backfill_galaxy_resources.py's
+        # own docstring and get_galaxy_sources_for_resource's general_value
+        # derivation) - NULL for any row imported before this column
+        # existed; treated as 1.0 (the common/default scale) wherever read,
+        # not an error.
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN planet_scale REAL")
     c.execute("""
         CREATE TABLE IF NOT EXISTS galaxy_systems (
             system_name TEXT PRIMARY KEY,
@@ -1245,10 +1253,10 @@ def import_galaxy_resources(rows):
     """Bulk INSERT OR IGNORE galaxy_resources rows. `rows` is a list of
     (system_name, planet, sector, resource, node_count, density, poi_tags,
     poi_area_density, is_asteroid, temperature, temperature_name, attributes,
-    attribute_names) tuples - poi_tags is a comma-joined string of which
-    POI(s) that resource is tied to on that planet (e.g. "poi0",
-    "poi0,poi1"), "general" if it's scattered planet-wide with no POI
-    anchor, or "poi0,general" if it's split between both. poi_area_density
+    attribute_names, planet_scale) tuples - poi_tags is a comma-joined
+    string of which POI(s) that resource is tied to on that planet (e.g.
+    "poi0", "poi0,poi1"), "general" if it's scattered planet-wide with no
+    POI anchor, or "poi0,general" if it's split between both. poi_area_density
     is `density` divided by the POI(s)' own combined surface-area fraction
     (see tools/backfill_galaxy_resources.py's poi_surface) - only
     computable, and only ever set, when the resource is PURELY POI-anchored
@@ -1268,7 +1276,13 @@ def import_galaxy_resources(rows):
     generation-time attributes (e.g. water presence, radioactive, foggy -
     temperature is one possible member of this same list, duplicated into
     its own columns since it's the one every planet always resolves to).
-    These four are planet-level, not resource-level, so they repeat across
+    planet_scale is `planet.inf.props.scale` (defaults to 1.0 in-game when
+    unset - the dump's own "planetScale" field, see
+    tools/backfill_galaxy_resources.py) - used by get_galaxy_sources_for_
+    resource to convert `density` (which the game's own
+    compute_display_density formula scales UP with planet size) into a true,
+    physically-normalized density for general/scattered-gathering ranking.
+    These five are planet-level, not resource-level, so they repeat across
     every resource row for the same planet - same treatment as system_name/
     sector already get. Existing rows are left alone
     (UNIQUE(system_name, planet, resource)), so re-running an import after
@@ -1280,8 +1294,8 @@ def import_galaxy_resources(rows):
         "INSERT OR IGNORE INTO galaxy_resources"
         " (system_name, planet, sector, resource, node_count, density, poi_tags,"
         " poi_area_density, is_asteroid, temperature, temperature_name,"
-        " attributes, attribute_names)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " attributes, attribute_names, planet_scale)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
@@ -1408,12 +1422,27 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
       visit. Raw node counts, never area-divided - see below for how the
       count is assembled per pure-vs-mixed row.
     - `general_value`: how much this row is worth as open-planet, walk-the-
-      whole-surface gathering. Plain `density` (still the right tool here -
-      unlike a bounded POI, covering more of a bigger planet genuinely costs
-      more, which is exactly what compute_display_density's scale^2 factor
-      is compensating for), minus whatever's already credited to a
-      confirmed POI sub-portion (see the mixed-row case below), so the same
-      nodes are never counted in both components.
+      whole-surface gathering. Starts from plain `density` (minus whatever's
+      already credited to a confirmed POI sub-portion, see the mixed-row
+      case below, so the same nodes are never counted in both components),
+      then converted from the game's own DISPLAY-density basis to a true,
+      physically-normalized one: `density` is `count * const * scale^2`
+      (see compute_display_density, dump_planet_resources.py) - it scales UP
+      with planet size for a fixed count, the opposite of an actual areal
+      density (count / surface_area, which scales DOWN with size, since a
+      bigger planet's same count is spread thinner). A real density is what
+      "covering more of a bigger planet genuinely costs more" actually
+      requires - using the game's own display stat as-is would reward large
+      planets for exactly the extra search effort they cost. Since
+      surface_area is proportional to (PlanetReferenceSize * scale)^2,
+      substituting shows true_density is proportional to `density /
+      scale^4` - the PlanetReferenceSize/const factors are global constants
+      that cancel out of every ratio this function computes, so dividing by
+      scale^4 is the complete conversion, applied right before this value is
+      stored (see the `scale = entry["planet_scale"]` line below).
+      planet_scale is `planet.inf.props.scale` (see tools/
+      backfill_galaxy_resources.py) - defaults to 1.0 (a no-op) for rows
+      imported before this column existed.
 
     Each row's `effective_score` is poi_ratio + general_ratio, where each
     ratio is that row's own component divided by the MAX of that same
@@ -1519,7 +1548,8 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     query = (
         "SELECT system_name, planet, sector, node_count, density, poi_tags,"
         " is_asteroid, temperature, temperature_name,"
-        f" attributes, attribute_names FROM galaxy_resources WHERE resource IN ({placeholders})"
+        " attributes, attribute_names, planet_scale"
+        f" FROM galaxy_resources WHERE resource IN ({placeholders})"
     )
     params = list(family)
     if not include_asteroids:
@@ -1566,13 +1596,14 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     for (
         system_name, planet, sector, node_count, density, poi_tags,
         is_asteroid, temperature, temperature_name,
-        attributes, attribute_names,
+        attributes, attribute_names, planet_scale,
     ) in rows:
         entry = combined.setdefault((system_name, planet), {
             "sector": sector, "node_count": 0, "density": 0.0,
             "poi_tag_labels": set(), "is_asteroid": is_asteroid,
             "temperature": temperature, "temperature_name": temperature_name,
             "attributes": attributes, "attribute_names": attribute_names,
+            "planet_scale": planet_scale,
         })
         entry["node_count"] += node_count or 0
         entry["density"] += density or 0.0
@@ -1641,6 +1672,24 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
             # No real POI tag at all.
             general_value = entry["density"]
             poi_value_is_exact = False
+
+        # Convert general_value from the game's own display-density basis
+        # (count * const * scale^2 - INCREASES with planet size, see
+        # dump_planet_resources.py's compute_display_density) to a true,
+        # physically-normalized density (count / surface_area, which
+        # DECREASES with planet size, matching what "more planet to search"
+        # actually means effort-wise) - see this function's own docstring
+        # for the full derivation. true_density = count / (4*pi*R^2) where
+        # R = PlanetReferenceSize * scale, and since density = count * const
+        # * scale^2, substituting gives true_density proportional to
+        # density / scale^4 - the PlanetReferenceSize/const factors are
+        # GLOBAL constants that cancel out of every ratio this function ever
+        # computes, so dividing by scale^4 alone is the complete, correct
+        # conversion for ranking purposes. planet_scale defaults to 1.0
+        # (scale^4 = 1, a no-op) for any row imported before this column
+        # existed, or where the dump itself didn't have it.
+        scale = entry["planet_scale"] if entry["planet_scale"] else 1.0
+        general_value = general_value / (scale ** 4)
 
         rows_data.append({
             "system_name": system_name, "planet": planet, "sector": entry["sector"],

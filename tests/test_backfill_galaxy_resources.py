@@ -47,6 +47,7 @@ def test_load_rows_computes_poi_area_density_only_for_pure_poi_with_known_sizes(
             "temperatureName": "Very Hot",
             "attributes": ["PlanetHot2"],
             "attributeNames": ["Very Hot"],
+            "planetScale": 0.75,
         },
     ]
     dump_path = tmp_path / "galaxy_resources.json"
@@ -62,7 +63,7 @@ def test_load_rows_computes_poi_area_density_only_for_pure_poi_with_known_sizes(
     expected_density = 0.103 / poi_surface(0.1231817752122879)
     assert gray_quartz[7] == expected_density  # poi_area_density
     assert gray_quartz[8] is True  # isAsteroid passed through as-is
-    assert gray_quartz[9:] == ("PlanetHot2", "Very Hot", "PlanetHot2", "Very Hot")
+    assert gray_quartz[9:] == ("PlanetHot2", "Very Hot", "PlanetHot2", "Very Hot", 0.75)
 
     # Ferric Stone is tied to poi1 AND general - not purely POI-anchored,
     # so poi_area_density must stay None even though it also has a poi tag.

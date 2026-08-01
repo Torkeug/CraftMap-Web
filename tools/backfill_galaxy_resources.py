@@ -231,6 +231,7 @@ def load_rows(dump_path):
         temperature_name = p.get("temperatureName")
         attributes = p.get("attributes") or []
         attribute_names = p.get("attributeNames") or []
+        planet_scale = p.get("planetScale")
 
         poi_tags_by_resource = {}
         for poi_label, resource_names in (p.get("resourcesByPoi") or {}).items():
@@ -267,6 +268,7 @@ def load_rows(dump_path):
                 temperature_name,
                 ",".join(attributes) if attributes else None,
                 ",".join(attribute_names) if attribute_names else None,
+                planet_scale,
             ))
 
         for combo_name, combo_count, combo_density in composite_rows_for_planet(
@@ -286,6 +288,7 @@ def load_rows(dump_path):
                 temperature_name,
                 ",".join(attributes) if attributes else None,
                 ",".join(attribute_names) if attribute_names else None,
+                planet_scale,
             ))
     return rows
 

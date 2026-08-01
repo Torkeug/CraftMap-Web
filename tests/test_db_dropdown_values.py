@@ -18,7 +18,7 @@ def db(tmp_path, monkeypatch):
 def _import_galaxy_row(system_name, planet, sector, resource):
     return (
         system_name, planet, sector, resource, 10, 1.0, "poi0", None, 0,
-        "PlanetTemperate", "Temperate", None, None,
+        "PlanetTemperate", "Temperate", None, None, None,
     )
 
 

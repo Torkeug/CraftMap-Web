@@ -30,11 +30,11 @@ def test_get_galaxy_resource_names(api):
     db_module.import_galaxy_resources([
         (
             "Sys1", "PlanetA", "Sec1", "Clay Shell", 100, 1.0, "general", None, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
         (
             "Sys1", "PlanetA", "Sec1", "Aquamarine", 30, 0.5, "poi0", 2.0, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
     ])
     names = api.get_galaxy_resource_names()
@@ -46,7 +46,7 @@ def test_get_galaxy_sources_shapes_rows_as_dicts(api):
     db_module.import_galaxy_resources([
         (
             "Sysices", "Sysices I", "Jester", "Aquamarine", 36, 0.29, "poi0,poi1", 4.96, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
     ])
     rows = api.get_galaxy_sources("Aquamarine")
@@ -85,7 +85,7 @@ def test_get_galaxy_sources_attaches_exact_poi_counts(api):
     db_module.import_galaxy_resources([
         (
             "Sysices", "Sysices I", "Jester", "Aquamarine", 36, 0.29, "poi0,poi1", 4.96, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
     ])
     db_module.import_poi_resource_nodes([
@@ -104,7 +104,7 @@ def test_get_galaxy_sources_surfaces_which_poi_is_driving_the_ranking(api):
     db_module.import_galaxy_resources([
         (
             "Sysices", "Sysices I", "Jester", "Aquamarine", 100, 1.0, "poi0,poi1", 2.0, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
     ])
     db_module.import_galaxy_poi_landmarks([
@@ -127,7 +127,7 @@ def test_get_galaxy_sources_exact_poi_counts_empty_when_never_visited(api):
     db_module.import_galaxy_resources([
         (
             "Sysices", "Sysices I", "Jester", "Aquamarine", 36, 0.29, "poi0,poi1", 4.96, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
     ])
     rows = api.get_galaxy_sources("Aquamarine")
@@ -139,7 +139,7 @@ def test_get_galaxy_sources_includes_poi_landmarks(api):
     db_module.import_galaxy_resources([
         (
             "Sys1", "PlanetA", "Sec1", "Aquamarine", 36, 0.29, "poi0", 4.96, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
     ])
     db_module.import_galaxy_poi_landmarks([
@@ -164,11 +164,11 @@ def test_get_galaxy_sources_excludes_asteroids_by_default(api):
     db_module.import_galaxy_resources([
         (
             "Sys1", "PlanetA", "Sec1", "Iron", 100, 5.0, "general", None, 0,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
         (
             "Sys2", "AST-1A2", "Sec1", "Iron", 200, 8.0, "general", None, 1,
-            "PlanetTemperate", "Temperate", None, None,
+            "PlanetTemperate", "Temperate", None, None, None,
         ),
     ])
     # default matches js/galaxy.js's own default (asteroid checkbox unchecked)
