@@ -36,6 +36,19 @@ const BreakdownTree = (function () {
     return parts.join(" ");
   }
 
+  // Per-ITEM rate, for comparing which station/mode (or, once shown
+  // there too, which alt recipe) is actually fastest per item produced -
+  // formatDuration's whole-second rounding would make two recipes whose
+  // per-craft time both round to "3s" look identical even at a genuinely
+  // different 3.1s vs 3.9s per item, defeating the point of comparing.
+  // Only sub-minute rates keep that decimal - anything a minute or over
+  // reuses formatDuration's own h/m/s formatting untouched.
+  function formatPerItemDuration(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return "";
+    if (seconds >= 60) return formatDuration(seconds);
+    return `${fmtNum(Math.round(seconds * 10) / 10)}s`;
+  }
+
   function remainingPart(seconds) {
     if (!seconds || seconds <= 0) return null;
     return `  ${formatDuration(seconds)} left`;
@@ -461,11 +474,44 @@ const BreakdownTree = (function () {
     // root). Both are expected to trigger their own refresh afterward.
     function openStepPopup(anchorEl, node, isRoot, onAlt, onStation) {
       stepPopupEl.innerHTML = "";
+      const curStation = node.station;
+      const curMode = node.craft_mode || "auto";
       const alts = isRoot ? [] : node.alts || [];
       if (alts.length) {
         addPopupSectionLabel("ALTERNATE RECIPE");
         for (const alt of alts) {
-          addPopupOption(alt.recipe_name, false, () => onAlt(alt));
+          // Rate the alt at the SAME station currently in use (not every
+          // station it offers - that'd crowd the popup with numbers that
+          // aren't a fair apples-to-apples comparison against what's
+          // actually selected right now) so its per-item time can be
+          // weighed against the current recipe's own, right above/below
+          // it in the STATION & MODE section. An alt that isn't even
+          // craftable at that station says so explicitly rather than
+          // silently showing just the bare name, which read as "same
+          // speed" at a glance rather than "not comparable here."
+          let label = alt.recipe_name;
+          const match = (alt.stations || []).find(([stName]) => stName === curStation);
+          let seconds = null;
+          let useAuto = true;
+          if (match) {
+            const [, mAuto, mManual] = match;
+            // Prefer the same mode currently active; fall back to
+            // whichever the alt actually offers at this station if not.
+            useAuto = curMode === "auto" ? Boolean(mAuto) : !mManual;
+            seconds = useAuto ? mAuto : mManual;
+          }
+          if (seconds) {
+            const altOutputQty = alt.output_qty || 1;
+            const perItem =
+              altOutputQty > 1
+                ? `, ${formatPerItemDuration(seconds / altOutputQty)}/item`
+                : "";
+            const modeLabel = useAuto ? "Auto" : "Manual";
+            label += `  (${curStation} · ${modeLabel}: ${formatDuration(seconds)}/craft${perItem})`;
+          } else if (curStation) {
+            label += `  (not craftable at ${curStation})`;
+          }
+          addPopupOption(label, false, () => onAlt(alt));
         }
       }
 
@@ -482,19 +528,26 @@ const BreakdownTree = (function () {
           stepPopupEl.appendChild(sep);
         }
         addPopupSectionLabel("STATION & MODE");
-        const curStation = node.station;
-        const curMode = node.craft_mode || "auto";
+        // Only worth showing separately from the per-craft time when a
+        // craft actually produces more than one item - otherwise they're
+        // the same number and a second "(Ns/item)" alongside it would
+        // just be redundant clutter.
+        const outputQty = node.output_qty || 1;
         for (const [stName, stAuto, stManual] of stations) {
           if (stAuto) {
+            const perItem =
+              outputQty > 1 ? `, ${formatPerItemDuration(stAuto / outputQty)}/item` : "";
             addPopupOption(
-              `${stName} · Auto  (${formatDuration(stAuto)}/craft)`,
+              `${stName} · Auto  (${formatDuration(stAuto)}/craft${perItem})`,
               stName === curStation && curMode === "auto",
               () => onStation(stName, "auto")
             );
           }
           if (stManual) {
+            const perItem =
+              outputQty > 1 ? `, ${formatPerItemDuration(stManual / outputQty)}/item` : "";
             addPopupOption(
-              `${stName} · Manual  (${formatDuration(stManual)}/craft)`,
+              `${stName} · Manual  (${formatDuration(stManual)}/craft${perItem})`,
               stName === curStation && curMode === "manual",
               () => onStation(stName, "manual")
             );
