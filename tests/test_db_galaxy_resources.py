@@ -117,9 +117,63 @@ def test_get_galaxy_sources_confirmed_mixed_poi_credit_is_scale_independent(db):
     assert by_planet["PlanetA"][GENERAL_VALUE] == pytest.approx(0.001)
     assert by_planet["PlanetA"][POI_VALUE_IS_EXACT] is True
     assert by_planet["PlanetA"][POI_VALUE_POI_INDEX] == "poi0"
-    # PlanetA's poi_ratio (900/900=1.0) plus its tiny general_ratio
-    # (0.001/0.5=0.002) still edges out PlanetB's general_ratio-only 1.0.
+    # PlanetA's poi_ratio (900/900 * 1.0 weight, only one nonzero poi_value
+    # sample) plus its tiny general_ratio (0.001/0.5 * ~0.998 discrimination
+    # weight, see _discrimination_weight) still edges out PlanetB's
+    # general_ratio-only ~0.998.
     assert [r[PLANET] for r in results] == ["PlanetA", "PlanetB"]
+
+
+def test_get_galaxy_sources_downweights_general_ratio_when_general_population_barely_discriminates(db):
+    # PlanetB (general-only, general_value=0.5) and PlanetC (pure POI,
+    # poi_value=30) both sit at a similar RATIO-TO-MAX in their own
+    # dimension (0.5/0.6=0.833 vs 30/40=0.75) - a naive ratio-to-max sum
+    # would rank PlanetB above PlanetC. But PlanetB's general_value is one
+    # of only two ever seen for this resource, 0.5 and 0.6 - barely
+    # different from the best - while PlanetC's poi_value (30) is
+    # meaningfully smaller than the best confirmed POI haul (40, on
+    # PlanetA) - a population that actually spans a wide range. Once each
+    # ratio is scaled by how much its OWN population discriminates
+    # (_discrimination_weight), PlanetC's poi contribution should hold up
+    # far better than PlanetB's general contribution, flipping the order.
+    db.import_galaxy_resources([
+        # mixed: confirmed poi0=40 out of node_count=100 -> general leftover
+        # 60 * density_per_node(1.0/100=0.01) = general_value 0.6
+        ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "general,poi0", None, 0,
+         "PlanetTemperate", "Temperate", None, None),
+        ("Sys2", "PlanetB", "Sec1", "Iron", 100, 0.5, "general", None, 0,
+         "PlanetTemperate", "Temperate", None, None),
+        ("Sys3", "PlanetC", "Sec1", "Iron", 30, 1.0, "poi0", None, 0,
+         "PlanetTemperate", "Temperate", None, None),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Iron", 40, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Iron")
+    by_planet = {r[PLANET]: r for r in results}
+    assert by_planet["PlanetA"][GENERAL_VALUE] == pytest.approx(0.6)
+    assert by_planet["PlanetA"][POI_VALUE] == pytest.approx(40)
+    # general_weight = (0.6-0.5)/0.6 ~= 0.1667; poi_weight = (40-30)/40 = 0.25
+    assert by_planet["PlanetB"][EFFECTIVE_SCORE] == pytest.approx((0.5 / 0.6) * (0.1 / 0.6))
+    assert by_planet["PlanetC"][EFFECTIVE_SCORE] == pytest.approx((30 / 40) * 0.25)
+    assert [r[PLANET] for r in results] == ["PlanetA", "PlanetC", "PlanetB"]
+
+
+def test_get_galaxy_sources_discrimination_weight_defaults_to_full_with_one_sample(db):
+    # Only one row has any general/poi presence at all for this resource -
+    # nothing to compare it against, so _discrimination_weight must NOT
+    # suppress it (defaults to full weight 1.0), unlike the 2+-sample case
+    # above.
+    db.import_galaxy_resources([
+        ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "general,poi0", None, 0,
+         "PlanetTemperate", "Temperate", None, None),
+    ])
+    db.import_poi_resource_nodes([
+        ("Sys1", "PlanetA", "poi0", "Iron", 40, "2026-07-23T00:00:00+00:00"),
+    ])
+    results = db.get_galaxy_sources_for_resource("Iron")
+    # poi_ratio = 40/40 * 1.0 = 1.0; general_ratio = 0.6/0.6 * 1.0 = 1.0
+    assert results[0][EFFECTIVE_SCORE] == pytest.approx(2.0)
 
 
 def test_get_galaxy_sources_unconfirmed_mixed_row_falls_back_to_plain_density(db):

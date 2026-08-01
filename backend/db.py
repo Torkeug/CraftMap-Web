@@ -1340,6 +1340,43 @@ def _resource_family(resource_name):
 POI_DENSITY_DECAY_WEIGHT = 0.5
 
 
+def _discrimination_weight(nonzero_values):
+    """How much a ranking component's own population actually varies, as a
+    0-1 factor: (max-min)/max among values that are actually present for
+    this resource (a row with 0 for this component isn't part of "the
+    field" being judged - it contributes nothing regardless of this
+    weight, whatever it works out to). Used by get_galaxy_sources_for_
+    resource to scale poi_ratio/general_ratio before summing them into
+    effective_score.
+
+    Why this is needed: ratio-to-max (value / max(all values)) always gives
+    SOME row a ratio of 1.0, even when every value in the population is
+    almost identical - "the best of a barely-differentiated field" is not
+    the same claim as "the best of a field with real spread", but a plain
+    ratio can't tell the two apart. Confirmed against real data: for some
+    resources, general_value's whole population (across every planet that
+    has ANY of it) spans under 2x top-to-bottom even with hundreds of
+    samples (e.g. Elmerite), while for others it spans 60-80x (e.g. Ferrous
+    Outcrop, Magnetite) - a single fixed weight applied to every resource's
+    general_ratio would either needlessly suppress the genuinely
+    discriminating cases or fail to suppress the barely-discriminating
+    ones. Scaling by each resource's own actual spread targets the real
+    cause instead: a general_value of "0.41, out of a field that only ever
+    reaches 0.66" is nowhere near as meaningful a signal as the same 0.41
+    would be "out of a field reaching 14" - the population itself says how
+    much confidence a ratio of X within it deserves.
+
+    Defaults to full weight (1.0) with fewer than 2 samples - there's
+    nothing to call "clustered" yet (clustering is a property of multiple
+    points relative to each other), so this isn't a case to suppress; a
+    lone confirmed data point still deserves full credit."""
+    if len(nonzero_values) < 2:
+        return 1.0
+    best = max(nonzero_values)
+    worst = min(nonzero_values)
+    return (best - worst) / best if best > 0 else 1.0
+
+
 def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     """Every known planet with this resource OR any of its known size-
     variant siblings (see RESOURCE_SIZE_VARIANTS - e.g. querying "Coal
@@ -1380,15 +1417,25 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
 
     Each row's `effective_score` is poi_ratio + general_ratio, where each
     ratio is that row's own component divided by the MAX of that same
-    component across every row returned for this resource (both components
-    normalized independently, then summed - not multiplied like the
-    frontend's "combined" sort mode, since these are two additive value
-    sources you collect on the SAME visit, not two competing descriptions of
-    one quantity). This is what the final sort orders by. A pure-POI row
-    naturally has general_value=0 (ranks purely on poi_ratio); a pure-
-    general row has poi_value=0 (ranks purely on general_ratio, in the same
-    relative order plain density always gave, since dividing every row by
-    the same max is order-preserving).
+    component across every row returned for this resource, then scaled by
+    _discrimination_weight of that component's own nonzero population (both
+    components normalized and weighted independently, then summed - not
+    multiplied like the frontend's "combined" sort mode, since these are
+    two additive value sources you collect on the SAME visit, not two
+    competing descriptions of one quantity). The discrimination weight
+    matters because ratio-to-max alone always gives SOME row a 1.0, even
+    when this resource's general spreads (or, in principle, its POI hauls)
+    are all roughly the same middling size everywhere they're found - see
+    _discrimination_weight's own docstring for the real data that motivated
+    this and why a single fixed downweight can't substitute for it (some
+    resources' general spreads genuinely do vary a lot planet to planet,
+    and deserve full weight; others barely vary at all, and shouldn't claim
+    a near-1.0 ratio on that basis). This is what the final sort orders by.
+    A pure-POI row naturally has general_value=0 (ranks purely on
+    poi_ratio); a pure-general row has poi_value=0 (ranks purely on
+    general_ratio, in the same relative order plain density always gave,
+    since scaling every row by the same max and weight is order-
+    preserving).
 
     poi_value's raw-count assembly, per row shape:
     - No real POI tag at all ("general" only, or no poi_tags): poi_value=0,
@@ -1609,9 +1656,18 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
 
     max_poi_value = max((r["poi_value"] for r in rows_data), default=0.0)
     max_general_value = max((r["general_value"] for r in rows_data), default=0.0)
+    poi_weight = _discrimination_weight([r["poi_value"] for r in rows_data if r["poi_value"] > 0])
+    general_weight = _discrimination_weight(
+        [r["general_value"] for r in rows_data if r["general_value"] > 0]
+    )
     for r in rows_data:
-        poi_ratio = (r["poi_value"] / max_poi_value) if max_poi_value > 0 else 0.0
-        general_ratio = (r["general_value"] / max_general_value) if max_general_value > 0 else 0.0
+        poi_ratio = (
+            r["poi_value"] / max_poi_value * poi_weight if max_poi_value > 0 else 0.0
+        )
+        general_ratio = (
+            r["general_value"] / max_general_value * general_weight
+            if max_general_value > 0 else 0.0
+        )
         r["effective_score"] = poi_ratio + general_ratio
 
     rows_data.sort(key=lambda r: (-r["effective_score"], -r["node_count"]))

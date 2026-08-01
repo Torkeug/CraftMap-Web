@@ -193,6 +193,16 @@
     return row.general_value;
   }
 
+  // Mirrors backend/db.py's _discrimination_weight exactly - see its own
+  // docstring for the full reasoning (ratio-to-max alone always gives some
+  // row a 1.0, even when the whole population barely varies).
+  function discriminationWeight(nonzeroValues) {
+    if (nonzeroValues.length < 2) return 1;
+    const best = Math.max(...nonzeroValues);
+    const worst = Math.min(...nonzeroValues);
+    return best > 0 ? (best - worst) / best : 1;
+  }
+
   // "combined" sort mode's own density input - unlike poiValueFor/
   // generalValueFor above, this stays the OLD area-weighted estimate
   // (survivingAreaFraction) rather than the new poi_value/general_value
@@ -865,16 +875,25 @@
     const maxQuantity = Math.max(...visible.map(quantityFor));
     const maxPoiValue = Math.max(...visible.map(poiValueFor));
     const maxGeneralValue = Math.max(...visible.map(generalValueFor));
+    // Mirrors backend/db.py's _discrimination_weight exactly - see its own
+    // docstring for why ratio-to-max alone isn't enough (some POI/general
+    // populations barely vary planet to planet, so even a middling row
+    // would otherwise claim a near-1.0 ratio). Recomputed against whatever
+    // rows are currently visible, same reasoning as maxPoiValue/
+    // maxGeneralValue above.
+    const poiWeight = discriminationWeight(visible.map(poiValueFor).filter((v) => v > 0));
+    const generalWeight = discriminationWeight(visible.map(generalValueFor).filter((v) => v > 0));
     // Default rank's own effective score - trusts the backend's own
     // effective_score (already poi_ratio+general_ratio over the FULL
     // resource population, not just what's currently visible) whenever the
     // lighting filter is untouched, and only recomputes against the
-    // visible-only maxes above once it's narrowed (the backend has no
-    // notion of which sun-state chips are currently unchecked).
+    // visible-only maxes/weights above once it's narrowed (the backend has
+    // no notion of which sun-state chips are currently unchecked).
     const rankEffectiveFor = (row) => {
       if (!isLightingFilterNarrowed()) return row.effective_score;
-      const poiRatio = maxPoiValue > 0 ? poiValueFor(row) / maxPoiValue : 0;
-      const generalRatio = maxGeneralValue > 0 ? generalValueFor(row) / maxGeneralValue : 0;
+      const poiRatio = maxPoiValue > 0 ? (poiValueFor(row) / maxPoiValue) * poiWeight : 0;
+      const generalRatio =
+        maxGeneralValue > 0 ? (generalValueFor(row) / maxGeneralValue) * generalWeight : 0;
       return poiRatio + generalRatio;
     };
     const effectiveFor = (row) => {
