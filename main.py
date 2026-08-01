@@ -620,9 +620,7 @@ class App:
 
             threading.Thread(target=_clear_suppress, daemon=True).start()
         self.toggle_key = new_key
-        cfg = config.load_config()
-        cfg["toggle_key"] = new_key
-        config.save_config(cfg)
+        config.update_config(lambda cfg: cfg.update({"toggle_key": new_key}))
         return True, new_key
 
     def start_hotkey_capture(self):
@@ -709,14 +707,17 @@ class App:
         self.unregister_hotkey()
         if self.tray_icon is not None:
             self.tray_icon.stop()
-        # Persist whether the queue window was open so the next launch can
-        # recreate and show it up front (see main()'s queue_open) instead of
-        # leaving the user to reopen it - the common case, not having it
-        # open, now skips creating the window at all (see
-        # _ensure_queue_window) rather than creating it hidden.
-        cfg = config.load_config()
-        cfg["queue_open"] = self.queue_visible
-        config.save_config(cfg)
+        # Persist whether the queue/wreck tracker windows were open so the
+        # next launch can recreate and show them up front (see main()'s
+        # queue_open/wreck_tracker_open) instead of leaving the user to
+        # reopen them - the common case, neither open, now skips creating
+        # either window at all (see _ensure_queue_window/_ensure_wreck_
+        # tracker_window) rather than creating them hidden.
+        config.update_config(
+            lambda cfg: cfg.update(
+                {"queue_open": self.queue_visible, "wreck_tracker_open": self.wreck_tracker_visible}
+            )
+        )
 
 
 def _create_queue_window(app):
@@ -757,11 +758,11 @@ def _create_queue_window(app):
 
 
 def _create_wreck_tracker_window(app):
-    """Creates the Wreck Tracker window - always on first actual use (see
-    App._ensure_wreck_tracker_window), never restored at startup the way
-    a persisted queue_open can (this window's open state isn't currently
-    persisted across app restarts - see App.quit_app, which only
-    persists queue_open)."""
+    """Creates the Wreck Tracker window - either up front in main() when
+    wreck_tracker_open was persisted True by the last quit_app (mirrors
+    _create_queue_window's own queue_open restore), or lazily via
+    App._ensure_wreck_tracker_window the first time the user actually
+    opens it in this session."""
     cfg = config.load_config()
     wx, wy = cfg.get("wreck_tracker_x", 460), cfg.get("wreck_tracker_y", 60)
     ww, wh = cfg.get("wreck_tracker_w", 340), cfg.get("wreck_tracker_h", 86)
@@ -827,6 +828,7 @@ def main():
     x, y = cfg.get("window_x", 60), cfg.get("window_y", 60)
     w, h = cfg.get("window_w", 640), cfg.get("window_h", 300)
     queue_open = cfg.get("queue_open", False)
+    wreck_tracker_open = cfg.get("wreck_tracker_open", False)
 
     api = Api()
     window = webview.create_window(
@@ -863,6 +865,7 @@ def main():
 
     app = App(window, None, api)
     app.queue_visible = queue_open
+    app.wreck_tracker_visible = wreck_tracker_open
     api._on_quit = app.quit_app  # pylint: disable=protected-access
     api._app_ctrl = app  # pylint: disable=protected-access
 
@@ -873,11 +876,27 @@ def main():
         # `shown` event fires (see webview/__init__.py's start()/
         # _create_children), same as it always was pre-start().
         _create_queue_window(app)
+    if wreck_tracker_open:
+        # Same restore as queue_open above, for the Wreck Tracker HUD.
+        _create_wreck_tracker_window(app)
 
     def on_loaded():
         hwnd = win32util.pywebview_hwnd(window)
         win32util.set_window_alpha(hwnd, WINDOW_ALPHA)
         threading.Thread(target=app.poll_input_passthrough, daemon=True).start()
+
+        # A window shown via plain .show() at startup (as every window here
+        # just was, including any queue/wreck-tracker window restored above)
+        # is marked WS_EX_TOPMOST but Windows won't actually place it above
+        # whatever already-foreground window it's competing with (the
+        # desktop, a game, the launching terminal) until something makes it
+        # the genuine OS foreground window - a real user click satisfies
+        # that, which is why clicking the main window "fixes" every topmost
+        # window's stacking at once, but nothing here ever did the
+        # equivalent at launch itself. force_foreground_window is the same
+        # AttachThreadInput workaround toggle()'s show branch already
+        # relies on for exactly this - see its own docstring.
+        win32util.force_foreground_window(hwnd)
 
         if queue_open:
             # Restoring queue_open (see above) sets app.queue_visible

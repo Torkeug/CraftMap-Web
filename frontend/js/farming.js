@@ -659,6 +659,7 @@
     currentCrop = cropId;
     cropTabRockwood.classList.toggle("active", cropId === "rockwood");
     cropTabSpacekorn.classList.toggle("active", cropId === "spacekorn");
+    CraftMapApi.call("set_sub_tab", "farming_crop", cropId);
     render();
   }
 
@@ -1171,6 +1172,7 @@
     modeLayoutsBtn.classList.toggle("active", mode === "layouts");
     referenceViewEl.classList.toggle("hidden", mode !== "reference");
     layoutsViewEl.classList.toggle("hidden", mode !== "layouts");
+    CraftMapApi.call("set_sub_tab", "farming", mode);
     if (mode === "layouts") renderLayoutsView();
   }
 
@@ -1195,7 +1197,12 @@
 
   async function init() {
     await ensureDataLoaded();
-    render();
+    const [savedFarmingMode, savedCrop] = await Promise.all([
+      CraftMapApi.call("get_sub_tab", "farming"),
+      CraftMapApi.call("get_sub_tab", "farming_crop"),
+    ]);
+    setCrop(savedCrop === "rockwood" ? "rockwood" : "spacekorn");
+    setFarmingMode(savedFarmingMode === "layouts" ? "layouts" : "reference");
     cropTabRockwood.addEventListener("click", () => setCrop("rockwood"));
     cropTabSpacekorn.addEventListener("click", () => setCrop("spacekorn"));
     new LiveDropdown(goalSearchInput, {

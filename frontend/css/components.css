@@ -2981,9 +2981,24 @@
 #app.measuring-min-size #sources-rows,
 #app.measuring-min-size #wrecks-tree,
 #app.measuring-min-size #galaxy-rows,
-#app.measuring-min-size #farming-variants {
+#app.measuring-min-size #farming-variants,
+#app.measuring-min-size #farming-layouts-result {
   flex: 0 0 auto;
   height: 60px; /* matches their own permanent min-height floor */
+}
+
+/* #wrecks-live-stats's own min-height floor is 50px, not the 60px shared
+   by the panes above - a fully-expanded, unbounded history list (this
+   grows with the whole game session's wreck-sighting log, unlike every
+   other pane above whose data is either static or naturally small) was
+   missing from the block above entirely, so it got measured at its full
+   natural height instead of ever being clamped - the actual cause of a
+   real ~11000px min-height getting measured and persisted once Wrecks/
+   Live Tracking became a sub-tab that can be the one restored on launch
+   (see js/wrecks.js's persisted `mode`/Api.get_sub_tab/set_sub_tab). */
+#app.measuring-min-size #wrecks-live-stats {
+  flex: 0 0 auto;
+  height: 50px;
 }
 
 #app.measuring-min-size #queue-body {

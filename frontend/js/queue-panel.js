@@ -787,6 +787,7 @@
     mode = m;
     modeQueueBtn.classList.toggle("active", mode === "queue");
     modeTotalsBtn.classList.toggle("active", mode === "totals");
+    CraftMapApi.call("set_sub_tab", "queue", mode);
     // Entering Totals mode always forces a full recompute: an alt-recipe/
     // station pick made while in Queue mode is a global, ingredient-name-
     // keyed preference that the Totals tree cache's per-job key can't see
@@ -832,6 +833,14 @@
     jobListEl.style.height = `${split}px`;
     initSplit();
     await initPin();
+
+    // Set directly rather than through setMode() - that also triggers its
+    // own refreshBreakdown(), which would just be redone a second time by
+    // the unconditional one at the end of this function.
+    const savedMode = await CraftMapApi.call("get_sub_tab", "queue");
+    mode = savedMode === "totals" ? "totals" : "queue";
+    modeQueueBtn.classList.toggle("active", mode === "queue");
+    modeTotalsBtn.classList.toggle("active", mode === "totals");
 
     new LiveDropdown(addRecipeInput, {
       getValues: async () => {

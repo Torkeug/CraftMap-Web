@@ -90,30 +90,27 @@ class Api:
         self._wreck_tracker_window = None
 
     # ---- config ----
-
-    def get_config(self):
-        return config.load_config()
-
-    def save_config(self, cfg):
-        config.save_config(cfg)
-        return True
+    #
+    # Every mutation below goes through config.update_config(mutate) - see
+    # that module's own docstring for why a bare load_config()+save_config()
+    # pair is a lost-update race under pywebview's per-call-thread dispatch.
+    # (The old get_config/save_config raw whole-dict passthrough pair was
+    # removed here rather than fixed - unused by any frontend code, and a
+    # direct route for a stale cached dict to stomp the whole file, exactly
+    # the bug update_config exists to prevent.)
 
     def get_collapsed_nodes(self):
         return config.load_config().get("collapsed_nodes", [])
 
     def set_collapsed_nodes(self, collapsed_nodes):
-        cfg = config.load_config()
-        cfg["collapsed_nodes"] = collapsed_nodes
-        config.save_config(cfg)
+        config.update_config(lambda cfg: cfg.update({"collapsed_nodes": collapsed_nodes}))
         return True
 
     def get_view_mode(self):
         return config.load_config().get("view_mode", "resource")
 
     def set_view_mode(self, mode):
-        cfg = config.load_config()
-        cfg["view_mode"] = mode
-        config.save_config(cfg)
+        config.update_config(lambda cfg: cfg.update({"view_mode": mode}))
         return True
 
     # A breakdown tree's expand/collapse state (frontend/js/breakdown-
@@ -130,9 +127,32 @@ class Api:
         )
 
     def set_tree_expand_state(self, tree_key, state):
-        cfg = config.load_config()
-        cfg.setdefault("tree_expand_state", {})[tree_key] = state
-        config.save_config(cfg)
+        def mutate(cfg):
+            cfg.setdefault("tree_expand_state", {})[tree_key] = state
+
+        config.update_config(mutate)
+        return True
+
+    # A screen's own internal sub-tab (js/deposits.js's My Deposits/Galaxy,
+    # js/wrecks.js's By Sector/By Item/Live Tracking, js/farming.js's
+    # Reference/Layouts and its Rockwood/Spacekorn crop tab, js/queue-
+    # panel.js's Queue/Totals) is otherwise pure in-memory JS state that
+    # resets to that module's hardcoded default on every app restart -
+    # same "several call-sites, same shape" case get_tree_expand_state
+    # above already solves for tree state, so this reuses that same
+    # single-dict-namespaced-by-caller-supplied-key pattern rather than
+    # adding a dedicated get_x_mode/set_x_mode Api method pair per screen.
+    # `key` is just each caller's own chosen namespace (e.g. "wrecks",
+    # "farming_crop") - collision-safe as long as each screen picks a
+    # distinct one, same as tree_key.
+    def get_sub_tab(self, key, default=None):
+        return config.load_config().get("sub_tab_state", {}).get(key, default)
+
+    def set_sub_tab(self, key, value):
+        def mutate(cfg):
+            cfg.setdefault("sub_tab_state", {})[key] = value
+
+        config.update_config(mutate)
         return True
 
     # ---- deposits (frontend/js/deposits.js) ----
@@ -571,10 +591,11 @@ class Api:
         }
 
     def set_wreck_tracker_settings(self, script_path, python_path=""):
-        cfg = config.load_config()
-        cfg["wreck_tracker_script_path"] = script_path
-        cfg["wreck_tracker_python_path"] = python_path
-        config.save_config(cfg)
+        config.update_config(
+            lambda cfg: cfg.update(
+                {"wreck_tracker_script_path": script_path, "wreck_tracker_python_path": python_path}
+            )
+        )
         return True
 
     def start_wreck_tracking(self):
@@ -714,10 +735,10 @@ class Api:
         return config.load_config().get("wreck_tracker_pinned", False)
 
     def toggle_wreck_tracker_pin(self):
-        cfg = config.load_config()
-        pinned = not cfg.get("wreck_tracker_pinned", False)
-        cfg["wreck_tracker_pinned"] = pinned
-        config.save_config(cfg)
+        def mutate(cfg):
+            cfg["wreck_tracker_pinned"] = not cfg.get("wreck_tracker_pinned", False)
+
+        pinned = config.update_config(mutate)["wreck_tracker_pinned"]
         if self._app_ctrl is not None:
             self._app_ctrl.on_wreck_tracker_pin_changed(pinned)
         return pinned
@@ -737,10 +758,16 @@ class Api:
         self._wreck_tracker_window.resize(int(width), int(height))
 
     def save_wreck_tracker_window_geometry(self, x, y, width, height):
-        cfg = config.load_config()
-        cfg["wreck_tracker_x"], cfg["wreck_tracker_y"] = int(x), int(y)
-        cfg["wreck_tracker_w"], cfg["wreck_tracker_h"] = int(width), int(height)
-        config.save_config(cfg)
+        config.update_config(
+            lambda cfg: cfg.update(
+                {
+                    "wreck_tracker_x": int(x),
+                    "wreck_tracker_y": int(y),
+                    "wreck_tracker_w": int(width),
+                    "wreck_tracker_h": int(height),
+                }
+            )
+        )
         return True
 
     # ---- window geometry (drag/resize - see frontend/js/drag-resize.js) ----
@@ -764,10 +791,11 @@ class Api:
         self._overlay_window.resize(int(width), int(height))
 
     def save_window_geometry(self, x, y, width, height):
-        cfg = config.load_config()
-        cfg["window_x"], cfg["window_y"] = int(x), int(y)
-        cfg["window_w"], cfg["window_h"] = int(width), int(height)
-        config.save_config(cfg)
+        config.update_config(
+            lambda cfg: cfg.update(
+                {"window_x": int(x), "window_y": int(y), "window_w": int(width), "window_h": int(height)}
+            )
+        )
         return True
 
     # ---- craft queue window geometry (frontend/queue.html's own drag bar/
@@ -785,19 +813,18 @@ class Api:
         self._queue_window.resize(int(width), int(height))
 
     def save_queue_window_geometry(self, x, y, width, height):
-        cfg = config.load_config()
-        cfg["queue_x"], cfg["queue_y"] = int(x), int(y)
-        cfg["queue_w"], cfg["queue_h"] = int(width), int(height)
-        config.save_config(cfg)
+        config.update_config(
+            lambda cfg: cfg.update(
+                {"queue_x": int(x), "queue_y": int(y), "queue_w": int(width), "queue_h": int(height)}
+            )
+        )
         return True
 
     def get_queue_split(self):
         return config.load_config().get("queue_split", 160)
 
     def save_queue_split(self, split_px):
-        cfg = config.load_config()
-        cfg["queue_split"] = int(split_px)
-        config.save_config(cfg)
+        config.update_config(lambda cfg: cfg.update({"queue_split": int(split_px)}))
         return True
 
     # ---- craft queue show/hide/pin (state machine lives on main.py's App -
@@ -807,10 +834,10 @@ class Api:
         return config.load_config().get("queue_pinned", False)
 
     def toggle_queue_pin(self):
-        cfg = config.load_config()
-        pinned = not cfg.get("queue_pinned", False)
-        cfg["queue_pinned"] = pinned
-        config.save_config(cfg)
+        def mutate(cfg):
+            cfg["queue_pinned"] = not cfg.get("queue_pinned", False)
+
+        pinned = config.update_config(mutate)["queue_pinned"]
         if self._app_ctrl is not None:
             self._app_ctrl.on_queue_pin_changed(pinned)
         return pinned

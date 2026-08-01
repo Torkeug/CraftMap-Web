@@ -37,7 +37,7 @@
   const liveViewEl = document.getElementById("wrecks-live-view");
   const crateStatsRowEl = document.getElementById("wrecks-crate-stats-row");
 
-  let mode = "sector"; // "sector" | "item" | "live" - session-only, not persisted
+  let mode = "sector"; // "sector" | "item" | "live" - persisted, see setMode/init
   let sectorsData = null; // fetched once per mode, cached
   let itemsData = null;
   // Session-only, not persisted (unlike js/deposits.js's collapsed_nodes,
@@ -373,8 +373,8 @@
     }
   }
 
-  async function setMode(newMode) {
-    if (mode === newMode) return;
+  async function setMode(newMode, { force = false } = {}) {
+    if (!force && mode === newMode) return;
     mode = newMode;
     modeSectorBtn.classList.toggle("active", mode === "sector");
     modeItemBtn.classList.toggle("active", mode === "item");
@@ -383,6 +383,7 @@
     treeEl.classList.toggle("hidden", mode === "live");
     crateStatsRowEl.classList.toggle("hidden", mode !== "sector");
     liveViewEl.classList.toggle("hidden", mode !== "live");
+    CraftMapApi.call("set_sub_tab", "wrecks", mode);
     if (mode === "live") {
       await LiveTracking.onShow();
       return;
@@ -424,6 +425,11 @@
     // display and to know when it's died unexpectedly.
     let tracking = false;
     let sawFirstSnapshot = false;
+    // Whether this tab has actually observed the tracker running this
+    // session - lets a later "not running" status distinguish "it died
+    // after running" from "it just hasn't started yet" (e.g. main.py's
+    // auto-start is still in flight - see poll()/onShow() below).
+    let everRan = false;
 
     function fmtTime(iso) {
       if (!iso) return "";
@@ -523,24 +529,32 @@
       } catch (e) {
         // CraftMapApi.call already surfaces this via the error banner
       }
-      if (isFresh(snapshot)) {
-        sawFirstSnapshot = true;
-        setStatus(`Running - updated ${fmtTime(snapshot.observed_at)}`, "running");
-      } else if (!sawFirstSnapshot) {
-        setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
-      }
       const status = await CraftMapApi.call("get_wreck_tracking_status");
-      if (!status.running && tracking) {
-        // Subprocess died on its own (game not running, script path
-        // wrong, etc.) - reflect that rather than keep claiming "starting".
+      if (status.running) {
+        tracking = true;
+        everRan = true;
+        if (isFresh(snapshot)) {
+          sawFirstSnapshot = true;
+          setStatus(`Running - updated ${fmtTime(snapshot.observed_at)}`, "running");
+        } else if (!sawFirstSnapshot) {
+          setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
+        }
+      } else {
+        // Not running - either main.py's auto-start hasn't landed yet (this
+        // tab can open before it does - see onShow()'s own comment) or it
+        // died after actually running. Keep polling either way (no
+        // stopPolling() here) rather than giving up on a single check, so
+        // this self-corrects once the tracker actually comes up instead of
+        // getting stuck on a stale "not running" forever.
         tracking = false;
         sawFirstSnapshot = false;
-        setStatus(
-          status.last_error ||
-            "Tracker stopped unexpectedly - check the script path and that the game is running.",
-          "error"
-        );
-        stopPolling();
+        if (status.last_error) {
+          setStatus(status.last_error, "error");
+        } else if (everRan) {
+          setStatus("Tracker stopped unexpectedly - check the script path and that the game is running.", "error");
+        } else {
+          setStatus("Not running - set a script path above, then click Show Wreck Overlay to start it.", "");
+        }
       }
       await renderStats();
     }
@@ -564,6 +578,7 @@
     // already is, e.g. the normal case) and opens the HUD window, doubling
     // as the manual retry when auto-start failed or wasn't configured yet.
     async function showOverlay() {
+      const wasTracking = tracking;
       try {
         await CraftMapApi.call("start_wreck_tracking");
       } catch (e) {
@@ -574,9 +589,16 @@
         setStatus(status.last_error || (e.message || String(e)), "error");
         return;
       }
-      tracking = true;
-      sawFirstSnapshot = false;
-      setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
+      // start_wreck_tracking is a no-op when already running (the normal
+      // case, since it auto-starts with the app) - only reset to the
+      // "starting up" state when this call actually launched it fresh,
+      // so clicking the button while it's already running doesn't stomp
+      // a real "Running - updated ..." status back to "Starting up...".
+      if (!wasTracking) {
+        tracking = true;
+        sawFirstSnapshot = false;
+        setStatus("Starting up, scanning game memory (can take 1-3 minutes the first time)...", "starting");
+      }
       startPolling();
       // Opens (never hides) the separate Wreck Tracker HUD window - same
       // "always shows" semantics as the recipe panel's own '+ Queue'
@@ -619,16 +641,13 @@
     }
 
     async function onShow() {
-      const status = await CraftMapApi.call("get_wreck_tracking_status");
-      tracking = status.running;
-      if (tracking) {
-        startPolling();
-      } else if (status.last_error) {
-        setStatus(status.last_error, "error");
-      } else {
-        setStatus("Not running - set a script path above, then click Show Wreck Overlay to start it.", "");
-      }
-      await renderStats();
+      // Always poll rather than doing one status check and stopping there
+      // - this tab can open (e.g. sub_tab_state restoring straight to
+      // Live Tracking) before main.py's on_loaded has actually finished
+      // auto-starting the tracker, and a single check right then would
+      // just catch it "not running yet" and never look again. poll()
+      // itself keeps re-checking every tick regardless of outcome.
+      startPolling();
     }
 
     function onHide() {
@@ -646,15 +665,16 @@
   })();
 
   async function init() {
-    await ensureDataLoaded();
-    render();
+    LiveTracking.init();
+    const savedMode = await CraftMapApi.call("get_sub_tab", "wrecks");
+    const initialMode = savedMode === "item" || savedMode === "live" ? savedMode : "sector";
+    await setMode(initialMode, { force: true });
     modeSectorBtn.addEventListener("click", () => setMode("sector"));
     modeItemBtn.addEventListener("click", () => setMode("item"));
     modeLiveBtn.addEventListener("click", () => setMode("live"));
     searchInput.addEventListener("input", render);
     filterPatch.addEventListener("change", render);
     filterBlueprint.addEventListener("change", render);
-    LiveTracking.init();
   }
 
   init();
