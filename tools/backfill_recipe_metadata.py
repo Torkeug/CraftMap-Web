@@ -64,6 +64,35 @@ def item_name(items, item_id):
     return items.get(item_id, {}).get("name") or item_id
 
 
+def load_unreachable_permit_crafts():
+    """Craft ids with unlockType==0 ("Permit") that no `permit` sheet entry
+    actually grants (nothing's `unlocks.craft` references them). Despite
+    "Permit" commonly being summarized as "always known", the game's own
+    isKnownCraft (decompiled from hlboot.dat, src/st/PlayerProgress.hx)
+    requires a matching permit to exist - without one it always returns
+    false, so these can never appear in the crafting UI regardless of
+    player progression. See game_data_extract/README.md's `unlockType` note
+    for the full derivation (found via AluminiumIngot_Emerald, which has no
+    permit while every sibling crystal-smelting recipe does).
+
+    Returns None (meaning "unknown, don't filter") if data.cdb isn't
+    reachable - same tolerance as load_buildings_by_tag(), since the
+    `permit` sheet isn't part of game_data_extract/ either."""
+    if not DATA_CDB_PATH.exists():
+        return None
+    data = json.loads(DATA_CDB_PATH.read_text(encoding="utf-8"))
+    sheets = {s["name"]: s for s in data["sheets"]}
+    granted = set()
+    for permit in sheets["permit"]["lines"]:
+        for c in (permit.get("unlocks") or {}).get("craft") or []:
+            granted.add(c["craft"])
+    return {
+        r["id"]
+        for r in sheets["craft"]["lines"]
+        if r.get("unlockType") == 0 and r["id"] not in granted
+    }
+
+
 def resolve_craft_time(craft, item_tags):
     """Return (auto_seconds, manual_seconds), mirroring the game's own
     CraftUtils.getAutoTime/getManualTime exactly."""
@@ -162,7 +191,7 @@ def build_game_index(items, recipes):
     return index
 
 
-def enrich(items, recipes, item_tags):
+def enrich(items, recipes, item_tags, unreachable=None):
     game_index = build_game_index(items, recipes)
 
     conn = sqlite3.connect(DB_PATH)
@@ -178,6 +207,7 @@ def enrich(items, recipes, item_tags):
     matched = 0
     skipped = []
     newly_matched = []
+    unreachable_matches = []
     for rid, rname, out_name in db_recipes:
         c.execute(
             "SELECT ingredient_name, quantity FROM recipe_ingredients WHERE recipe_id=?",
@@ -198,6 +228,9 @@ def enrich(items, recipes, item_tags):
             continue
 
         craft = best["craft"]
+        if unreachable and craft["id"] in unreachable:
+            unreachable_matches.append((rname, out_name, craft["id"]))
+            continue
         station = item_tags.get(craft.get("where"), {}).get("label")
         auto_s, manual_s = resolve_craft_time(craft, item_tags)
         c.execute(
@@ -234,6 +267,14 @@ def enrich(items, recipes, item_tags):
             print(
                 f"  - {rname!r} (produces {out_name!r}): {n_candidates} game candidates"
             )
+    if unreachable_matches:
+        print(
+            f"{len(unreachable_matches)} recipes matched a game craft with no "
+            "granting permit (unreachable in normal play - see "
+            "load_unreachable_permit_crafts()'s docstring) and were left alone:"
+        )
+        for rname, out_name, craft_id in unreachable_matches:
+            print(f"  - {rname!r} (produces {out_name!r}): {craft_id!r}")
     return newly_matched
 
 
@@ -408,10 +449,15 @@ def fix_names(items, recipes):
     print(f"Renamed {renamed} of {len(rows)} matched recipes.")
 
 
-def report_missing(items, recipes, item_tags):
+def report_missing(items, recipes, item_tags, unreachable=None):
     matched_ids = get_matched_craft_ids()
+    unreachable = unreachable or set()
     missing = [
-        r for r in recipes if r["id"] not in matched_ids and r.get("outputs")
+        r
+        for r in recipes
+        if r["id"] not in matched_ids
+        and r.get("outputs")
+        and r["id"] not in unreachable
     ]
     alt_groups = build_alt_groups(recipes)
     by_cat = defaultdict(list)
@@ -426,6 +472,22 @@ def report_missing(items, recipes, item_tags):
         " edit before hand-entering.",
         "",
     ]
+    if unreachable:
+        skipped_count = sum(
+            1
+            for r in recipes
+            if r["id"] not in matched_ids
+            and r.get("outputs")
+            and r["id"] in unreachable
+        )
+        if skipped_count:
+            lines.append(
+                f"({skipped_count} additional game recipes excluded above: "
+                "`unlockType: 0` but no `permit` sheet entry actually grants "
+                "them, so they're unreachable in normal play - see "
+                "game_data_extract/README.md's `unlockType` note.)"
+            )
+            lines.append("")
     for cat in sorted(by_cat):
         entries = sorted(by_cat[cat], key=lambda r: r["id"])
         lines.append(f"## {cat} ({len(entries)})")
@@ -471,11 +533,12 @@ def main():
 
     init_db()
     items, recipes, item_tags = load_game_data()
+    unreachable = load_unreachable_permit_crafts()
 
     if args.report_missing:
-        report_missing(items, recipes, item_tags)
+        report_missing(items, recipes, item_tags, unreachable)
     else:
-        enrich(items, recipes, item_tags)
+        enrich(items, recipes, item_tags, unreachable)
         fix_names(items, recipes)
         enrich_stations(recipes, item_tags)
 

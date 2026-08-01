@@ -24,14 +24,29 @@ for review before you decide how to merge.
     `Craft_Parts`, `Craft_Dismantle`, `BaseBuilding`, etc.)
   - `unlockType` — how the recipe is learned; the `craft` sheet's own enum
     column (`typeStr: "5:Permit,Unique_Blueprint,Random_Blueprint,
-    Cannot_Unlock,Study,Dismantle,Custo"`): `0`=Permit (always known),
-    `1`=Unique_Blueprint (a fixed, non-random source — quest/vendor/
-    location), `2`=Random_Blueprint (the only value the shipwreck rare-crate
-    system ever draws from — see `shipwreck_loot.json`'s notes and
-    `shipbuilder/tools/game_logic_notes.md` Finding 15), `3`=Cannot_Unlock,
-    `4`=Study, `5`=Dismantle, `6`=Custom. A recipe can have a `lootLevel` set
-    while still being `unlockType != 2` — it will never actually drop from a
-    crate in that case.
+    Cannot_Unlock,Study,Dismantle,Custo"`): `0`=Permit, `1`=Unique_Blueprint
+    (a fixed, non-random source — quest/vendor/location), `2`=Random_Blueprint
+    (the only value the shipwreck rare-crate system ever draws from — see
+    `shipwreck_loot.json`'s notes and `shipbuilder/tools/game_logic_notes.md`
+    Finding 15), `3`=Cannot_Unlock, `4`=Study, `5`=Dismantle, `6`=Custom. A
+    recipe can have a `lootLevel` set while still being `unlockType != 2` —
+    it will never actually drop from a crate in that case.
+    **`unlockType == 0` ("Permit") is commonly summarized as "always known",
+    but that's not literally true** — it just means this recipe's unlock
+    mechanism *is* a permit, not that any permit actually grants it.
+    Confirmed live against `hlboot.dat` (`st.PlayerProgress.isKnownCraft`,
+    decompiled): a `Permit`-type recipe only ever shows as known if some
+    `permit` sheet row's `unlocks.craft` list references its id — the
+    `permit` sheet isn't part of this extract (only `data.cdb` directly has
+    it). A handful of recipes have `unlockType: 0` but **no** permit
+    anywhere grants them (e.g. `AluminiumIngot_Emerald` — every sibling
+    crystal-smelting recipe like `IronIngot_Hematite` has a matching
+    `P_HematiteCrystal1`-style permit gated on "have the raw item"; Emerald's
+    has none) — these are permanently unreachable in normal play, not
+    progression-gated. `tools/backfill_recipe_metadata.py`'s
+    `load_unreachable_permit_crafts()` computes this set directly from
+    `data.cdb` and excludes them from both recipe enrichment and the missing-
+    recipes report.
   - `lootLevel` — progression gating (crate-drop tier; see above for the
     additional `unlockType` gate specific to blueprints)
   - `props` — free-form dict, e.g. `autoPowerCost`, `craftTimeFactor`,
