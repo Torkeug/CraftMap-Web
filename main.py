@@ -263,19 +263,18 @@ class App:
         # that external window instead of Windows defaulting to the
         # still-visible pinned companion.
         self.pre_focus_hwnd = None
-        # Whichever of our own windows (main/queue/wreck tracker) had OS
-        # focus at the exact moment hide() last ran - so toggle()'s show
-        # branch can restore focus (and therefore topmost stacking order,
-        # since all three are WS_EX_TOPMOST) to the window the user was
-        # actually last using instead of always main. Captured once, at
-        # hide() itself, rather than continuously via the click-through
-        # poll: a pinned companion that's still visible while hidden can
-        # receive OS focus for reasons that aren't genuine user intent
-        # (e.g. toggle()'s own "first hotkey press while hidden hands the
-        # pinned companion focus" reveal step) - tracking it live would
-        # pick that up and then keep favoring the companion on every
-        # later restore, even when the window actually focused right
-        # before the app was hidden was main.
+        # Whichever of our own windows (main/queue/wreck tracker) was last
+        # genuinely focused - so toggle()'s two "bring focus back to us"
+        # branches (see _restore_target_hwnd) can restore focus (and
+        # therefore topmost stacking order, since all three are WS_EX_
+        # TOPMOST) to the window the user was actually last using instead
+        # of always main. Kept current by sync_input_passthrough's poll,
+        # but ONLY while self.visible - see that method's own comment for
+        # why tracking must stop while hidden specifically (a pinned
+        # companion mid-reveal via toggle()'s own "first hotkey press
+        # while hidden" step would otherwise get mistaken for genuine
+        # intent and always win the next restore) - plus a precise
+        # same-instant snapshot in hide() itself.
         self.last_own_focused_hwnd = None
 
     # ----- main window -----
@@ -337,22 +336,7 @@ class App:
             if not self.wreck_tracker_pinned and self.wreck_tracker_was_visible:
                 self.wreck_tracker_visible = True
                 self.wreck_tracker_window.show()
-            # Restore focus to whichever of our own windows was last
-            # focused (see last_own_focused_hwnd) if it's actually visible
-            # again now, rather than always defaulting to main.
-            restore_hwnd = hwnd
-            if self.last_own_focused_hwnd is not None:
-                if self.queue_visible and self.last_own_focused_hwnd == win32util.pywebview_hwnd(
-                    self.queue_window
-                ):
-                    restore_hwnd = self.last_own_focused_hwnd
-                elif (
-                    self.wreck_tracker_visible
-                    and self.last_own_focused_hwnd
-                    == win32util.pywebview_hwnd(self.wreck_tracker_window)
-                ):
-                    restore_hwnd = self.last_own_focused_hwnd
-            win32util.force_foreground_window(restore_hwnd)
+            win32util.force_foreground_window(self._restore_target_hwnd())
             self.sync_input_passthrough()
             return
 
@@ -367,21 +351,47 @@ class App:
             )
         if not focused:
             # Visible but click-through (unfocused) - the hotkey's job here
-            # is to hand focus back, not hide a window the user can still see.
-            win32util.force_foreground_window(hwnd)
+            # is to hand focus back, not hide a window the user can still
+            # see. Same "restore whichever was genuinely last used" target
+            # as the hidden->visible branch above, not always main - this
+            # was hardcoded to hwnd (main) until a user report caught it
+            # always winning here even when a companion was last used.
+            win32util.force_foreground_window(self._restore_target_hwnd())
             self.sync_input_passthrough()
             return
 
         self.hide()
 
+    def _restore_target_hwnd(self):
+        """Whichever of our own windows should regain focus/topmost right
+        now: last_own_focused_hwnd if it points at one of ours that's
+        actually visible, else the main window. Shared by toggle()'s two
+        "bring focus back to us" branches (hidden->visible, and visible-
+        but-click-through->refocus) so they can't drift apart again."""
+        hwnd = win32util.pywebview_hwnd(self.window)
+        if self.last_own_focused_hwnd is not None:
+            if self.queue_visible and self.last_own_focused_hwnd == win32util.pywebview_hwnd(
+                self.queue_window
+            ):
+                return self.last_own_focused_hwnd
+            if (
+                self.wreck_tracker_visible
+                and self.last_own_focused_hwnd
+                == win32util.pywebview_hwnd(self.wreck_tracker_window)
+            ):
+                return self.last_own_focused_hwnd
+        return hwnd
+
     def hide(self):
         # Snapshot which of our own windows genuinely has focus right now,
-        # before hiding anything - see last_own_focused_hwnd's own comment
-        # for why this must happen here and only here, rather than via the
-        # continuous click-through poll. hide() is only ever called from
-        # toggle()'s "one of our own windows is currently focused" branch,
-        # so this should always find one - the None fallback (leaving the
-        # previous value alone) is just defensive.
+        # before hiding anything - sync_input_passthrough's poll already
+        # tracks this continuously while visible (see its own comment),
+        # but this catches it precisely at the hide instant rather than
+        # however many ms stale the poll's last tick might be. hide() is
+        # only ever called from toggle()'s "one of our own windows is
+        # currently focused" branch, so this should always find one - the
+        # None fallback (leaving the previous value alone) is just
+        # defensive.
         focused_hwnd = self._focused_own_hwnd()
         if focused_hwnd is not None:
             self.last_own_focused_hwnd = focused_hwnd
@@ -420,10 +430,10 @@ class App:
     def _focused_own_hwnd(self):
         """Whichever of our own three windows currently holds OS
         foreground focus, or None if it's none of them - shared by
-        sync_input_passthrough (per-tick click-through decision) and
-        hide() (one-off last_own_focused_hwnd snapshot, see its own
-        comment on why that one must NOT be driven by the continuous
-        poll)."""
+        sync_input_passthrough (per-tick click-through decision, and the
+        continuous last_own_focused_hwnd tracking below) and hide() (a
+        more precise one-off snapshot at the exact moment of hiding,
+        rather than waiting for the poll's next tick)."""
         hwnd = win32util.pywebview_hwnd(self.window)
         if win32util.hwnd_is_foreground(hwnd):
             return hwnd
@@ -442,7 +452,24 @@ class App:
         # focused, so all of them toggle click-through together - matches
         # craftmap/overlay.py's Overlay._sync_all_input_passthrough.
         hwnd = win32util.pywebview_hwnd(self.window)
-        focused = self._focused_own_hwnd() is not None
+        focused_hwnd = self._focused_own_hwnd()
+        focused = focused_hwnd is not None
+
+        # Continuously track "last genuinely focused window" - but ONLY
+        # while the app is normally visible. While hidden, the only thing
+        # _focused_own_hwnd can ever report is a pinned companion mid-
+        # reveal (toggle()'s "first hotkey press while hidden focuses the
+        # companion, without showing main" step) - that's an artifact of
+        # the reveal mechanic, not the user choosing the companion over
+        # main, and letting it feed back into last_own_focused_hwnd is
+        # exactly what made a pinned companion always win the next full
+        # restore regardless of what was truly last used. Gating on
+        # self.visible excludes that one case while still catching every
+        # genuine focus change made during normal use (switching between
+        # main/queue/tracker without ever hiding in between, which a
+        # hide()-only snapshot would otherwise miss entirely).
+        if self.visible and focused_hwnd is not None:
+            self.last_own_focused_hwnd = focused_hwnd
 
         if self.visible and self.passthrough != (not focused):
             self.passthrough = not focused
