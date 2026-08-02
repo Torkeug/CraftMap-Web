@@ -37,7 +37,7 @@ GAME_DATA_DIR = REPO_ROOT / "game_data_extract"
 # game_data_extract/ snapshot, since only one category (Workshop_Smelter)
 # currently needs them. Acceptable here since this is a one-off dev-machine
 # maintenance script, not part of the shipped app.
-DATA_CDB_PATH = Path(r"D:\Documents\Spacecraft\shipbuilder\pak_out\data.cdb")
+DATA_CDB_PATH = Path(r"E:\Documents\Spacecraft\shipbuilder\pak_out\data.cdb")
 
 # $Const.ShipOnBoardSmelterTimeFactor, verified via hlbc decompile of
 # hlboot.dat's `constant` sheet - the ship's on-board smelter skill runs at
