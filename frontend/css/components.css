@@ -735,8 +735,14 @@
   font-size: 9px;
 }
 
+.station-row.station-header span:first-child {
+  width: 140px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .station-row.station-header .col-hint {
-  width: 90px;
+  width: 60px;
 }
 
 .station-row input,
