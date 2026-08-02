@@ -44,6 +44,35 @@ DATA_CDB_PATH = Path(r"D:\Documents\Spacecraft\shipbuilder\pak_out\data.cdb")
 # getManualTime(craft) * this factor, with no auto/passive-queue equivalent.
 SHIP_ONBOARD_SMELTER_FACTOR = 3.0
 
+# ent.b.Factory.isCraftCompatible (src/ent/b/Factory.hx:221-222), verified via
+# hlbc raw-opcode disassembly (decomp's pseudocode mangled the if-bodies to
+# empty): a placed building matches a craft when craft.where == the
+# building's own tag, OR - one single hardcoded exception - when the
+# building's own tag is Workshop_Factory (the Assembler) and
+# craft.where == Workshop_Atelier (globals 10042/5577, resolved via the same
+# cdb.Module.hx enum-init function that assigns every other Workshop_* tag
+# string). So the Assembler also auto-produces every Workshop_Atelier-tagged
+# recipe, in addition to its own directly-tagged ones. No other building gets
+# an equivalent bonus: every station building in the game (Smelter, Chemical
+# Factory, Bottling Plant, Crystallizer, ...) compiles down to this exact
+# same ent.b.Factory class - there's no per-building-type subclass that could
+# override the check differently.
+#
+# Separately, CraftUtils.getManualTime()/getAllWorkshopCrafts() (src/lib/
+# utils/CraftUtils.hx:34-44, decompiled) show manual "click craft now"
+# crafting is its own mechanic entirely, tied to the base Command Center
+# itself rather than to any placed Factory instance - it exists only for
+# craft.where tags whose item_tags.json entry defines a manualCraftTime at
+# all (Workshop_Atelier, Workshop_Smelter, Workshop_Seed - every other tag
+# has none, so those recipes are automation-only with no Command Center
+# bench). This means the pre-existing single merged recipe_stations row this
+# script used to write for those three tags was wrong: the "auto" and
+# "manual" numbers on one row are two unrelated stations (an automated
+# building vs. the always-available Command Center bench), not two modes of
+# the same station - see enrich_stations() below.
+ASSEMBLER_TAG = "Workshop_Factory"
+ASSEMBLER_BONUS_TAG = "Workshop_Atelier"
+
 
 def _norm(s):
     return re.sub(r"\s+", " ", s or "").strip().lower()
@@ -311,15 +340,37 @@ def load_buildings_by_tag():
     return buildings_by_tag
 
 
+def _building_rows(craft, item_tags, buildings_by_tag, tag):
+    """Every placed-building row for `craft` running at station-tag `tag`
+    (auto/passive-queue only - a building never itself offers manual-click
+    crafting, see enrich_stations()'s docstring). `tag` is passed separately
+    from craft["where"] so the Assembler's cross-tag bonus can compute the
+    Assembler's own base autoCraftTime rather than Workshop_Atelier's."""
+    buildings = buildings_by_tag.get(tag, [])
+    if not buildings:
+        return []
+    base_auto_s, base_manual_s = resolve_craft_time(dict(craft, where=tag), item_tags)
+    category_label = item_tags.get(tag, {}).get("label") or tag
+    rows = []
+    for b in buildings:
+        produce_time = (
+            base_manual_s if b["use_manual_crafting_time"] else base_auto_s
+        ) * b["produce_time_factor"]
+        station_label = b["name"] if len(buildings) > 1 else category_label
+        rows.append((station_label, float(produce_time), 0.0))
+    return rows
+
+
 def enrich_stations(recipes, item_tags):
     """Populate recipe_stations with every usable station for already-matched
-    recipes (game_craft_id set), for categories where a recipe can be
-    crafted more than one way - mirrors ent.b.Factory.getProduceTime
-    (src/ent/b/Factory.hx:177-181) for each building's auto/passive-queue
-    value, plus the plain manual-click value (unaffected by per-building
-    modifiers), plus the ship's on-board smelter skill for Workshop_Smelter
-    specifically. Categories with exactly one plain building are left as
-    already backfilled by `enrich()` - re-running is safe."""
+    recipes (game_craft_id set): every placed building compatible with the
+    craft (own-tag direct match, plus the Assembler's Workshop_Atelier bonus
+    - see ASSEMBLER_BONUS_TAG's docstring above) at its auto/passive-queue
+    time, plus a manual Command Center bench row for tags that have one
+    (Workshop_Atelier/Workshop_Smelter/Workshop_Seed only), plus the ship's
+    on-board smelter skill for Workshop_Smelter specifically. Always
+    recomputes the full row set for every matched recipe and overwrites -
+    re-running after a game_data_extract/ refresh is safe."""
     try:
         buildings_by_tag = load_buildings_by_tag()
     except FileNotFoundError as e:
@@ -342,30 +393,41 @@ def enrich_stations(recipes, item_tags):
         if craft is None:
             continue
         tag = craft.get("where")
-        buildings = buildings_by_tag.get(tag, [])
-        has_modifiers = any(
-            b["produce_time_factor"] != 1 or b["use_manual_crafting_time"]
-            for b in buildings
-        )
-        is_smelter = tag == "Workshop_Smelter"
-        if len(buildings) <= 1 and not has_modifiers and not is_smelter:
-            continue  # single plain station - already correctly backfilled
+        if not tag:
+            continue
 
-        base_auto_s, manual_s = resolve_craft_time(craft, item_tags)
-        category_label = item_tags.get(tag, {}).get("label") or tag
-        stations = []
-        for b in buildings:
-            produce_time = (
-                manual_s if b["use_manual_crafting_time"] else base_auto_s
-            ) * b["produce_time_factor"]
-            station_label = b["name"] if len(buildings) > 1 else category_label
-            stations.append((station_label, float(produce_time), manual_s))
-        if is_smelter:
+        own_building_rows = _building_rows(craft, item_tags, buildings_by_tag, tag)
+        stations = list(own_building_rows)
+        if tag == ASSEMBLER_BONUS_TAG:
+            stations += _building_rows(
+                craft, item_tags, buildings_by_tag, ASSEMBLER_TAG
+            )
+
+        # Manual Command Center bench, keyed off the craft's own native tag
+        # (never the Assembler-bonus substitution above) - only tags that
+        # define a manualCraftTime have one at all.
+        _, manual_s = resolve_craft_time(craft, item_tags)
+        if item_tags.get(tag, {}).get("manualCraftTime") is not None and manual_s:
+            # "Workshop" when a same-named automated building already owns
+            # the tag's own label (e.g. Workshop_Smelter's own label is
+            # "Smelter", which the freestanding Smelter building already
+            # uses) - otherwise the tag's own label is unclaimed and more
+            # specific (e.g. Workshop_Atelier -> "Workshop",
+            # Workshop_Seed -> "Seed Extractor").
+            manual_label = (
+                "Workshop"
+                if own_building_rows
+                else (item_tags.get(tag, {}).get("label") or tag)
+            )
+            stations.append((manual_label, None, manual_s))
+
+        if tag == "Workshop_Smelter" and manual_s:
             stations.append(
                 ("Ship (on-board)", None, manual_s * SHIP_ONBOARD_SMELTER_FACTOR)
             )
+
         if not stations:
-            continue
+            continue  # no modeled station for this tag - leave alone (e.g. Workshop_Building)
 
         c.execute("DELETE FROM recipe_stations WHERE recipe_id=?", (rid,))
         for st_name, auto_s, m_s in stations:
@@ -385,9 +447,7 @@ def enrich_stations(recipes, item_tags):
 
     conn.commit()
     conn.close()
-    print(
-        f"Multi-station enrichment: updated {updated} of {len(matched)} matched recipes."
-    )
+    print(f"Station enrichment: updated {updated} of {len(matched)} matched recipes.")
 
 
 def get_matched_craft_ids():
