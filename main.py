@@ -796,9 +796,20 @@ def _create_queue_window(app):
     # Underscore-prefixed: see backend/api.py's module docstring.
     app.api._queue_window = queue_window  # pylint: disable=protected-access
 
+    def on_queue_shown():
+        # See _create_wreck_tracker_window's on_wreck_tracker_shown for the
+        # full explanation - pywebview's winforms backend clips the
+        # requested Size when it switches this freshly-created Form to
+        # frameless, and queue.html's own syncGeometry() only ever grows an
+        # undersized dimension, so left uncorrected this compounds into a
+        # shrink every restart the queue window happens to be recreated on.
+        queue_window.move(qx, qy)
+        queue_window.resize(qw, qh)
+
     def on_queue_loaded():
         win32util.set_window_alpha(win32util.pywebview_hwnd(queue_window), WINDOW_ALPHA)
 
+    queue_window.events.shown += on_queue_shown
     queue_window.events.loaded += on_queue_loaded
     return queue_window
 
@@ -908,6 +919,19 @@ def main():
     # here would make it recurse into the Window/.native object graph and
     # crash on a pythonnet reflection cycle.
     api._overlay_window = window  # pylint: disable=protected-access
+
+    def on_window_shown():
+        # See _create_wreck_tracker_window's on_wreck_tracker_shown for the
+        # full explanation - pywebview's winforms backend clips the
+        # requested Size when it switches this freshly-created Form to
+        # frameless, and index.html's own syncGeometry() only ever grows an
+        # undersized dimension, so left uncorrected this compounds into a
+        # shrink every app restart. This window (unlike queue/wreck-tracker)
+        # is always created fresh in main(), so this always applies.
+        window.move(x, y)
+        window.resize(w, h)
+
+    window.events.shown += on_window_shown
 
     app = App(window, None, api)
     app.queue_visible = queue_open
