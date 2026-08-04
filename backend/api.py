@@ -710,12 +710,13 @@ class Api:
                 ),
                 "kind": db.WRECK_RESOURCE_INFO.get(resource_id, {}).get("kind"),
                 "level": db.WRECK_RESOURCE_INFO.get(resource_id, {}).get("level"),
+                "size": wreck_size,
                 "seen_count": seen_count,
                 "looted_count": looted_count,
                 "despawned_count": despawned_count,
             }
             for (
-                system_name, planet, sector, resource_id,
+                system_name, planet, sector, resource_id, wreck_size,
                 seen_count, looted_count, despawned_count,
             ) in db.get_wreck_stats()
         ]

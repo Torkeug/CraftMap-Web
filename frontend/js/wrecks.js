@@ -543,8 +543,20 @@
         // r.level is null for untiered kinds (ShipWreck_BlackBox, and the
         // SmallPiece1/SmallPiece2 hull-debris pieces - see db.py's
         // WRECK_RESOURCE_INFO) - omit the "L" suffix entirely rather than
-        // rendering the literal string "Lnull".
-        const key = r.level != null ? `${r.display_name} L${r.level}` : r.display_name;
+        // rendering the literal string "Lnull". r.size (from wreck_events'
+        // own wreck_size column, grouped separately server-side - see
+        // db.get_wreck_stats) is similarly null for sightings logged
+        // before that column existed, or where the tracker couldn't
+        // resolve a wreck's size - same "just omit it" treatment, not a
+        // guessed default. Big/Small is genuinely informative even on a
+        // crate/black-box row, not just the hull itself - it's inherited
+        // from the wreck the piece belongs to (see annotate_wreck_size_tier
+        // in the sibling repo), and size drives crate COUNT independent of
+        // tier's item-level floor.
+        const sizeLabel = r.size === "big" ? "Big" : r.size === "small" ? "Small" : null;
+        const key = [r.display_name, sizeLabel, r.level != null ? `L${r.level}` : null]
+          .filter(Boolean)
+          .join(" ");
         const agg = byResource.get(key) || { seen: 0, looted: 0, despawned: 0 };
         agg.seen += r.seen_count;
         agg.looted += r.looted_count;

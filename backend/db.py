@@ -321,14 +321,22 @@ def init_db():
     # small" stopped being a safe assumption for a long-running session.
     # Keyed by source_db_path (not a fixed single row) in case a different
     # source db path ever gets configured. Was byte_offset into a JSONL
-    # file before the 2026-08-04 SQLite migration - last_id (an
-    # AUTOINCREMENT id in the SOURCE db, not this one) replaces it
-    # end-to-end; a pre-migration db's old source_path rows simply won't
-    # match the new source_db_path key, so the very first import against
-    # the new source naturally starts from last_id=0 and re-imports
-    # everything - safe and idempotent thanks to wreck_events' own UNIQUE
-    # constraint above, not something this migration needs to handle
-    # specially.
+    # file (columns source_path/byte_offset) before the 2026-08-04 SQLite
+    # migration - last_id (an AUTOINCREMENT id in the SOURCE db, not this
+    # one) replaces it end-to-end. SAME table name, though, so `CREATE
+    # TABLE IF NOT EXISTS` alone is a no-op against an already-existing
+    # old-schema table (confirmed live: this crashed a real import with
+    # "no such column: last_id" - the table existed, just with the wrong
+    # columns) - needs an explicit drop first. Safe to just drop rather
+    # than migrate the old byte_offset value: it's meaningless once the
+    # source changed from a flat file to a row-id-keyed db, and a fresh
+    # cursor simply re-imports everything from last_id=0, which
+    # wreck_events' own UNIQUE constraint + INSERT OR IGNORE already makes
+    # idempotent even for rows already imported under the old scheme.
+    c.execute("PRAGMA table_info(wreck_event_import_cursor)")
+    cursor_cols = [row[1] for row in c.fetchall()]
+    if cursor_cols and "last_id" not in cursor_cols:
+        c.execute("DROP TABLE wreck_event_import_cursor")
     c.execute("""
         CREATE TABLE IF NOT EXISTS wreck_event_import_cursor (
             source_db_path TEXT PRIMARY KEY,
@@ -2021,27 +2029,35 @@ def import_wreck_events(rows):
 
 
 def get_wreck_stats():
-    """One row per (system_name, planet, resource_id) ever logged:
-    counts of each event_type - seen (every distinct sighting, including
-    ones later looted/despawned - a cumulative "how many have I ever
-    found here" count, not a current-count), looted, despawned. sector is
-    a best-effort lookup against galaxy_resources (None if that system
-    was never covered by a galaxy-wide dump import - see this table's own
-    docstring in init_db for why wreck_events doesn't store sector
-    itself). Caller (Api layer / frontend) rolls this up by planet/
-    system/sector as needed - already the finest useful grain per row, so
-    no separate pre-aggregated variant is needed for each rollup level.
-    Returns (system_name, planet, sector, resource_id, seen_count,
-    looted_count, despawned_count) tuples."""
+    """One row per (system_name, planet, resource_id, wreck_size) ever
+    logged: counts of each event_type - seen (every distinct sighting,
+    including ones later looted/despawned - a cumulative "how many have I
+    ever found here" count, not a current-count), looted, despawned.
+    wreck_size is grouped separately (not just carried along) because a
+    Big and Small wreck sharing the same resource_id at the same planet
+    are genuinely different sighting populations, same reasoning as
+    splitting by resource_id (crate tier) in the first place - see the
+    sibling repo's annotate_wreck_size_tier. Rows with wreck_size IS NULL
+    (sightings logged before that column existed, or a wreck whose size
+    the tracker couldn't resolve) get their own group rather than being
+    dropped or merged into a guess. sector is a best-effort lookup against
+    galaxy_resources (None if that system was never covered by a
+    galaxy-wide dump import - see this table's own docstring in init_db
+    for why wreck_events doesn't store sector itself). Caller (Api layer /
+    frontend) rolls this up by planet/system/sector as needed - already
+    the finest useful grain per row, so no separate pre-aggregated variant
+    is needed for each rollup level. Returns (system_name, planet, sector,
+    resource_id, wreck_size, seen_count, looted_count, despawned_count)
+    tuples."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""
-        SELECT system_name, planet, resource_id,
+        SELECT system_name, planet, resource_id, wreck_size,
                SUM(CASE WHEN event_type='seen' THEN 1 ELSE 0 END),
                SUM(CASE WHEN event_type='looted' THEN 1 ELSE 0 END),
                SUM(CASE WHEN event_type='despawned' THEN 1 ELSE 0 END)
         FROM wreck_events
-        GROUP BY system_name, planet, resource_id
+        GROUP BY system_name, planet, resource_id, wreck_size
         ORDER BY system_name COLLATE NOCASE, planet COLLATE NOCASE, resource_id
     """)
     rows = c.fetchall()
@@ -2051,8 +2067,8 @@ def get_wreck_stats():
     sector_by_system = dict(c.fetchall())
     conn.close()
     return [
-        (system_name, planet, sector_by_system.get(system_name), resource_id, seen, looted, despawned)
-        for (system_name, planet, resource_id, seen, looted, despawned) in rows
+        (system_name, planet, sector_by_system.get(system_name), resource_id, wreck_size, seen, looted, despawned)
+        for (system_name, planet, resource_id, wreck_size, seen, looted, despawned) in rows
     ]
 
 
