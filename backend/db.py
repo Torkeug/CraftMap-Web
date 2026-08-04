@@ -200,6 +200,7 @@ def init_db():
             attributes TEXT,
             attribute_names TEXT,
             planet_scale REAL,
+            explored INTEGER,
             UNIQUE (system_name, planet, resource)
         )
     """)
@@ -226,6 +227,15 @@ def init_db():
         # existed; treated as 1.0 (the common/default scale) wherever read,
         # not an error.
         c.execute("ALTER TABLE galaxy_resources ADD COLUMN planet_scale REAL")
+    if "explored" not in galaxy_cols:
+        # game.me.progress.systems, decoded per-planet by the sibling
+        # spacecraft-memory-research repo's dump_galaxy_resources.py - THIS
+        # player's own, personal "have I explored this" flag (distinct from
+        # resourcesGenerated/shared quadrant state). NULL for any row
+        # imported before this column existed, or where the dump itself
+        # didn't have it - treated as "unknown", not "unexplored", wherever
+        # read (see get_galaxy_sources_for_resource).
+        c.execute("ALTER TABLE galaxy_resources ADD COLUMN explored INTEGER")
     c.execute("""
         CREATE TABLE IF NOT EXISTS galaxy_systems (
             system_name TEXT PRIMARY KEY,
@@ -1253,7 +1263,7 @@ def import_galaxy_resources(rows):
     """Bulk INSERT OR IGNORE galaxy_resources rows. `rows` is a list of
     (system_name, planet, sector, resource, node_count, density, poi_tags,
     poi_area_density, is_asteroid, temperature, temperature_name, attributes,
-    attribute_names, planet_scale) tuples - poi_tags is a comma-joined
+    attribute_names, planet_scale, explored) tuples - poi_tags is a comma-joined
     string of which POI(s) that resource is tied to on that planet (e.g.
     "poi0", "poi0,poi1"), "general" if it's scattered planet-wide with no
     POI anchor, or "poi0,general" if it's split between both. poi_area_density
@@ -1282,9 +1292,13 @@ def import_galaxy_resources(rows):
     resource to convert `density` (which the game's own
     compute_display_density formula scales UP with planet size) into a true,
     physically-normalized density for general/scattered-gathering ranking.
-    These five are planet-level, not resource-level, so they repeat across
-    every resource row for the same planet - same treatment as system_name/
-    sector already get. Existing rows are left alone
+    explored (0/1/None) is THIS player's own, personal per-planet
+    exploration flag (game.me.progress.systems, decoded by the dump's own
+    read_explored_bits_by_system) - distinct from resourcesGenerated/shared
+    quadrant state, and covers ent.Asteroid slots the same as ent.Planet
+    slots. These six are planet-level, not resource-level, so they repeat
+    across every resource row for the same planet - same treatment as
+    system_name/sector already get. Existing rows are left alone
     (UNIQUE(system_name, planet, resource)), so re-running an import after
     further in-game exploration only adds new ones. Returns the number of
     rows actually inserted."""
@@ -1294,8 +1308,8 @@ def import_galaxy_resources(rows):
         "INSERT OR IGNORE INTO galaxy_resources"
         " (system_name, planet, sector, resource, node_count, density, poi_tags,"
         " poi_area_density, is_asteroid, temperature, temperature_name,"
-        " attributes, attribute_names, planet_scale)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " attributes, attribute_names, planet_scale, explored)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
@@ -1535,10 +1549,16 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     day/night/twilight filter chips are driven directly off this list, see
     js/galaxy.js's chipsForRow).
 
+    Also annotated with explored (True/False/None - None means no row for
+    this planet has ever carried the dump's own "explored" field, e.g.
+    imported before that column existed; treated as unknown, not
+    unexplored, by callers) - THIS player's own, personal per-planet
+    exploration flag, see import_galaxy_resources's own docstring.
+
     Returns (system_name, planet, sector, node_count, density, poi_tags,
     pure_poi, is_asteroid, temperature, temperature_name, attributes,
     attribute_names, poi_landmarks, poi_sun_states, poi_value, general_value,
-    effective_score, poi_value_is_exact, poi_value_poi_index) tuples,
+    effective_score, poi_value_is_exact, poi_value_poi_index, explored) tuples,
     already sorted by effective_score descending (node_count descending as a
     tiebreak)."""
     family = _resource_family(resource_name)
@@ -1548,7 +1568,7 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     query = (
         "SELECT system_name, planet, sector, node_count, density, poi_tags,"
         " is_asteroid, temperature, temperature_name,"
-        " attributes, attribute_names, planet_scale"
+        " attributes, attribute_names, planet_scale, explored"
         f" FROM galaxy_resources WHERE resource IN ({placeholders})"
     )
     params = list(family)
@@ -1596,14 +1616,14 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
     for (
         system_name, planet, sector, node_count, density, poi_tags,
         is_asteroid, temperature, temperature_name,
-        attributes, attribute_names, planet_scale,
+        attributes, attribute_names, planet_scale, explored,
     ) in rows:
         entry = combined.setdefault((system_name, planet), {
             "sector": sector, "node_count": 0, "density": 0.0,
             "poi_tag_labels": set(), "is_asteroid": is_asteroid,
             "temperature": temperature, "temperature_name": temperature_name,
             "attributes": attributes, "attribute_names": attribute_names,
-            "planet_scale": planet_scale,
+            "planet_scale": planet_scale, "explored": explored,
         })
         entry["node_count"] += node_count or 0
         entry["density"] += density or 0.0
@@ -1701,6 +1721,7 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
             "poi_sun_states": poi_sun_states, "poi_value": poi_value,
             "general_value": general_value, "poi_value_is_exact": poi_value_is_exact,
             "poi_value_poi_index": poi_value_poi_index,
+            "explored": bool(entry["explored"]) if entry["explored"] is not None else None,
         })
 
     max_poi_value = max((r["poi_value"] for r in rows_data), default=0.0)
@@ -1728,6 +1749,7 @@ def get_galaxy_sources_for_resource(resource_name, include_asteroids=True):
             r["temperature_name"], r["attributes"], r["attribute_names"],
             r["poi_landmarks"], r["poi_sun_states"], r["poi_value"], r["general_value"],
             r["effective_score"], r["poi_value_is_exact"], r["poi_value_poi_index"],
+            r["explored"],
         )
         for r in rows_data
     ]

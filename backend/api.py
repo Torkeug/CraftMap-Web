@@ -435,7 +435,11 @@ class Api:
         exact_poi_counts entries) that's actually driving this row's
         poi_value, so the frontend can point the player at that one spot
         directly rather than making them cross-reference exact_poi_counts by
-        hand."""
+        hand.
+
+        explored (True/False/None - see db.get_galaxy_sources_for_resource's
+        own docstring) passes through as-is; None means unknown, not
+        unexplored."""
         exact_by_planet = {}
         for system_name, planet, poi_index, node_count, observed_at in (
             db.get_poi_resource_node_counts_for_resource(node_name)
@@ -465,6 +469,7 @@ class Api:
                 "effective_score": effective_score,
                 "poi_value_is_exact": poi_value_is_exact,
                 "poi_value_poi_index": poi_value_poi_index,
+                "explored": explored,
             }
             for (
                 system_name, planet, sector, node_count, density, poi_tags,
@@ -472,7 +477,7 @@ class Api:
                 temperature_name, attributes, attribute_names,
                 poi_landmarks, poi_sun_states,
                 poi_value, general_value, effective_score,
-                poi_value_is_exact, poi_value_poi_index,
+                poi_value_is_exact, poi_value_poi_index, explored,
             ) in db.get_galaxy_sources_for_resource(
                 node_name, include_asteroids=not exclude_asteroids
             )

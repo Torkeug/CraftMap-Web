@@ -63,13 +63,32 @@ def test_load_rows_computes_poi_area_density_only_for_pure_poi_with_known_sizes(
     expected_density = 0.103 / poi_surface(0.1231817752122879)
     assert gray_quartz[7] == expected_density  # poi_area_density
     assert gray_quartz[8] is True  # isAsteroid passed through as-is
-    assert gray_quartz[9:] == ("PlanetHot2", "Very Hot", "PlanetHot2", "Very Hot", 0.75)
+    assert gray_quartz[9:] == ("PlanetHot2", "Very Hot", "PlanetHot2", "Very Hot", 0.75, None)
 
     # Ferric Stone is tied to poi1 AND general - not purely POI-anchored,
     # so poi_area_density must stay None even though it also has a poi tag.
     ferric_stone = by_resource["Ferric Stone"]
     assert ferric_stone[6] == "general,poi1"
     assert ferric_stone[7] is None
+
+
+def test_load_rows_passes_explored_through_as_is(tmp_path):
+    dump = [
+        {
+            "system_name": "Sys1",
+            "planet_name": "PlanetA",
+            "sector_name": "Sec1",
+            "resourceCounts": {"Gray Quartz": 13},
+            "resourceDensities": {"Gray Quartz": 0.103},
+            "explored": False,
+        },
+    ]
+    dump_path = tmp_path / "galaxy_resources.json"
+    dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+    rows = load_rows(dump_path)
+    assert rows[0][3] == "Gray Quartz"
+    assert rows[0][14] is False  # explored - last field
 
 
 def test_load_rows_leaves_poi_area_density_none_when_a_poi_size_is_missing(tmp_path):

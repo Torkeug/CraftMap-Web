@@ -91,6 +91,7 @@
   const comboInput = document.getElementById("galaxy-combo");
   const breadcrumbEl = document.getElementById("galaxy-breadcrumb");
   const asteroidCheckbox = document.getElementById("galaxy-filter-asteroids");
+  const unexploredCheckbox = document.getElementById("galaxy-filter-unexplored");
   const poiCheckbox = document.getElementById("galaxy-filter-poi");
   const mixedPoiCheckbox = document.getElementById("galaxy-filter-mixed-poi");
   const nonPoiCheckbox = document.getElementById("galaxy-filter-non-poi");
@@ -399,6 +400,17 @@
     if (state === "pure") return poiCheckbox.checked;
     if (state === "mixed") return mixedPoiCheckbox.checked;
     return nonPoiCheckbox.checked;
+  }
+
+  // row.explored is True/False/None (see backend.db.
+  // get_galaxy_sources_for_resource's own docstring) - only an explicit
+  // False (this player confirmed-unexplored, not merely "no data yet") is
+  // ever filtered out; None (unknown - no dump has carried this field for
+  // this row yet) always passes, same conservative treatment as an
+  // unconfirmed row elsewhere in this file.
+  function passesExploredFilter(row) {
+    if (row.explored === false) return unexploredCheckbox.checked;
+    return true;
   }
 
   function passesClimateFilter(row) {
@@ -732,6 +744,16 @@
       top.appendChild(pinEl);
     }
 
+    // row.explored === false only (not None/unknown) - see
+    // passesExploredFilter's own comment for why unknown never gets flagged.
+    if (row.explored === false) {
+      const unexploredEl = document.createElement("span");
+      unexploredEl.className = "galaxy-unexplored-pin";
+      unexploredEl.textContent = "UNEXPLORED";
+      unexploredEl.title = "You haven't explored this planet yet";
+      top.appendChild(unexploredEl);
+    }
+
     // Only rendered once a current system is set AND its hop-distance graph
     // has resolved (see setCurrentSystem) - shown regardless of sortMode,
     // since it's useful context even while sorted by rank. hops === null
@@ -839,7 +861,8 @@
     rowsEl.innerHTML = "";
     const visible = currentRows.filter(
       (row) =>
-        passesPoiFilter(row) && passesClimateFilter(row) && passesSunFilter(row) && passesSectorFilter(row)
+        passesPoiFilter(row) && passesClimateFilter(row) && passesSunFilter(row) &&
+        passesSectorFilter(row) && passesExploredFilter(row)
     );
     countLabelEl.textContent = currentNode
       ? `${visible.length} of ${currentRows.length} explored planets`
@@ -1082,6 +1105,8 @@
   asteroidCheckbox.addEventListener("change", () => {
     if (currentNode) loadNode(currentNode);
   });
+
+  unexploredCheckbox.addEventListener("change", () => renderRows());
 
   poiCheckbox.addEventListener("change", () => renderRows());
   mixedPoiCheckbox.addEventListener("change", () => renderRows());

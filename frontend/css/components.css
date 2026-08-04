@@ -1340,6 +1340,16 @@
   padding: 0 4px;
 }
 
+.galaxy-unexplored-pin {
+  flex: 0 0 auto;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--warn);
+  border-radius: 7px;
+  padding: 0 4px;
+}
+
 .galaxy-hops {
   flex: 0 0 auto;
   font-size: 8.5px;

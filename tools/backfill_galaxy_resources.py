@@ -46,6 +46,13 @@ Also carries over isAsteroid (ent.Asteroid debris field vs. a regular
 ent.Planet - see dump_galaxy_resources.py's own CLAUDE.md) as-is, so a
 query can filter fields out of "planet" results.
 
+Also carries over explored (THIS player's own, personal, no-travel-required
+per-planet "have I explored this" flag - game.me.progress.systems, decoded
+by dump_galaxy_resources.py's read_explored_bits_by_system - distinct from
+resourcesGenerated/shared quadrant state) as-is, so a query can flag
+never-visited planets even though they still show up via shared galaxy
+data.
+
 Also carries over temperature/temperatureName (the planet's resolved
 temperature attribute, e.g. "PlanetHot2"/"Very Hot" - always set, defaults
 to "PlanetTemperate"/"Temperate" when the planet has no explicit
@@ -227,6 +234,7 @@ def load_rows(dump_path):
         densities = p.get("resourceDensities") or {}
         poi_sizes = p.get("poiSizes") or {}
         is_asteroid = p.get("isAsteroid")
+        explored = p.get("explored")
         temperature = p.get("temperature")
         temperature_name = p.get("temperatureName")
         attributes = p.get("attributes") or []
@@ -269,6 +277,7 @@ def load_rows(dump_path):
                 ",".join(attributes) if attributes else None,
                 ",".join(attribute_names) if attribute_names else None,
                 planet_scale,
+                explored,
             ))
 
         for combo_name, combo_count, combo_density in composite_rows_for_planet(
@@ -289,6 +298,7 @@ def load_rows(dump_path):
                 ",".join(attributes) if attributes else None,
                 ",".join(attribute_names) if attribute_names else None,
                 planet_scale,
+                explored,
             ))
     return rows
 

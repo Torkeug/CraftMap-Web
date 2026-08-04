@@ -6,13 +6,15 @@ get_galaxy_sources_for_resource's returned tuple order (see its own
 docstring): (system_name, planet, sector, node_count, density, poi_tags,
 pure_poi, is_asteroid, temperature, temperature_name, attributes,
 attribute_names, poi_landmarks, poi_sun_states, poi_value, general_value,
-effective_score, poi_value_is_exact, poi_value_poi_index).
+effective_score, poi_value_is_exact, poi_value_poi_index, explored).
 
 Row tuples passed to import_galaxy_resources end with a trailing
 planet_scale field - None in most fixtures here (falls back to 1.0, a
 no-op on general_value - see get_galaxy_sources_for_resource's own
 docstring for the scale^4 derivation), except where a test explicitly
-exercises the true-density conversion."""
+exercises the true-density conversion - followed by a trailing explored
+field, None in every fixture here (unknown - no test here exercises the
+explored filter itself)."""
 
 import os
 import sys
@@ -41,6 +43,7 @@ GENERAL_VALUE = 15
 EFFECTIVE_SCORE = 16
 POI_VALUE_IS_EXACT = 17
 POI_VALUE_POI_INDEX = 18
+EXPLORED = 19
 
 
 @pytest.fixture
@@ -53,7 +56,7 @@ def db(tmp_path, monkeypatch):
 def test_import_is_idempotent(db):
     rows = [(
         "Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0", None, 0,
-        "PlanetTemperate", "Temperate", None, None, None,
+        "PlanetTemperate", "Temperate", None, None, None, None,
     )]
     assert db.import_galaxy_resources(rows) == 1
     assert db.import_galaxy_resources(rows) == 0
@@ -67,9 +70,9 @@ def test_get_galaxy_sources_pure_single_poi_ranks_by_raw_node_count(db):
     # count simply wins.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Iron", 90, 0.4, "poi0", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
         ("Sys2", "PlanetB", "Sec1", "Iron", 20, 4.7, "poi0", None, 1,
-         "PlanetHot1", "Hot", None, None, None),
+         "PlanetHot1", "Hot", None, None, None, None),
     ])
     results = db.get_galaxy_sources_for_resource("Iron")
     assert [r[PLANET] for r in results] == ["PlanetA", "PlanetB"]
@@ -89,9 +92,9 @@ def test_get_galaxy_sources_general_rows_still_rank_by_density(db):
     # sparse one, same as always for plain scattered gathering.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Graphite", 10, 5.0, "general", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
         ("Sys2", "PlanetB", "Sec1", "Graphite", 1000, 0.1, "general", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     results = db.get_galaxy_sources_for_resource("Graphite")
     assert [r[PLANET] for r in results] == ["PlanetA", "PlanetB"]
@@ -110,9 +113,9 @@ def test_get_galaxy_sources_general_value_uses_true_density_not_display_density(
     # converted, not tied.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Graphite", 100, 2.0, "general", None, 0,
-         "PlanetTemperate", "Temperate", None, None, 1.0),
+         "PlanetTemperate", "Temperate", None, None, 1.0, None),
         ("Sys2", "PlanetB", "Sec1", "Graphite", 100, 2.0, "general", None, 0,
-         "PlanetTemperate", "Temperate", None, None, 0.5),
+         "PlanetTemperate", "Temperate", None, None, 0.5, None),
     ])
     results = db.get_galaxy_sources_for_resource("Graphite")
     by_planet = {r[PLANET]: r for r in results}
@@ -131,9 +134,9 @@ def test_get_galaxy_sources_confirmed_mixed_poi_credit_is_scale_independent(db):
     # buried behind an unrelated general-only planet.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Aquamarine", 1000, 0.01, "general,poi0", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
         ("Sys2", "PlanetB", "Sec1", "Aquamarine", 50, 0.5, "general", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     db.import_poi_resource_nodes([
         ("Sys1", "PlanetA", "poi0", "Aquamarine", 900, "2026-07-23T00:00:00+00:00"),
@@ -170,11 +173,11 @@ def test_get_galaxy_sources_downweights_general_ratio_when_general_population_ba
         # mixed: confirmed poi0=40 out of node_count=100 -> general leftover
         # 60 * density_per_node(1.0/100=0.01) = general_value 0.6
         ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "general,poi0", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
         ("Sys2", "PlanetB", "Sec1", "Iron", 100, 0.5, "general", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
         ("Sys3", "PlanetC", "Sec1", "Iron", 30, 1.0, "poi0", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     db.import_poi_resource_nodes([
         ("Sys1", "PlanetA", "poi0", "Iron", 40, "2026-07-23T00:00:00+00:00"),
@@ -196,7 +199,7 @@ def test_get_galaxy_sources_discrimination_weight_defaults_to_full_with_one_samp
     # above.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "general,poi0", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     db.import_poi_resource_nodes([
         ("Sys1", "PlanetA", "poi0", "Iron", 40, "2026-07-23T00:00:00+00:00"),
@@ -214,9 +217,9 @@ def test_get_galaxy_sources_unconfirmed_mixed_row_falls_back_to_plain_density(db
     # POI-anchored at all, until someone actually visits and confirms it.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Aquamarine", 100, 1.0, "general,poi0", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
         ("Sys2", "PlanetB", "Sec1", "Aquamarine", 100, 1.0, "general", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     results = db.get_galaxy_sources_for_resource("Aquamarine")
     by_planet = {r[PLANET]: r for r in results}
@@ -233,7 +236,7 @@ def test_get_galaxy_sources_pure_multi_poi_unconfirmed_ranks_on_full_total(db):
     # than being zeroed out for lack of a per-POI split.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     results = db.get_galaxy_sources_for_resource("Iron")
     assert results[0][POI_VALUE] == pytest.approx(100)
@@ -250,7 +253,7 @@ def test_get_galaxy_sources_pure_multi_poi_unconfirmed_remainder_can_still_domin
     # player at yet.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     db.import_poi_resource_nodes([
         ("Sys1", "PlanetA", "poi0", "Iron", 10, "2026-07-23T00:00:00+00:00"),
@@ -268,7 +271,7 @@ def test_get_galaxy_sources_pure_multi_poi_confirmed_remainder_can_be_pointed_at
     # it as the real spot worth visiting.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     db.import_poi_resource_nodes([
         ("Sys1", "PlanetA", "poi0", "Iron", 90, "2026-07-23T00:00:00+00:00"),
@@ -288,9 +291,9 @@ def test_get_galaxy_sources_rewards_concentration_over_an_even_spread(db):
     # same planet, not nothing.
     db.import_galaxy_resources([
         ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1,poi2,poi3", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
         ("Sys2", "PlanetB", "Sec1", "Iron", 100, 1.0, "poi0,poi1,poi2,poi3", None, 0,
-         "PlanetTemperate", "Temperate", None, None, None),
+         "PlanetTemperate", "Temperate", None, None, None, None),
     ])
     db.import_poi_resource_nodes([
         ("Sys1", "PlanetA", "poi0", "Iron", 70, "2026-07-23T00:00:00+00:00"),
@@ -313,11 +316,11 @@ def test_get_galaxy_sources_can_exclude_asteroids(db):
     db.import_galaxy_resources([
         (
             "Sys1", "PlanetA", "Sec1", "Iron", 100, 5.0, "general", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
         (
             "Sys2", "AST-1A2", "Sec1", "Iron", 200, 8.0, "general", None, 1,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
     ])
     with_asteroids = db.get_galaxy_sources_for_resource("Iron")
@@ -345,16 +348,16 @@ def test_get_galaxy_sources_combines_size_variants_on_the_same_planet(db):
         # is simply the combined total.
         (
             "Sys1", "PlanetA", "Sec1", "Coal Clump", 100, 1.0, "poi0", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
         (
             "Sys1", "PlanetA", "Sec1", "Big Coal Clump", 50, 0.5, "poi0", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
         # a different planet with only the base resource - unaffected
         (
             "Sys2", "PlanetB", "Sec1", "Coal Clump", 200, 2.5, "general", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
     ])
     # queryable by either the base name or the variant's own name
@@ -375,13 +378,13 @@ def test_get_galaxy_sources_combines_differing_poi_tags_into_a_mixed_row(db):
     db.import_galaxy_resources([
         (
             "Sys1", "PlanetA", "Sec1", "Coal Clump", 100, 1.0, "poi0", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
         # same planet, but this variant is scattered ("general") rather than
         # tied to poi0 - the combined row is now genuinely mixed
         (
             "Sys1", "PlanetA", "Sec1", "Big Coal Clump", 50, 0.5, "general", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
     ])
     results = db.get_galaxy_sources_for_resource("Coal Clump")
@@ -400,7 +403,7 @@ def test_get_galaxy_sources_attaches_matching_poi_landmarks_only(db):
         # anchored at poi0 AND poi1 - only poi0 has a landmark
         (
             "Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
     ])
     db.import_galaxy_poi_landmarks([
@@ -422,7 +425,7 @@ def test_get_galaxy_sources_reports_mixed_sun_states_across_pois(db):
     db.import_galaxy_resources([
         (
             "Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0,poi1", None, 0,
-            "PlanetTemperate", "Temperate", None, None, None,
+            "PlanetTemperate", "Temperate", None, None, None, None,
         ),
     ])
     db.import_galaxy_poi_landmarks([
