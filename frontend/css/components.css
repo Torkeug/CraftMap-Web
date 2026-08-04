@@ -845,8 +845,33 @@
   padding: 0 4px;
 }
 
+.source-row.source-row-header .source-row-name {
+  margin: 0;
+}
+
 .source-row.source-row-header .col-hint {
-  width: 60px;
+  /* flex: 0 0 60px (not shrink:1's default) pins the box to exactly the
+     data columns' own 60px width, no matter how wide the label text or its
+     sort arrow gets - nowrap keeps that text on one line, overflowing
+     leftward into the name column's slack space instead of wrapping under
+     itself or dragging the *other* header out of alignment with its own
+     data column. */
+  flex: 0 0 60px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.source-row.source-row-header .col-hint.sortable {
+  cursor: pointer;
+}
+
+.source-row.source-row-header .col-hint.sortable:hover {
+  color: var(--text);
+}
+
+.source-row.source-row-header .col-hint.sort-active {
+  color: var(--accent);
 }
 
 .source-row-name {

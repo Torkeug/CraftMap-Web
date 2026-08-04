@@ -14,6 +14,44 @@
 (function () {
   const sourcesCombo = document.getElementById("sources-combo");
   const rowsEl = document.getElementById("sources-rows");
+  const sortHeaders = {
+    concentration: document.getElementById("sources-sort-concentration"),
+    expected_qty: document.getElementById("sources-sort-expected_qty"),
+  };
+
+  // Sources come back from the backend already sorted (concentration desc,
+  // name), but both columns are worth sorting by - a resource with lots of
+  // near-tied concentrations is exactly the case expected_qty exists to
+  // break, so re-sorting by it needs to be just as easy. Re-sorts the
+  // already-fetched list client-side rather than re-querying, since both
+  // fields are already present on every row.
+  let currentSources = [];
+  let sortState = { key: "concentration", dir: "desc" };
+
+  function compareSortValue(a, b, key, dir) {
+    const av = a[key];
+    const bv = b[key];
+    const aNull = av === null || av === undefined;
+    const bNull = bv === null || bv === undefined;
+    if (aNull && bNull) return 0;
+    if (aNull) return 1; // nulls always sort last, regardless of direction
+    if (bNull) return -1;
+    return dir === "asc" ? av - bv : bv - av;
+  }
+
+  function sortedSources() {
+    return [...currentSources].sort((a, b) =>
+      compareSortValue(a, b, sortState.key, sortState.dir)
+    );
+  }
+
+  function updateSortHeaders() {
+    for (const [key, el] of Object.entries(sortHeaders)) {
+      el.classList.toggle("sort-active", key === sortState.key);
+      const arrow = key === sortState.key ? (sortState.dir === "asc" ? " ▲" : " ▼") : "";
+      el.textContent = (key === "concentration" ? "Concentration" : "Avg Qty") + arrow;
+    }
+  }
 
   function fmtConcentration(concentration) {
     if (concentration === null || concentration === undefined) return "";
@@ -63,20 +101,24 @@
     return rowEl;
   }
 
-  async function loadResource(name) {
-    sourcesCombo.value = name;
+  function renderRows() {
     rowsEl.innerHTML = "";
-    const sources = await CraftMapApi.call("get_resource_sources", name);
-    if (!sources.length) {
+    if (!currentSources.length) {
       const emptyEl = document.createElement("div");
       emptyEl.className = "source-row source-row-empty";
       emptyEl.textContent = "No known sources for this resource yet.";
       rowsEl.appendChild(emptyEl);
       return;
     }
-    for (const s of sources) {
+    for (const s of sortedSources()) {
       rowsEl.appendChild(makeRow(s.name, s.concentration, s.expected_qty));
     }
+  }
+
+  async function loadResource(name) {
+    sourcesCombo.value = name;
+    currentSources = await CraftMapApi.call("get_resource_sources", name);
+    renderRows();
   }
 
   async function onSourcesComboCommit() {
@@ -101,6 +143,20 @@
     sourcesCombo.addEventListener("keydown", (e) => {
       if (e.key === "Enter") onSourcesComboCommit();
     });
+    for (const [key, el] of Object.entries(sortHeaders)) {
+      el.addEventListener("click", () => {
+        // Both columns default to "biggest first" on first click of a new
+        // column - that's the useful direction for either (highest
+        // concentration or highest expected yield is the better source).
+        sortState =
+          sortState.key === key
+            ? { key, dir: sortState.dir === "desc" ? "asc" : "desc" }
+            : { key, dir: "desc" };
+        updateSortHeaders();
+        renderRows();
+      });
+    }
+    updateSortHeaders();
   }
 
   init();
