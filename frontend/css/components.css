@@ -1540,7 +1540,8 @@
   display: none;
 }
 
-#wrecks-search {
+#wrecks-search,
+#wrecks-secondary-search {
   flex: 1 1 auto;
   min-width: 0;
   box-sizing: border-box;
@@ -1553,13 +1554,23 @@
   font-size: 12px;
 }
 
-#wrecks-search::placeholder {
+#wrecks-search::placeholder,
+#wrecks-secondary-search::placeholder {
   color: var(--faint);
 }
 
-#wrecks-search:focus {
+#wrecks-search:focus,
+#wrecks-secondary-search:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Only meaningful in By Sector mode (secondary loot isn't browsable in By
+   Item mode) - js/wrecks.js toggles this alongside mode switches, separate
+   from #wrecks-search-row's own hidden class (which only hides for Live
+   Tracking) since #wrecks-search itself must stay visible in By Item mode. */
+#wrecks-secondary-search.hidden {
+  display: none;
 }
 
 #wrecks-cat-filter {

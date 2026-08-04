@@ -108,6 +108,25 @@ for review before you decide how to merge.
     `crateSpawn` (P(a wreck here has a rare loot crate at all) — a full
     crate-*count* distribution, since a single wreck can hold more than
     one).
+  - `sectors[*].secondaryItemPool`: a DIFFERENT loot channel from
+    `itemDropOdds`/`wreckSiteItemOdds` below (Patch/Blueprint only) — every
+    rare crate also always attempts to fill a separate value budget with a
+    Material/Manufactured/Luxury-category item, a second generation pass
+    independent of the primary Patch/Blueprint roll
+    (`secondaryItemTypes==14` on every `ShipWreck_Loot_4..9` row — see
+    `game_logic_notes.md` Finding 25 Part B for the full trace, including
+    the confirmed flag→`itemType` mapping). Each entry is *eligible*, not a
+    drop probability: an item's own `lootLevel` must be within this
+    sector's own reach, and (if it has any) every one of its own
+    `item.props.lootMaterial` requirements must be present in this
+    sector's `secondaryMaterialPool` (Finding 25 Part A — confirmed both
+    via raw opcodes and via `item@props.lootMaterial`'s own `data.cdb`
+    column documentation). The real per-crate pick is a repeated random-
+    draw budget-fill loop (`Loot.generate`'s secondary-slot loop, tuned by
+    the `constant` sheet's `Loot_Secondary_Overflow`/
+    `Loot_Secondary_SmallestStack`) that isn't simulated here, so there's
+    no per-item pct/expected-per-wreck for this channel yet, unlike the
+    primary items below.
   - `itemDropOdds.patches` / `itemDropOdds.blueprints`: per-item drop
     probability by sector, sectors pre-grouped wherever the odds land on the
     same number. The concrete Patch pool is `item.type=Patch` rows with their

@@ -1,6 +1,7 @@
 /* Wrecks screen: a browsable tree of shipwreck rare-loot-crate odds, typed
  * search narrowing/auto-expanding it - not a "pick one, see its own detail
- * panel" combo, since with only ~18 sectors / ~150 items total (see
+ * panel" combo, since with only ~18 sectors / ~150 Patch+Blueprint items
+ * (plus each sector's own secondary-loot eligible-item list - see
  * backend/shipwreck_loot.py's own module docstring) the whole dataset is
  * cheap to hold client-side and browse directly, same as js/deposits.js's
  * own tree (whose tree-node/tree-row/disclosure/tree-children/tree-label
@@ -30,6 +31,7 @@
   const modeItemBtn = document.getElementById("wrecks-mode-item");
   const modeLiveBtn = document.getElementById("wrecks-mode-live");
   const searchInput = document.getElementById("wrecks-search");
+  const secondarySearchInput = document.getElementById("wrecks-secondary-search");
   const searchRowEl = document.getElementById("wrecks-search-row");
   const treeEl = document.getElementById("wrecks-tree");
   const filterPatch = document.getElementById("wrecks-filter-patch");
@@ -67,6 +69,20 @@
 
   function matchesQuery(text, q) {
     return !q || text.toLowerCase().includes(q);
+  }
+
+  // Every distinct secondary-loot item name across every sector's own
+  // secondary_item_pool, deduped - backs the #wrecks-secondary-search
+  // LiveDropdown (see init()) and is recomputed fresh each call rather
+  // than cached, since it's cheap (<200 names) and this only runs on
+  // focus/keystroke, not per render.
+  function allSecondaryItemNames() {
+    if (!sectorsData) return [];
+    const names = new Set();
+    for (const sector of sectorsData) {
+      for (const item of sector.secondary_item_pool) names.add(item.name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
   }
 
   // "62% Small · 38% Big" - the ONE thing that actually varies by sector
@@ -197,7 +213,11 @@
   }
 
   // ---- Sector mode: Sector > (summary lines) > loot-level header > item ----
-  function buildSectorTree(q) {
+  // q filters by sector name or Patch/Blueprint item name (the original
+  // field); sq is a SEPARATE, independent filter scoped only to
+  // secondary-loot item names (see #wrecks-secondary-search in init()) -
+  // a sector must pass both (each defaults to "pass" when empty) to show.
+  function buildSectorTree(q, sq) {
     const showPatch = filterPatch.checked;
     const showBlueprint = filterBlueprint.checked;
     const roots = [];
@@ -210,6 +230,11 @@
         ? items
         : items.filter((it) => matchesQuery(it.name, q));
       if (q && visibleItems.length === 0) continue;
+
+      const visibleSecondaryItems = sq
+        ? sector.secondary_item_pool.filter((it) => matchesQuery(it.name, sq))
+        : sector.secondary_item_pool;
+      if (sq && visibleSecondaryItems.length === 0) continue;
 
       // Item levels actually obtainable here (not sector.loot_level_probability's
       // own crate-TARGET-level distribution, shown below in the summary line -
@@ -256,12 +281,41 @@
           makeSummaryNode(`Wreck mix: ${sizeDistText}`, "loc_sum")
         );
       }
-      sectorNode.children.push(
-        makeSummaryNode(
-          `Secondary materials: ${sector.secondary_material_pool.join(", ")}`,
-          "loc_sum"
-        )
-      );
+      // Every rare crate ALSO always attempts a second, independent
+      // Material/Manufactured/Luxury item pick alongside its primary
+      // Patch/Blueprint roll - see backend/shipwreck_loot.py's
+      // get_all_sectors docstring and game_logic_notes.md Finding 25 Part
+      // B. This is an ELIGIBLE-item list, not drop odds (no simulated pct
+      // for this channel yet) - nested under its own collapsible group,
+      // separate from the Patch/Blueprint items below, since it can run to
+      // dozens of entries and answers a different question ("what could
+      // this sector's crates ALSO contain") than the primary odds do.
+      // Deliberately NOT shown: sector.secondary_material_pool (the raw
+      // material whitelist) or each item's own required_materials - both
+      // are just this list's own eligibility filter restated, so once an
+      // item is already showing here its requirements are satisfied by
+      // construction; surfacing them adds no decision-relevant info for
+      // "what can I get here," only mechanism noise. Both fields still
+      // exist in the API/JSON (see backend/shipwreck_loot.py) since
+      // they're the actual audit trail for why the list looks the way it
+      // does - just not surfaced in this UI.
+      if (visibleSecondaryItems.length) {
+        const secondaryGroup = makeGroupNode(
+          `wsec-2nd|${sector.name}`,
+          "Secondary loot (eligible, not weighted odds)",
+          "loc_sum",
+          `${visibleSecondaryItems.length} items`
+        );
+        let secondaryLevel = null;
+        for (const item of visibleSecondaryItems) {
+          if (item.level !== secondaryLevel) {
+            secondaryLevel = item.level;
+            secondaryGroup.children.push(makeSummaryNode(`Loot level ${secondaryLevel}:`, "loc_sum"));
+          }
+          secondaryGroup.children.push(makeLeafNode(item.name, "planet", null));
+        }
+        sectorNode.children.push(secondaryGroup);
+      }
 
       // Grouped by loot level as a plain divider, not a nested collapsible
       // group - see the divider's own note in the item loop below for why
@@ -347,18 +401,23 @@
   // ---- shared render/filter ----
   function render() {
     const q = searchInput.value.trim().toLowerCase();
+    const sq = mode === "sector" ? secondarySearchInput.value.trim().toLowerCase() : "";
     treeEl.innerHTML = "";
 
-    if (!filterPatch.checked && !filterBlueprint.checked) {
+    // Item mode's whole content IS Patch/Blueprint, so nothing left to show
+    // with both off. Sector mode has secondary loot as an independent
+    // channel (unaffected by these checkboxes - see buildSectorTree), so
+    // this gate must not block it there.
+    if (mode !== "sector" && !filterPatch.checked && !filterBlueprint.checked) {
       treeEl.appendChild(makeMessageRow("No categories selected."));
       return;
     }
-    const roots = mode === "sector" ? buildSectorTree(q) : buildItemTree(q);
+    const roots = mode === "sector" ? buildSectorTree(q, sq) : buildItemTree(q);
     if (!roots.length) {
       treeEl.appendChild(makeMessageRow("No matches."));
       return;
     }
-    const forceExpand = q.length > 0;
+    const forceExpand = q.length > 0 || sq.length > 0;
     for (const node of roots) {
       treeEl.appendChild(renderTreeNode(node, forceExpand));
     }
@@ -380,6 +439,7 @@
     modeItemBtn.classList.toggle("active", mode === "item");
     modeLiveBtn.classList.toggle("active", mode === "live");
     searchRowEl.classList.toggle("hidden", mode === "live");
+    secondarySearchInput.classList.toggle("hidden", mode !== "sector");
     treeEl.classList.toggle("hidden", mode === "live");
     crateStatsRowEl.classList.toggle("hidden", mode !== "sector");
     liveViewEl.classList.toggle("hidden", mode !== "live");
@@ -480,7 +540,11 @@
               ? r.system_name
               : `${r.system_name} - ${r.planet}`;
         const byResource = groups.get(label) || new Map();
-        const key = `${r.display_name} L${r.level}`;
+        // r.level is null for untiered kinds (ShipWreck_BlackBox, and the
+        // SmallPiece1/SmallPiece2 hull-debris pieces - see db.py's
+        // WRECK_RESOURCE_INFO) - omit the "L" suffix entirely rather than
+        // rendering the literal string "Lnull".
+        const key = r.level != null ? `${r.display_name} L${r.level}` : r.display_name;
         const agg = byResource.get(key) || { seen: 0, looted: 0, despawned: 0 };
         agg.seen += r.seen_count;
         agg.looted += r.looted_count;
@@ -673,6 +737,11 @@
     modeItemBtn.addEventListener("click", () => setMode("item"));
     modeLiveBtn.addEventListener("click", () => setMode("live"));
     searchInput.addEventListener("input", render);
+    secondarySearchInput.addEventListener("input", render);
+    // getValues re-reads sectorsData fresh each open rather than snapshotting
+    // it here - harmless since it's only ever populated once (sector mode's
+    // ensureDataLoaded), but keeps this resilient if that ever changes.
+    new LiveDropdown(secondarySearchInput, { getValues: allSecondaryItemNames, onSelect: render });
     filterPatch.addEventListener("change", render);
     filterBlueprint.addEventListener("change", render);
   }

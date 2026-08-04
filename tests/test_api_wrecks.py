@@ -43,6 +43,31 @@ def test_get_wreck_sectors_items_grouped_and_sorted():
         # always be populated for a sector's own item rows.
         assert isinstance(item["expected_per_wreck"], (int, float))
         assert isinstance(item["at_least_one_pct"], (int, float))
+
+
+def test_get_wreck_sectors_secondary_item_pool():
+    """secondary_item_pool is a different loot channel from items (Patch/
+    Blueprint only) - every rare crate also always attempts a separate
+    Material/Manufactured/Luxury item pick, gated by lootLevel and by the
+    sector's own secondary_material_pool (see get_all_sectors docstring
+    and game_logic_notes.md Finding 25 Part B). Eligible-item list, not
+    odds - no pct/expected_per_wreck for this channel."""
+    api = Api()
+    sectors = api.get_wreck_sectors()
+    threshold = next(s for s in sectors if s["name"] == "Threshold")
+    assert threshold["secondary_item_pool"], "Threshold should have at least one eligible secondary item"
+    levels = [i["level"] for i in threshold["secondary_item_pool"]]
+    assert levels == sorted(levels)
+    for item in threshold["secondary_item_pool"]:
+        assert isinstance(item["name"], str) and item["name"]
+        assert isinstance(item["level"], int)
+        assert isinstance(item["required_materials"], list)
+        # every required material must be one Threshold's own pool actually
+        # has - that's the eligibility gate itself (see build_secondary_
+        # item_pool/compute_secondary_items_by_sector in
+        # shipbuilder/tools/extract_shipwreck_loot.py).
+        if item["required_materials"]:
+            assert set(item["required_materials"]) <= set(threshold["secondary_material_pool"])
     levels = [i["level"] for i in threshold["items"]]
     assert levels == sorted(levels)
 

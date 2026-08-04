@@ -17,7 +17,7 @@ Both getters below return their FULL dataset (every sector / every item) in
 one call rather than a names-only list plus a per-name detail lookup: the
 frontend builds a browsable tree from the whole thing and filters/expands
 it client-side as the user types, so a second round trip per node the user
-expands would just be latency with no benefit - this data is small (~150KB
+expands would just be latency with no benefit - this data is small (~450KB
 raw JSON) and static, unlike the recipe tree's own depth-limited/on-demand
 scheme in resolver.py (which exists because a recipe tree can be deep and
 its per-node cost is real DB/graph work, neither of which applies here).
@@ -143,6 +143,18 @@ def get_all_sectors():
     are wreckSiteItemOdds's (fold in the sector's own crate-count mix too -
     see _wreck_site_lookup and shipwreck_loot_integration.md).
 
+    secondary_item_pool is a DIFFERENT loot channel from items above (which
+    is Patch/Blueprint only) - every rare crate ALSO always attempts to
+    fill a separate value budget with Material/Manufactured/Luxury-category
+    items, a second generation pass independent of the primary Patch/
+    Blueprint roll - see shipbuilder/tools/game_logic_notes.md Finding 25
+    Part B. Each entry here is ELIGIBLE (own lootLevel within this sector's
+    reach, and its own required_materials - if any - all present in this
+    sector's secondary_material_pool), not a drop probability: unlike
+    items above, there is no per-item pct/expected_per_wreck for this
+    channel, since the real pick is a repeated random-draw budget-fill loop
+    that hasn't been simulated (Finding 25 Part B's own open item).
+
     wreck_size_counts is the {"Big": n, "Small": m} count of wreck-size
     variants in this sector's own generation table - THIS is what varies
     by sector, unlike crate_spawn_by_size's own per-size figures (which are
@@ -186,6 +198,16 @@ def get_all_sectors():
                 "loot_level_probability": sector["lootLevelProbability"],
                 "secondary_material_pool": [
                     SECONDARY_MATERIAL_NAMES.get(m, m) for m in sector["secondaryMaterialPool"]
+                ],
+                "secondary_item_pool": [
+                    {
+                        "name": item["name"],
+                        "level": item["level"],
+                        "required_materials": [
+                            SECONDARY_MATERIAL_NAMES.get(m, m) for m in item["requiredMaterials"]
+                        ],
+                    }
+                    for item in sector["secondaryItemPool"]
                 ],
                 "crate_spawn_at_least_one": crate_spawn["atLeastOne"],
                 "crate_spawn_expected_count": crate_spawn["expectedCount"],
