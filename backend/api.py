@@ -342,14 +342,19 @@ class Api:
 
     def get_resource_sources(self, resource_name):
         return [
-            {"name": n, "concentration": c}
-            for n, c in db.get_resource_sources(resource_name)
+            {"name": n, "concentration": c, "expected_qty": eq}
+            for n, c, eq in db.get_resource_sources(resource_name)
         ]
 
     def set_resource_sources(self, resource_name, sources):
-        """sources: [{name, concentration}] - concentration may be None."""
+        """sources: [{name, concentration, expected_qty}] - concentration
+        and expected_qty may be None."""
         db.set_resource_sources(
-            resource_name, [(s["name"], s.get("concentration")) for s in sources]
+            resource_name,
+            [
+                (s["name"], s.get("concentration"), s.get("expected_qty"))
+                for s in sources
+            ],
         )
         return True
 

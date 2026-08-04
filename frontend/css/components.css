@@ -853,7 +853,8 @@
   flex: 1 1 auto;
 }
 
-.source-row-conc {
+.source-row-conc,
+.source-row-qty {
   width: 60px;
   color: var(--muted);
   text-align: right;

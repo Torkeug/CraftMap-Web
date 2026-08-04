@@ -86,7 +86,7 @@ def test_resource_sources_round_trip(api):
         api.set_resource_sources(
             "a-Carbon",
             [
-                {"name": "Coal Clump", "concentration": 25.0},
+                {"name": "Coal Clump", "concentration": 25.0, "expected_qty": 3.6},
                 {"name": "Vitreous Carbon", "concentration": None},
             ],
         )
@@ -96,8 +96,8 @@ def test_resource_sources_round_trip(api):
     json.dumps(sources)
     # Highest concentration first; nulls sort last.
     assert sources == [
-        {"name": "Coal Clump", "concentration": 25.0},
-        {"name": "Vitreous Carbon", "concentration": None},
+        {"name": "Coal Clump", "concentration": 25.0, "expected_qty": 3.6},
+        {"name": "Vitreous Carbon", "concentration": None, "expected_qty": None},
     ]
 
 
@@ -112,7 +112,7 @@ def test_set_resource_sources_replaces_and_dedupes(api):
         ],
     )
     assert api.get_resource_sources("a-Carbon") == [
-        {"name": "Vitreous Carbon", "concentration": 10}
+        {"name": "Vitreous Carbon", "concentration": 10, "expected_qty": None}
     ]
 
 

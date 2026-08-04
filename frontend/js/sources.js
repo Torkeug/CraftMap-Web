@@ -21,6 +21,17 @@
     return `${rounded}%`;
   }
 
+  // Concentration is a *relative* share among a node's same-kind siblings -
+  // two different items at two different nodes can land on the exact same
+  // % by coincidence. expectedQty is the average quantity actually
+  // obtained per harvest of that node (the same number the game's own
+  // Encyclopedia shows next to each contained item), an absolute figure
+  // that breaks those ties - see tools/backfill_resource_sources.py.
+  function fmtExpectedQty(expectedQty) {
+    if (expectedQty === null || expectedQty === undefined) return "";
+    return expectedQty.toFixed(2);
+  }
+
   // Source nodes here are node TYPES (e.g. "Clay Shell"), a completely
   // different namespace from the raw material being searched for (e.g.
   // "Aquamarine") - galaxy_resources only ever holds live per-node
@@ -29,7 +40,7 @@
   // single link off the search box can't work: two different node rows
   // for the same raw material can have completely unrelated galaxy
   // rankings. Double-clicking a specific row is the only correct link.
-  function makeRow(name, concentration) {
+  function makeRow(name, concentration, expectedQty) {
     const rowEl = document.createElement("div");
     rowEl.className = "source-row linkable";
     rowEl.title = "Double-click to see where this node has been found";
@@ -41,6 +52,10 @@
     concEl.className = "source-row-conc";
     concEl.textContent = fmtConcentration(concentration);
     rowEl.appendChild(concEl);
+    const qtyEl = document.createElement("span");
+    qtyEl.className = "source-row-qty";
+    qtyEl.textContent = fmtExpectedQty(expectedQty);
+    rowEl.appendChild(qtyEl);
     rowEl.addEventListener("dblclick", () => {
       document.getElementById("tab-resource").click();
       window.DepositsTabs.showGalaxyForNode(name, sourcesCombo.value.trim());
@@ -60,7 +75,7 @@
       return;
     }
     for (const s of sources) {
-      rowsEl.appendChild(makeRow(s.name, s.concentration));
+      rowsEl.appendChild(makeRow(s.name, s.concentration, s.expected_qty));
     }
   }
 
