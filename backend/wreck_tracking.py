@@ -21,11 +21,13 @@ def resolve_paths(script_path):
     """(live_out, events_out, state_file) paths matching live_tracker.py's
     own argparse defaults (all alongside the script itself, see its
     module docstring) - CraftMap and the poller agree on where to look
-    with zero extra config beyond the one script_path setting."""
+    with zero extra config beyond the one script_path setting. events_out
+    is event_log.db (SQLite) as of the 2026-08-04 migration off an
+    earlier wreck_events.jsonl - see backend/wreck_import.py."""
     script_dir = Path(script_path).resolve().parent
     return (
         script_dir / "current_planet_wrecks.json",
-        script_dir / "wreck_events.jsonl",
+        script_dir / "event_log.db",
         script_dir / "wreck_tracker_state.json",
     )
 

@@ -181,8 +181,11 @@ def init_db():
         )
     """)
     c.execute("PRAGMA table_info(resource_sources)")
-    if "concentration" not in [row[1] for row in c.fetchall()]:
+    resource_sources_cols = [row[1] for row in c.fetchall()]
+    if "concentration" not in resource_sources_cols:
         c.execute("ALTER TABLE resource_sources ADD COLUMN concentration REAL")
+    if "expected_qty" not in resource_sources_cols:
+        c.execute("ALTER TABLE resource_sources ADD COLUMN expected_qty REAL")
     c.execute("""
         CREATE TABLE IF NOT EXISTS galaxy_resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -264,8 +267,10 @@ def init_db():
     # Live shipwreck-hull/crate sighting log - see the sibling
     # spacecraft-memory-research repo's live_tracker.py (a long-running
     # poller, not a one-shot dump like dump_galaxy_resources.py) and
-    # tools/import_wreck_events.py, which reads its JSONL event log into
-    # this table. Deliberately an EVENT LOG (one row per sighting/loot/
+    # tools/import_wreck_events.py, which reads its event_log_db (SQLite,
+    # `wreck_events` table - migrated 2026-08-04 off an earlier
+    # wreck_events.jsonl, see that repo's RESEARCH_LOG.md) into this
+    # table. Deliberately an EVENT LOG (one row per sighting/loot/
     # despawn), not a live-position table: unlike galaxy_resources (exact
     # counts that stay true once recorded), a wreck's exact position goes
     # stale the moment it despawns or gets looted - CRAFTMAP_INTEGRATION.md
@@ -281,7 +286,11 @@ def init_db():
     # resolved via a lookup against galaxy_resources at query time (see
     # get_wreck_stats), since deriving it live would need the same
     # full-galaxy voting pass dump_galaxy_resources.py runs, which the
-    # lightweight poller deliberately doesn't duplicate.
+    # lightweight poller deliberately doesn't duplicate. wreck_size/
+    # wreck_tier (added alongside the SQLite migration) come straight from
+    # the sibling repo's own annotate_wreck_size_tier - NULL for events
+    # logged before that existed, or wherever it couldn't resolve either
+    # axis for a given wreck.
     c.execute("""
         CREATE TABLE IF NOT EXISTS wreck_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -289,6 +298,8 @@ def init_db():
             planet TEXT NOT NULL,
             resource_id TEXT NOT NULL,
             event_type TEXT NOT NULL,
+            wreck_size TEXT,
+            wreck_tier INTEGER,
             x REAL,
             y REAL,
             z REAL,
@@ -296,18 +307,32 @@ def init_db():
             UNIQUE (system_name, planet, resource_id, event_type, observed_at, x, y, z)
         )
     """)
-    # Byte-offset bookmark into live_tracker.py's own JSONL event log, so
-    # backend/wreck_import.py only ever re-parses NEWLY appended lines
-    # instead of the whole file - added after the live HUD window started
-    # polling get_live_wreck_snapshot (and thus this import) at 5Hz, at
-    # which point "just reread the whole file every time, it's small"
-    # stopped being a safe assumption for a long-running session. Keyed by
-    # source_path (not a fixed single row) in case a different events
-    # file path ever gets configured.
+    c.execute("PRAGMA table_info(wreck_events)")
+    wreck_event_cols = [row[1] for row in c.fetchall()]
+    if "wreck_size" not in wreck_event_cols:
+        c.execute("ALTER TABLE wreck_events ADD COLUMN wreck_size TEXT")
+    if "wreck_tier" not in wreck_event_cols:
+        c.execute("ALTER TABLE wreck_events ADD COLUMN wreck_tier INTEGER")
+    # Cursor into the sibling repo's event_log_db wreck_events table, so
+    # backend/wreck_import.py only ever re-reads rows NEWER than the last
+    # imported id instead of the whole table every time - added after the
+    # live HUD window started polling get_live_wreck_snapshot (and thus
+    # this import) at 5Hz, at which point "just reread everything, it's
+    # small" stopped being a safe assumption for a long-running session.
+    # Keyed by source_db_path (not a fixed single row) in case a different
+    # source db path ever gets configured. Was byte_offset into a JSONL
+    # file before the 2026-08-04 SQLite migration - last_id (an
+    # AUTOINCREMENT id in the SOURCE db, not this one) replaces it
+    # end-to-end; a pre-migration db's old source_path rows simply won't
+    # match the new source_db_path key, so the very first import against
+    # the new source naturally starts from last_id=0 and re-imports
+    # everything - safe and idempotent thanks to wreck_events' own UNIQUE
+    # constraint above, not something this migration needs to handle
+    # specially.
     c.execute("""
         CREATE TABLE IF NOT EXISTS wreck_event_import_cursor (
-            source_path TEXT PRIMARY KEY,
-            byte_offset INTEGER NOT NULL DEFAULT 0
+            source_db_path TEXT PRIMARY KEY,
+            last_id INTEGER NOT NULL DEFAULT 0
         )
     """)
     # Exact, on-planet-confirmed per-POI resource node counts - see the
@@ -1162,19 +1187,24 @@ def clear_queue_checked(queue_id):
 
 
 def get_resource_sources(resource_name):
-    """(source_name, concentration) pairs for the node types that yield a
-    given raw resource - distinct from `deposits`, which tracks specific
-    manually-logged in-game locations, not general node-type categories.
-    `concentration` is what % of that node's primary-yield rolls land on
-    this resource (its proba weight vs its kind-0 sibling items', from the
-    game's own resource-generation data - see
-    tools/backfill_resource_sources.py); None for hand-entered rows with no
-    game-data match. Highest concentration first (best sources first), then
-    name for ties/nulls."""
+    """(source_name, concentration, expected_qty) triples for the node types
+    that yield a given raw resource - distinct from `deposits`, which tracks
+    specific manually-logged in-game locations, not general node-type
+    categories. `concentration` is what % of that node's primary-yield rolls
+    land on this resource (its proba weight vs its kind-0 sibling items',
+    from the game's own resource-generation data - see
+    tools/backfill_resource_sources.py). `expected_qty` is the average
+    quantity of this resource yielded per harvest of that node - the same
+    number the game's own Encyclopedia shows next to each item (reverse
+    engineered from `ResourceUtils.hx:getItemsExpectations` - see that
+    tool's docstring); unlike `concentration` it's an absolute figure, so it
+    still distinguishes between sources that happen to share a %. Both may
+    be None for hand-entered rows with no game-data match. Highest
+    concentration first (best sources first), then name for ties/nulls."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT source_name, concentration FROM resource_sources"
+        "SELECT source_name, concentration, expected_qty FROM resource_sources"
         " WHERE resource_name=?"
         " ORDER BY concentration IS NULL, concentration DESC, source_name COLLATE NOCASE",
         (resource_name,),
@@ -1187,20 +1217,20 @@ def get_resource_sources(resource_name):
 def set_resource_sources(resource_name, sources):
     """Replace the full set of source nodes for a resource in one go - same
     replace-all-on-save pattern as save_recipe's ingredients/outputs.
-    `sources` is a list of (source_name, concentration) tuples;
-    concentration may be None."""
+    `sources` is a list of (source_name, concentration, expected_qty)
+    triples; concentration/expected_qty may be None."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM resource_sources WHERE resource_name=?", (resource_name,))
     deduped = {}
-    for name, conc in sources:
+    for name, conc, expected_qty in sources:
         name = name.strip()
         if name:
-            deduped[name] = conc
+            deduped[name] = (conc, expected_qty)
     c.executemany(
         "INSERT OR IGNORE INTO resource_sources"
-        " (resource_name, source_name, concentration) VALUES (?, ?, ?)",
-        [(resource_name, n, c_) for n, c_ in deduped.items()],
+        " (resource_name, source_name, concentration, expected_qty) VALUES (?, ?, ?, ?)",
+        [(resource_name, n, conc, eq) for n, (conc, eq) in deduped.items()],
     )
     conn.commit()
     conn.close()
@@ -1958,9 +1988,10 @@ WRECK_RESOURCE_INFO = {
 
 def import_wreck_events(rows):
     """Bulk INSERT OR IGNORE wreck_events rows - `rows` is a list of
-    (system_name, planet, resource_id, event_type, x, y, z, observed_at)
-    tuples, straight from the sibling repo's live_tracker.py JSONL event
-    log (one line per event). `INSERT OR IGNORE` against
+    (system_name, planet, resource_id, event_type, wreck_size, wreck_tier,
+    x, y, z, observed_at) tuples, straight from the sibling repo's
+    event_log_db (SQLite `wreck_events` table - see backend/wreck_import.py
+    for the id-cursor-based read). `INSERT OR IGNORE` against
     UNIQUE(system_name, planet, resource_id, event_type, observed_at, x, y,
     z) - x/y/z are part of the key specifically because two DIFFERENT
     wrecks/crates of the same resourceId are routinely 'seen' in the same
@@ -1968,19 +1999,19 @@ def import_wreck_events(rows):
     in the key, a genuinely real second sighting silently collided with
     the first and got dropped (caught live: a 3-wreck test planet with 2
     same-tier hulls + 2 same-tier crates imported as only 1 of each until
-    this was added). The whole log is safe to re-read and re-import from
-    scratch every time (small data, no separate cursor/offset bookkeeping
-    needed - see tools/import_wreck_events.py's own docstring) since a
-    real repeat event would need to share resourceId, event_type,
-    position, AND microsecond-precision timestamp with an already-imported
-    one to collide, which only happens for an actual re-import of the same
-    line. Returns the number of rows actually inserted."""
+    this was added). wreck_size/wreck_tier are deliberately NOT part of the
+    UNIQUE key (same sighting shouldn't duplicate just because that axis
+    resolved differently) - IGNORE is a safety net for re-importing a
+    source row already seen, not the primary de-dup mechanism now that the
+    id cursor (see get/set_wreck_event_import_cursor) already skips
+    already-imported rows in the normal case. Returns the number of rows
+    actually inserted."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.executemany(
         "INSERT OR IGNORE INTO wreck_events"
-        " (system_name, planet, resource_id, event_type, x, y, z, observed_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        " (system_name, planet, resource_id, event_type, wreck_size, wreck_tier, x, y, z, observed_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
@@ -2025,24 +2056,24 @@ def get_wreck_stats():
     ]
 
 
-def get_wreck_event_import_offset(source_path):
+def get_wreck_event_import_cursor(source_db_path):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT byte_offset FROM wreck_event_import_cursor WHERE source_path=?",
-        (source_path,),
+        "SELECT last_id FROM wreck_event_import_cursor WHERE source_db_path=?",
+        (source_db_path,),
     )
     row = c.fetchone()
     conn.close()
     return row[0] if row else 0
 
 
-def set_wreck_event_import_offset(source_path, byte_offset):
+def set_wreck_event_import_cursor(source_db_path, last_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "INSERT OR REPLACE INTO wreck_event_import_cursor (source_path, byte_offset) VALUES (?, ?)",
-        (source_path, byte_offset),
+        "INSERT OR REPLACE INTO wreck_event_import_cursor (source_db_path, last_id) VALUES (?, ?)",
+        (source_db_path, last_id),
     )
     conn.commit()
     conn.close()

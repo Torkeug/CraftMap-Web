@@ -21,8 +21,8 @@ from . import db
 
 # Local-machine-only default - the sibling repo's own poller output, never
 # copied into this repo (personal/per-Quadrant data, same treatment
-# wreck_import.DEFAULT_EVENTS_PATH/tools/backfill_galaxy_resources.py's own
-# DEFAULT_DUMP_PATH get).
+# wreck_import.DEFAULT_EVENTS_DB_PATH/tools/backfill_galaxy_resources.py's
+# own DEFAULT_DUMP_PATH get).
 DEFAULT_POI_COUNTS_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "spacecraft-memory-research" / "poi_resource_counts.json"

@@ -1,20 +1,20 @@
 """Shared logic for importing the sibling spacecraft-memory-research repo's
-live_tracker.py JSONL event log into resources.db's wreck_events table -
-used both by tools/import_wreck_events.py (manual CLI run) and
-backend/api.py (periodic auto-import while live tracking is active, see
-Api.get_live_wreck_snapshot).
+event_log_db (SQLite, `wreck_events` table) into resources.db's own
+wreck_events table - used both by tools/import_wreck_events.py (manual CLI
+run) and backend/api.py (periodic auto-import while live tracking is
+active, see Api.get_live_wreck_snapshot).
 
-Incremental (cursor-based), not a whole-file reread every call - the live
-HUD window (frontend/js/wreck-tracker-panel.js) polls
-get_live_wreck_snapshot, and thus this import, at 5Hz, so "just reread the
-whole file every time, it's small" (this module's earlier assumption)
-stops being safe for anything but a short session. db.
-get_wreck_event_import_offset/set_wreck_event_import_offset persist a byte
-offset into the file (keyed by path) across calls and app restarts, so a
-steady-state call with nothing new to import is just a stat() + a zero-byte
-read, regardless of how large the file has grown.
+Migrated 2026-08-04 off an earlier JSONL event log (wreck_events.jsonl) -
+see the sibling repo's RESEARCH_LOG.md for why (the actual use case is a
+time-windowed JOIN against inventory deltas, which needs both event
+streams to be SQL-queryable). The cursor also changed shape accordingly:
+an id (AUTOINCREMENT in the SOURCE db) instead of a byte offset into a
+flat file - db.get/set_wreck_event_import_cursor persist the last-imported
+id (keyed by source db path) across calls and app restarts, so a
+steady-state call with nothing new to import is just one cheap indexed
+`WHERE id > ?` query, regardless of how large the source table has grown.
 """
-import json
+import sqlite3
 from pathlib import Path
 
 from . import db
@@ -22,100 +22,101 @@ from . import db
 # Local-machine-only default - the sibling repo's own poller output, never
 # copied into this repo (personal/per-Quadrant data, same treatment
 # tools/backfill_galaxy_resources.py's own DEFAULT_DUMP_PATH gets).
-DEFAULT_EVENTS_PATH = (
+DEFAULT_EVENTS_DB_PATH = (
     Path(__file__).resolve().parent.parent.parent
-    / "spacecraft-memory-research" / "wreck_events.jsonl"
+    / "spacecraft-memory-research" / "event_log.db"
 )
 
-
-def _parse_lines(text):
-    rows = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            ev = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        # planet is NOT NULL in wreck_events (db.init_db) - live_tracker.py's
-        # own planet-name resolution can transiently fail (returns null in
-        # the JSONL, e.g. mid-travel/loading) and DOES still log the event
-        # when that happens, but `INSERT OR IGNORE` against a NOT NULL
-        # column silently swallows the constraint violation instead of
-        # raising - a real event just vanishes with no error anywhere.
-        # Confirmed live: one whole system's worth of sightings (82 rows)
-        # went missing this way before this fallback existed. A sentinel
-        # keeps the row (same pattern as frontend/js/wrecks.js's own
-        # "(unknown sector)" fallback) rather than losing it outright.
-        rows.append((
-            ev.get("system_name"),
-            ev.get("planet_name") or "(unknown planet)",
-            ev.get("resource_id"),
-            ev.get("event_type"),
-            ev.get("x"),
-            ev.get("y"),
-            ev.get("z"),
-            ev.get("observed_at"),
-        ))
-    return rows
+_SELECT_COLUMNS = "system_name, planet_name, resource_id, event_type, wreck_size, wreck_tier, x, y, z, observed_at"
 
 
-def load_rows(events_path):
-    """Full-file parse - used by tools/import_wreck_events.py's --dry-run
-    (reports the file's TOTAL event count, not just what's new since the
-    cursor) and as the one-time initial read the very first time a given
-    events_path is imported. Malformed lines are skipped rather than
-    aborting the whole import - the poller writes one line per event and
-    flushes every cycle (see its own module docstring), so a torn last
-    line from a mid-write process kill is the realistic failure mode, not
-    systemic corruption."""
-    if not events_path.exists():
+def _normalize_rows(raw_rows):
+    # planet_name is nullable in the source (live_tracker.py's own
+    # planet-name resolution can transiently fail, e.g. mid-travel/
+    # loading) but NOT NULL in resources.db's wreck_events (db.init_db) -
+    # `INSERT OR IGNORE` against a NOT NULL column silently swallows the
+    # constraint violation instead of raising, so a real event just
+    # vanishes with no error anywhere if this isn't handled. Confirmed
+    # live (pre-migration, same underlying gap): one whole system's worth
+    # of sightings (82 rows) went missing this way before this fallback
+    # existed. A sentinel keeps the row (same pattern as frontend/js/
+    # wrecks.js's own "(unknown sector)" fallback) rather than losing it.
+    return [
+        (
+            system_name,
+            planet_name or "(unknown planet)",
+            resource_id,
+            event_type,
+            wreck_size,
+            wreck_tier,
+            x, y, z,
+            observed_at,
+        )
+        for (system_name, planet_name, resource_id, event_type, wreck_size, wreck_tier, x, y, z, observed_at)
+        in raw_rows
+    ]
+
+
+def load_rows(events_db_path):
+    """Full-table read - used by tools/import_wreck_events.py's --dry-run
+    (reports the TOTAL event count, not just what's new since the cursor)
+    and as the one-time initial read the very first time a given
+    events_db_path is imported. Returns [] if the db/table doesn't exist
+    yet (poller never run)."""
+    path = Path(events_db_path)
+    if not path.exists():
         return []
-    return _parse_lines(events_path.read_text(encoding="utf-8"))
+    conn = sqlite3.connect(str(path))
+    try:
+        c = conn.execute(f"SELECT {_SELECT_COLUMNS} FROM wreck_events ORDER BY id")
+        return _normalize_rows(c.fetchall())
+    except sqlite3.OperationalError:
+        return []  # table doesn't exist yet (fresh db, poller never run a node cycle)
+    finally:
+        conn.close()
 
 
-def load_new_rows(events_path, start_offset):
-    """Reads only newly-appended lines since start_offset (a byte offset
-    into events_path). Returns (rows, new_offset). Only advances the
-    offset up to the last COMPLETE line (one ending in a newline) - the
-    poller is a separate, unsynchronized process, so a read could land
-    mid-write; leaving a torn trailing partial line unconsumed for the
-    next call is simpler and safer than trying to lock across two
-    independent processes, and only ever delays a single event by one
-    poll cycle at worst. If the file is smaller than start_offset (e.g.
-    deleted and recreated, or a fresh run wiped it), the offset resets to
-    0 rather than silently reading nothing forever."""
-    if not events_path.exists():
-        return [], start_offset
-    size = events_path.stat().st_size
-    if size < start_offset:
-        start_offset = 0
-    if size == start_offset:
-        return [], start_offset
-    with events_path.open("rb") as f:
-        f.seek(start_offset)
-        data = f.read()
-    last_newline = data.rfind(b"\n")
-    if last_newline == -1:
-        return [], start_offset  # only a torn partial line available so far
-    complete = data[: last_newline + 1]
-    new_offset = start_offset + len(complete)
-    rows = _parse_lines(complete.decode("utf-8", errors="replace"))
-    return rows, new_offset
+def load_new_rows(events_db_path, last_id):
+    """Reads only rows with id > last_id. Returns (rows, new_last_id). If
+    the source db doesn't exist yet, or the table is empty/missing,
+    returns ([], last_id) unchanged - same "nothing new yet" treatment
+    load_rows gives a not-yet-existing poller output."""
+    path = Path(events_db_path)
+    if not path.exists():
+        return [], last_id
+    conn = sqlite3.connect(str(path))
+    try:
+        c = conn.execute(
+            f"SELECT id, {_SELECT_COLUMNS} FROM wreck_events WHERE id > ? ORDER BY id",
+            (last_id,),
+        )
+        fetched = c.fetchall()
+    except sqlite3.OperationalError:
+        return [], last_id
+    finally:
+        conn.close()
+    if not fetched:
+        return [], last_id
+    new_last_id = fetched[-1][0]
+    rows = _normalize_rows(row[1:] for row in fetched)  # drop the id column
+    return rows, new_last_id
 
 
-def import_events_from_file(events_path=None):
+def import_events_from_file(events_db_path=None):
     """Returns (parsed_count, inserted_count) for whatever's NEW since the
-    last call (not the file's total event count - see load_rows for
+    last call (not the source table's total row count - see load_rows for
     that). init_db() is the caller's responsibility (main.py already
     calls it at startup; tools/import_wreck_events.py calls it itself for
-    standalone runs)."""
-    path = Path(events_path) if events_path else DEFAULT_EVENTS_PATH
-    offset = db.get_wreck_event_import_offset(str(path))
-    rows, new_offset = load_new_rows(path, offset)
-    if new_offset != offset:
-        db.set_wreck_event_import_offset(str(path), new_offset)
+    standalone runs). Name kept as import_events_from_file (not renamed to
+    ..._from_db) - existing callers (backend/api.py, tests) already treat
+    this as "import whatever's new from the configured source," and the
+    source happening to be a SQLite db now rather than a JSONL file is an
+    internal detail, not a signature change worth propagating."""
+    path = Path(events_db_path) if events_db_path else DEFAULT_EVENTS_DB_PATH
+    last_id = db.get_wreck_event_import_cursor(str(path))
+    rows, new_last_id = load_new_rows(path, last_id)
+    if new_last_id != last_id:
+        db.set_wreck_event_import_cursor(str(path), new_last_id)
     if not rows:
         return 0, 0
     inserted = db.import_wreck_events(rows)
