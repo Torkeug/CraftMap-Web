@@ -27,7 +27,7 @@ DEFAULT_EVENTS_DB_PATH = (
     / "spacecraft-memory-research" / "event_log.db"
 )
 
-_SELECT_COLUMNS = "system_name, planet_name, resource_id, event_type, wreck_size, wreck_tier, x, y, z, observed_at"
+_SELECT_COLUMNS = "system_name, planet_name, resource_id, event_type, wreck_size, wreck_tier, parent_id, x, y, z, observed_at"
 
 
 def _normalize_rows(raw_rows):
@@ -49,10 +49,11 @@ def _normalize_rows(raw_rows):
             event_type,
             wreck_size,
             wreck_tier,
+            parent_id,
             x, y, z,
             observed_at,
         )
-        for (system_name, planet_name, resource_id, event_type, wreck_size, wreck_tier, x, y, z, observed_at)
+        for (system_name, planet_name, resource_id, event_type, wreck_size, wreck_tier, parent_id, x, y, z, observed_at)
         in raw_rows
     ]
 

@@ -524,7 +524,21 @@
     }
 
     async function renderStats() {
-      const rows = await CraftMapApi.call("get_wreck_stats");
+      // get_wreck_stats counts per-resource_id sightings - correct for
+      // crates/Black Box (each pickup genuinely is its own thing), but
+      // WRONG for hull pieces: a single Big wreck is 4 separate
+      // resource_ids (BigPiece1/BigPiece2/SmallPiece1/SmallPiece2), so
+      // per-resource_id counting fragments one wreck into up to 4 rows.
+      // get_wreck_site_stats counts distinct wreck SITES instead (via
+      // parent_id) - excluding hull rows from get_wreck_stats here and
+      // using site_rows for them instead, matching get_wreck_stats' own
+      // row shape (see Api.get_wreck_site_stats) so both feed the same
+      // aggregation loop below unchanged.
+      const [statRows, siteRows] = await Promise.all([
+        CraftMapApi.call("get_wreck_stats"),
+        CraftMapApi.call("get_wreck_site_stats"),
+      ]);
+      const rows = statRows.filter((r) => r.kind !== "hull").concat(siteRows);
       statsEl.innerHTML = "";
       if (!rows.length) {
         statsEl.appendChild(makeRow("No sightings logged yet."));
@@ -543,17 +557,16 @@
         // r.level is null for untiered kinds (ShipWreck_BlackBox, and the
         // SmallPiece1/SmallPiece2 hull-debris pieces - see db.py's
         // WRECK_RESOURCE_INFO) - omit the "L" suffix entirely rather than
-        // rendering the literal string "Lnull". r.size (from wreck_events'
-        // own wreck_size column, grouped separately server-side - see
-        // db.get_wreck_stats) is similarly null for sightings logged
-        // before that column existed, or where the tracker couldn't
-        // resolve a wreck's size - same "just omit it" treatment, not a
-        // guessed default. Big/Small is genuinely informative even on a
-        // crate/black-box row, not just the hull itself - it's inherited
-        // from the wreck the piece belongs to (see annotate_wreck_size_tier
-        // in the sibling repo), and size drives crate COUNT independent of
-        // tier's item-level floor.
-        const sizeLabel = r.size === "big" ? "Big" : r.size === "small" ? "Small" : null;
+        // rendering the literal string "Lnull". Big/Small is only shown
+        // for kind === "hull" - a crate or Black Box doesn't itself have a
+        // size (user correction: an earlier version of this comment
+        // claimed it was "informative even on a crate/black-box row" -
+        // wrong; the wreck it came from has a size, the pickup doesn't),
+        // matching the gating wreck-tracker-panel.js's live HUD overlay
+        // already uses (`e.kind === "hull" && e.wreckSize`) - this file
+        // was the one inconsistent with that established convention.
+        const sizeLabel =
+          r.kind === "hull" ? (r.size === "big" ? "Big" : r.size === "small" ? "Small" : null) : null;
         const key = [r.display_name, sizeLabel, r.level != null ? `L${r.level}` : null]
           .filter(Boolean)
           .join(" ");

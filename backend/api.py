@@ -721,6 +721,40 @@ class Api:
             ) in db.get_wreck_stats()
         ]
 
+    def get_wreck_site_stats(self):
+        """Distinct wreck SITES (via parent_id, see db.get_wreck_site_stats)
+        rather than per-hull-piece sightings - a Big wreck's 4 hull pieces
+        (BigPiece1/BigPiece2/SmallPiece1/SmallPiece2) collapse to 1 site
+        here, unlike get_wreck_stats' per-resource_id counting. Only
+        covers hull-kind rows with a resolved parent_id (sightings logged
+        before that column existed aren't included, not misattributed as
+        their own site - see db.get_wreck_site_stats' own docstring).
+        Row shape deliberately matches get_wreck_stats' own output
+        (display_name/kind/looted_count included even though they're
+        constant/always-0 here) so the frontend can feed both endpoints'
+        results through the exact same aggregation loop instead of
+        branching on which call a row came from - resource_id is the only
+        field genuinely N/A here (a site spans several resource_ids)."""
+        return [
+            {
+                "system_name": system_name,
+                "planet": planet,
+                "sector": sector,
+                "resource_id": None,
+                "display_name": "Shipwreck",
+                "kind": "hull",
+                "level": wreck_tier,
+                "size": wreck_size,
+                "seen_count": seen_count,
+                "looted_count": 0,
+                "despawned_count": despawned_count,
+            }
+            for (
+                system_name, planet, sector, wreck_size, wreck_tier,
+                seen_count, despawned_count,
+            ) in db.get_wreck_site_stats()
+        ]
+
     # ---- wreck tracker window (frontend/wreck-tracker.html) - show/hide/
     # pin state lives on main.py's App (see self._app_ctrl above), same
     # pattern as the queue window's own toggle_queue_window/

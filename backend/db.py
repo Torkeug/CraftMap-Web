@@ -290,7 +290,18 @@ def init_db():
     # wreck_tier (added alongside the SQLite migration) come straight from
     # the sibling repo's own annotate_wreck_size_tier - NULL for events
     # logged before that existed, or wherever it couldn't resolve either
-    # axis for a given wreck.
+    # axis for a given wreck. parent_id (added right after, same session -
+    # raised directly by the user: per-resource_id counting fragments ONE
+    # Big wreck sighting into up to 4 stat rows, since a Big wreck's hull
+    # is BigPiece1/BigPiece2/SmallPiece1/SmallPiece2, four separate
+    # resource_ids) is the sibling repo's live parentId - every hull piece
+    # of the SAME wreck shares it, so COUNT(DISTINCT parent_id) gives the
+    # actual number of wreck SITES, not hull-piece sightings. NULL for
+    # anything logged before this column existed - see get_wreck_site_stats.
+    # Not a durable cross-session wreck identity (see the sibling repo's
+    # own docstring on this) - only guaranteed stable within one continuous
+    # scan, which is exactly what's needed since a wreck's pieces are all
+    # discovered in the same poll cycle.
     c.execute("""
         CREATE TABLE IF NOT EXISTS wreck_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -300,6 +311,7 @@ def init_db():
             event_type TEXT NOT NULL,
             wreck_size TEXT,
             wreck_tier INTEGER,
+            parent_id INTEGER,
             x REAL,
             y REAL,
             z REAL,
@@ -313,6 +325,8 @@ def init_db():
         c.execute("ALTER TABLE wreck_events ADD COLUMN wreck_size TEXT")
     if "wreck_tier" not in wreck_event_cols:
         c.execute("ALTER TABLE wreck_events ADD COLUMN wreck_tier INTEGER")
+    if "parent_id" not in wreck_event_cols:
+        c.execute("ALTER TABLE wreck_events ADD COLUMN parent_id INTEGER")
     # Cursor into the sibling repo's event_log_db wreck_events table, so
     # backend/wreck_import.py only ever re-reads rows NEWER than the last
     # imported id instead of the whole table every time - added after the
@@ -1997,29 +2011,30 @@ WRECK_RESOURCE_INFO = {
 def import_wreck_events(rows):
     """Bulk INSERT OR IGNORE wreck_events rows - `rows` is a list of
     (system_name, planet, resource_id, event_type, wreck_size, wreck_tier,
-    x, y, z, observed_at) tuples, straight from the sibling repo's
-    event_log_db (SQLite `wreck_events` table - see backend/wreck_import.py
-    for the id-cursor-based read). `INSERT OR IGNORE` against
-    UNIQUE(system_name, planet, resource_id, event_type, observed_at, x, y,
-    z) - x/y/z are part of the key specifically because two DIFFERENT
-    wrecks/crates of the same resourceId are routinely 'seen' in the same
-    poll cycle (sharing the same observed_at timestamp) - without position
-    in the key, a genuinely real second sighting silently collided with
-    the first and got dropped (caught live: a 3-wreck test planet with 2
-    same-tier hulls + 2 same-tier crates imported as only 1 of each until
-    this was added). wreck_size/wreck_tier are deliberately NOT part of the
-    UNIQUE key (same sighting shouldn't duplicate just because that axis
-    resolved differently) - IGNORE is a safety net for re-importing a
-    source row already seen, not the primary de-dup mechanism now that the
-    id cursor (see get/set_wreck_event_import_cursor) already skips
-    already-imported rows in the normal case. Returns the number of rows
-    actually inserted."""
+    parent_id, x, y, z, observed_at) tuples, straight from the sibling
+    repo's event_log_db (SQLite `wreck_events` table - see backend/
+    wreck_import.py for the id-cursor-based read). `INSERT OR IGNORE`
+    against UNIQUE(system_name, planet, resource_id, event_type,
+    observed_at, x, y, z) - x/y/z are part of the key specifically because
+    two DIFFERENT wrecks/crates of the same resourceId are routinely
+    'seen' in the same poll cycle (sharing the same observed_at
+    timestamp) - without position in the key, a genuinely real second
+    sighting silently collided with the first and got dropped (caught
+    live: a 3-wreck test planet with 2 same-tier hulls + 2 same-tier
+    crates imported as only 1 of each until this was added). wreck_size/
+    wreck_tier/parent_id are deliberately NOT part of the UNIQUE key (same
+    sighting shouldn't duplicate just because one of those resolved
+    differently) - IGNORE is a safety net for re-importing a source row
+    already seen, not the primary de-dup mechanism now that the id cursor
+    (see get/set_wreck_event_import_cursor) already skips already-imported
+    rows in the normal case. Returns the number of rows actually
+    inserted."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.executemany(
         "INSERT OR IGNORE INTO wreck_events"
-        " (system_name, planet, resource_id, event_type, wreck_size, wreck_tier, x, y, z, observed_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " (system_name, planet, resource_id, event_type, wreck_size, wreck_tier, parent_id, x, y, z, observed_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
@@ -2069,6 +2084,68 @@ def get_wreck_stats():
     return [
         (system_name, planet, sector_by_system.get(system_name), resource_id, wreck_size, seen, looted, despawned)
         for (system_name, planet, resource_id, wreck_size, seen, looted, despawned) in rows
+    ]
+
+
+def get_wreck_site_stats():
+    """One row per (system_name, planet, sector, wreck_size, wreck_tier)
+    ever logged, counting distinct wreck SITES - not hull-piece sightings.
+    Raised directly by the user: per-resource_id counting (get_wreck_stats)
+    fragments ONE Big wreck into up to 4 rows, since a Big wreck's hull is
+    BigPiece1/BigPiece2/SmallPiece1/SmallPiece2 (4 separate resource_ids,
+    only 2 of which even carry a tier) - "what's useful is big and small
+    wreck SITE, not individual hull count."
+
+    Two-stage aggregation: first collapse every hull-piece row sharing a
+    parent_id (the sibling repo's live wreck-instance grouping - see that
+    repo's diff_nodes) down to ONE site-row (its resolved size/tier, and
+    whether it was ever seen/despawned), THEN aggregate those site-rows
+    into counts per (system, planet, size, tier). wreck_size/wreck_tier
+    are read via MAX() rather than a plain column reference because
+    they're aggregated-away by the first GROUP BY - safe/unambiguous since
+    every hull piece of the same wreck already carries the IDENTICAL
+    resolved size/tier (both stamped once per parent_id group by the
+    sibling repo's annotate_wreck_size_tier, not per-piece).
+
+    Only rows with parent_id IS NOT NULL count here (sightings logged
+    before that column existed are invisible to this query, not
+    mis-attributed as their own site - see RESEARCH_LOG.md for why
+    backfilling parent_id onto historical rows isn't possible: the
+    correlation data was never persisted, only used transiently in memory
+    at scan time). No 'looted' count - hull pieces are only ever 'seen'/
+    'despawned' (see the sibling repo's diff_nodes; only crates/Black Box
+    ever get classified 'looted'). Returns (system_name, planet, sector,
+    wreck_size, wreck_tier, seen_count, despawned_count) tuples."""
+    hull_ids = [rid for rid, info in WRECK_RESOURCE_INFO.items() if info["kind"] == "hull"]
+    placeholders = ",".join("?" * len(hull_ids))
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(f"""
+        WITH sites AS (
+            SELECT system_name, planet, parent_id,
+                   MAX(wreck_size) AS wreck_size,
+                   MAX(wreck_tier) AS wreck_tier,
+                   MAX(CASE WHEN event_type='seen' THEN 1 ELSE 0 END) AS was_seen,
+                   MAX(CASE WHEN event_type='despawned' THEN 1 ELSE 0 END) AS was_despawned
+            FROM wreck_events
+            WHERE parent_id IS NOT NULL AND resource_id IN ({placeholders})
+            GROUP BY system_name, planet, parent_id
+        )
+        SELECT system_name, planet, wreck_size, wreck_tier,
+               SUM(was_seen), SUM(was_despawned)
+        FROM sites
+        GROUP BY system_name, planet, wreck_size, wreck_tier
+        ORDER BY system_name COLLATE NOCASE, planet COLLATE NOCASE
+    """, hull_ids)
+    rows = c.fetchall()
+    c.execute(
+        "SELECT DISTINCT system_name, sector FROM galaxy_resources WHERE sector IS NOT NULL"
+    )
+    sector_by_system = dict(c.fetchall())
+    conn.close()
+    return [
+        (system_name, planet, sector_by_system.get(system_name), wreck_size, wreck_tier, seen, despawned)
+        for (system_name, planet, wreck_size, wreck_tier, seen, despawned) in rows
     ]
 
 
