@@ -2053,17 +2053,32 @@ def get_wreck_stats():
     are genuinely different sighting populations, same reasoning as
     splitting by resource_id (crate tier) in the first place - see the
     sibling repo's annotate_wreck_size_tier. Rows with wreck_size IS NULL
-    (sightings logged before that column existed, or a wreck whose size
-    the tracker couldn't resolve) get their own group rather than being
-    dropped or merged into a guess. sector is a best-effort lookup against
-    galaxy_resources (None if that system was never covered by a
+    (a crate/Black Box whose own wreck's hull piece wasn't in the same
+    scan cycle to resolve size from) get their own group rather than
+    being dropped or merged into a guess. sector is a best-effort lookup
+    against galaxy_resources (None if that system was never covered by a
     galaxy-wide dump import - see this table's own docstring in init_db
     for why wreck_events doesn't store sector itself). Caller (Api layer /
     frontend) rolls this up by planet/system/sector as needed - already
     the finest useful grain per row, so no separate pre-aggregated variant
     is needed for each rollup level. Returns (system_name, planet, sector,
     resource_id, wreck_size, seen_count, looted_count, despawned_count)
-    tuples."""
+    tuples.
+
+    WHERE parent_id IS NOT NULL - raised directly by the user: without
+    this, crate/Black Box counts here are a "since forever" cumulative
+    total (4835+ pre-parent_id historical rows) sitting next to
+    get_wreck_site_stats' "since parent_id tracking began" wreck-site
+    counts in the SAME UI panel - two different time windows that invite
+    a misleading comparison (e.g. "230 crates, 2 wreck sites" reads like
+    ~115 crates/wreck, which isn't a real ratio, just an artifact of the
+    site count's much shorter accumulation window). Filtering both
+    queries to the identical parent_id-based cutoff keeps every number in
+    this panel on the same time window - not a data-quality filter (the
+    excluded historical rows aren't wrong), a comparability one. The
+    excluded rows stay in the table, just unsurfaced here - nothing
+    deleted, reversible by dropping this filter later if the two stats
+    ever stop being shown together."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""
@@ -2072,6 +2087,7 @@ def get_wreck_stats():
                SUM(CASE WHEN event_type='looted' THEN 1 ELSE 0 END),
                SUM(CASE WHEN event_type='despawned' THEN 1 ELSE 0 END)
         FROM wreck_events
+        WHERE parent_id IS NOT NULL
         GROUP BY system_name, planet, resource_id, wreck_size
         ORDER BY system_name COLLATE NOCASE, planet COLLATE NOCASE, resource_id
     """)
