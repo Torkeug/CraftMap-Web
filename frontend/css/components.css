@@ -2534,8 +2534,19 @@
 
 #heading-strip {
   position: relative;
-  flex: 0 0 auto;
-  height: 44px; /* no vertical spread since markers dropped the elevation axis - see js/wreck-tracker-panel.js */
+  /* Space-filling (not fixed-height) so growing the window taller actually
+     grows the strip - previously flex:0 0 auto/fixed 44px meant width
+     tracked the window (an ordinary block element's width is already
+     100% of its row) but height never did, and once stacked distance
+     labels (see js/wreck-tracker-panel.js's computeLabelStackOffsets)
+     could need more than 44px for a cluster of 3+ overlapping wrecks,
+     there was no way to make more room visible - the strip's own
+     overflow:hidden just clipped the lower labels. min-height keeps the
+     44px floor (still enough for one un-stacked row) as the window's
+     actual resize-grip minimum - see components.css's matching
+     #app.measuring-min-size override below. */
+  flex: 1 1 auto;
+  min-height: 44px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -2582,18 +2593,29 @@
 }
 
 .heading-strip-marker {
-  /* left/top are fixed (0, 50%) and never touched after creation - ALL
-     dynamic positioning happens via a per-frame `transform` in
-     js/wreck-tracker-panel.js's updateMarkerEl instead of ever writing
-     left/width/height directly. transform (and opacity) are GPU-
-     compositor-only properties that don't force a synchronous browser
-     layout recalculation the way left/width/height do - confirmed live
-     as a real contributor to visible stutter at the HUD's 60Hz poll
-     rate, on top of the DOM-node-reuse fix (see renderMarkers' own
-     comment) that was already applied first. */
+  /* left/top are fixed (0, 14px - NOT a %, see below) and never touched
+     after creation - ALL dynamic positioning happens via a per-frame
+     `transform` (horizontal only now) in js/wreck-tracker-panel.js's
+     updateMarkerEl instead of ever writing left/width/height directly.
+     transform (and opacity) are GPU-compositor-only properties that
+     don't force a synchronous browser layout recalculation the way
+     left/width/height do - confirmed live as a real contributor to
+     visible stutter at the HUD's 60Hz poll rate, on top of the DOM-node-
+     reuse fix (see renderMarkers' own comment) that was already applied
+     first.
+     top is a fixed pixel offset, not 50%, on purpose: the dot's row must
+     never sit on top of #heading-strip-ticks' own tick-label row (the
+     bearing numbers along the top edge, ending around 12px down) - 16px
+     leaves a couple px of breathing room below that - and now that
+     #heading-strip itself can grow taller than its 44px floor (see its
+     own comment), a percentage-based top would have dragged the dot down
+     with it every time the window resized. Fixed top keeps the dot
+     pinned to the same row regardless of strip height; the label below
+     it (position: static within this flex column) is the only thing
+     that benefits from the extra room. */
   position: absolute;
   left: 0;
-  top: 50%;
+  top: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2602,19 +2624,14 @@
   z-index: 1;
 }
 
-/* Wreck (hull) markers stack above crate markers when they overlap, and
-   black boxes (rare, on-foot-only, worth never losing behind another
-   marker - see js/wreck-tracker-panel.js's on_foot filtering) stack above
-   both - explicit z-index rather than relying on DOM append order, since
-   js/wreck-tracker-panel.js's renderMarkers just iterates the snapshot's
-   node list in whatever order it came back in. */
-.heading-strip-marker.hull {
-  z-index: 2;
-}
-
-.heading-strip-marker.blackbox {
-  z-index: 3;
-}
+/* Kind- and distance-based stacking (blackbox over hull over crate, and
+   within a kind, nearer over farther) is computed and written as an inline
+   z-index every frame in js/wreck-tracker-panel.js's updateMarkerEl - see
+   its own comment. Inline style always wins over these class rules, so
+   there's deliberately no static per-kind z-index here anymore; a purely
+   static value can't reflect which marker is currently nearest, which was
+   exactly the reported bug (a far wreck's dot rendering in front of a
+   near one). */
 
 .heading-strip-marker-dot {
   /* Fixed at the MAX size - distance scaling shrinks it via `transform:
@@ -3013,6 +3030,16 @@
 
 #app.measuring-min-size #wreck-tracker-body {
   flex: 0 0 auto;
+}
+
+/* #heading-strip is now the wreck-tracker window's own space-filling
+   flex:1 pane (see its own comment) - clamp it to its 44px floor here too,
+   same as #wrecks-live-stats/#queue-breakdown-tree above, so the resize-
+   grip's measured minimum height is the strip's un-stacked floor, not
+   whatever extra height the window happens to already be at. */
+#app.measuring-min-size #heading-strip {
+  flex: 0 0 auto;
+  height: 44px;
 }
 
 #app.measuring-min-size #queue-breakdown-tree {

@@ -107,6 +107,17 @@
     return "crate";
   }
 
+  // Kind still wins the stacking order first (blackbox over hull over
+  // crate, matching components.css's old static z-index-per-kind rule),
+  // but WITHIN a kind, markers now stack by distance too - see
+  // updateMarkerEl's own comment on why that part had to move from CSS
+  // (fixed per-kind) to here (recomputed every frame).
+  const KIND_Z_TIER = { crate: 1, hull: 2, blackbox: 3 };
+  // Wide enough to swallow any real in-game distance (FAR_DISTANCE tops
+  // out at 150000) without a far-away marker of one kind ever spilling
+  // into a nearer marker's tier band.
+  const Z_TIER_SPAN = 1000000;
+
   function sub(a, b) {
     return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
   }
@@ -291,11 +302,8 @@
   // first, then only writing afterward, keeps every write in this
   // function free to batch into the browser's normal next-frame layout
   // pass instead.
-  function updateMarkerEl(pooled, e, stripWidthPx) {
-    const clampedBearing = Math.max(-BEARING_RANGE_DEG, Math.min(BEARING_RANGE_DEG, e.bearingDeg));
+  function updateMarkerEl(pooled, e, stripWidthPx, xPx, labelOffsetPx) {
     const atEdge = Math.abs(e.bearingDeg) > BEARING_RANGE_DEG;
-    const xPct = ((clampedBearing + BEARING_RANGE_DEG) / (2 * BEARING_RANGE_DEG)) * 100;
-    const xPx = (xPct / 100) * stripWidthPx;
     const { size, opacity } = markerScale(e.distance);
 
     // wreckSize/wreckTier (from the sibling spacecraft-memory-research
@@ -314,13 +322,27 @@
     const sizeClass = e.kind === "hull" && e.wreckSize ? ` size-${e.wreckSize}` : "";
     const tierClass = e.kind === "hull" && e.wreckTier != null ? ` tier-${e.wreckTier}` : "";
     pooled.el.className = `heading-strip-marker ${e.kind}${sizeClass}${tierClass}${atEdge ? " edge" : ""}`;
+    // DOM order is stable per pool slot (see renderMarkers' own comment -
+    // markers only get rebuilt when the entry COUNT changes, not every
+    // frame), but which entry maps to which slot, and how far that entry
+    // currently is, both drift frame to frame. Static append-order/CSS
+    // z-index made stacking track "which slot happened to render first,"
+    // not "which marker is actually nearest" - the reported bug (a far
+    // wreck's dot sitting in front of a near one). Recomputing z-index
+    // from live distance every frame, here instead of in CSS, is what
+    // keeps the nearest marker on top regardless of slot/DOM order.
+    pooled.el.style.zIndex = String(
+      (KIND_Z_TIER[e.kind] || 1) * Z_TIER_SPAN + (Z_TIER_SPAN - Math.round(e.distance))
+    );
     // Horizontal position AND self-centering combined into one transform
-    // (left/top stay fixed at 0/50% in CSS - see that rule's own
-    // comment) - `calc(${xPx}px - 50%)`'s percentage is relative to the
-    // MARKER'S OWN width (how CSS `translate` percentages work), which
-    // is exactly the centering `translate(-50%, -50%)` used to do
-    // separately when this was expressed via `left` instead.
-    pooled.el.style.transform = `translate(calc(${xPx}px - 50%), -50%)`;
+    // (left/top stay fixed at 0/14px in CSS - see that rule's own comment
+    // on why top is a fixed pixel offset, not a %) - `calc(${xPx}px -
+    // 50%)`'s percentage is relative to the MARKER'S OWN width (how CSS
+    // `translate` percentages work), which is exactly the horizontal
+    // centering `translateX(-50%)` used to do separately when this was
+    // expressed via `left` instead. No vertical component anymore - top's
+    // fixed 14px IS the dot's row; see that rule's own comment.
+    pooled.el.style.transform = `translateX(calc(${xPx}px - 50%))`;
     pooled.el.style.opacity = opacity;
     const metaBits = [];
     if (e.kind === "hull" && e.wreckSize) metaBits.push(e.wreckSize === "big" ? "Big" : "Small");
@@ -330,6 +352,14 @@
     // Dot is fixed at DOT_SIZE_MAX in CSS - scaled down for distance
     // instead of resizing width/height directly.
     pooled.dotEl.style.transform = `scale(${size / DOT_SIZE_MAX})`;
+    // Markers whose bearing puts them at nearly the same strip position
+    // (multiple wrecks roughly in the same direction, different
+    // distances) would otherwise print their distance labels directly on
+    // top of each other and turn to mush - see computeLabelStackOffsets.
+    // Only the label moves; the dot stays put, since dot overlap is
+    // already handled by z-index (size/opacity distinguish near from far
+    // there instead).
+    pooled.distEl.style.transform = labelOffsetPx ? `translateY(${labelOffsetPx}px)` : "";
     pooled.distEl.textContent = fmtDistance(e.distance);
   }
 
@@ -347,6 +377,47 @@
     return { el: marker, dotEl: dot, distEl: dist };
   }
 
+  function computeXPx(e, stripWidthPx) {
+    const clampedBearing = Math.max(-BEARING_RANGE_DEG, Math.min(BEARING_RANGE_DEG, e.bearingDeg));
+    const xPct = ((clampedBearing + BEARING_RANGE_DEG) / (2 * BEARING_RANGE_DEG)) * 100;
+    return (xPct / 100) * stripWidthPx;
+  }
+
+  // Distance labels are ~26px wide at the strip's 8px font (see
+  // .heading-strip-marker-dist) - two markers whose xPx land within that
+  // of each other would otherwise print their labels on top of each
+  // other. Groups colliding markers by walking them left-to-right and
+  // chaining any pair within LABEL_COLLIDE_PX (so a run of 3+ overlapping
+  // markers merges into one group even though only adjacent pairs are
+  // checked directly - transitively fine at the handful of wrecks this
+  // strip ever shows at once), then within each group stacks labels
+  // nearest-to-farthest by offsetting each one LABEL_STACK_STEP_PX
+  // further down than the last.
+  const LABEL_COLLIDE_PX = 26;
+  const LABEL_STACK_STEP_PX = 8;
+
+  function computeLabelStackOffsets(entries, xPxByIndex) {
+    const offsets = new Array(entries.length).fill(0);
+    const order = entries.map((_, i) => i).sort((a, b) => xPxByIndex[a] - xPxByIndex[b]);
+    let clusterStart = 0;
+    for (let k = 1; k <= order.length; k++) {
+      const clusterEnds =
+        k === order.length || xPxByIndex[order[k]] - xPxByIndex[order[k - 1]] > LABEL_COLLIDE_PX;
+      if (!clusterEnds) continue;
+      const cluster = order.slice(clusterStart, k);
+      if (cluster.length > 1) {
+        cluster
+          .slice()
+          .sort((a, b) => entries[a].distance - entries[b].distance)
+          .forEach((idx, rank) => {
+            offsets[idx] = rank * LABEL_STACK_STEP_PX;
+          });
+      }
+      clusterStart = k;
+    }
+    return offsets;
+  }
+
   function renderMarkers(entries) {
     if (entries.length !== markerPool.length) {
       // Count changed (rare) - full rebuild is simplest and correct;
@@ -357,7 +428,11 @@
     }
     if (!entries.length) return;
     const stripWidthPx = stripMarkersEl.clientWidth; // single read, see updateMarkerEl's own comment
-    entries.forEach((e, i) => updateMarkerEl(markerPool[i], e, stripWidthPx));
+    const xPxByIndex = entries.map((e) => computeXPx(e, stripWidthPx));
+    const labelOffsets = computeLabelStackOffsets(entries, xPxByIndex);
+    entries.forEach((e, i) =>
+      updateMarkerEl(markerPool[i], e, stripWidthPx, xPxByIndex[i], labelOffsets[i])
+    );
   }
 
   // Mirrors render's own per-mode marker filtering exactly (in ship: hull
