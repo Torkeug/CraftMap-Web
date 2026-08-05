@@ -49,9 +49,14 @@ query can filter fields out of "planet" results.
 Also carries over explored (THIS player's own, personal, no-travel-required
 per-planet "have I explored this" flag - game.me.progress.systems, decoded
 by dump_galaxy_resources.py's read_explored_bits_by_system - distinct from
-resourcesGenerated/shared quadrant state) as-is, so a query can flag
+resourcesGenerated/shared quadrant state), so a query can flag
 never-visited planets even though they still show up via shared galaxy
-data.
+data. Unlike every other planet-level field above, explored genuinely
+changes over time as the player keeps exploring, so it's not enough to
+attach it only to brand-new rows the way is_asteroid/temperature/
+planet_scale are - load_explored_rows + backend.db.update_galaxy_explored
+apply it as a separate UPDATE pass against EVERY already-imported row too,
+every time this script runs.
 
 Also carries over temperature/temperatureName (the planet's resolved
 temperature attribute, e.g. "PlanetHot2"/"Very Hot" - always set, defaults
@@ -303,6 +308,26 @@ def load_rows(dump_path):
     return rows
 
 
+def load_explored_rows(dump_path):
+    """One (system_name, planet, explored) tuple per planet entry in the
+    dump - used to UPDATE galaxy_resources.explored on rows imported by a
+    PAST run of this script (see backend.db.update_galaxy_explored's own
+    docstring for why this has to be a separate UPDATE pass rather than
+    riding along in load_rows/import_galaxy_resources's INSERT OR IGNORE:
+    unlike is_asteroid/temperature/planet_scale, explored genuinely changes
+    as the player keeps exploring, so a fresh dump must be able to correct
+    it on a planet logged long ago, not just attach it to brand-new rows).
+    Included even for planets with no resourceCounts at all (nothing to
+    update yet there, but harmless) - independent of load_rows' own
+    resourceCounts-gated skip logic, same reasoning as load_system_rows."""
+    planets = json.loads(dump_path.read_text(encoding="utf-8"))
+    return [
+        (p["system_name"], p["planet_name"], p.get("explored"))
+        for p in planets
+        if p.get("system_name") and p.get("planet_name")
+    ]
+
+
 def load_system_rows(dump_path):
     """One (system_name, x, y, z, near_system_names) tuple per distinct
     system_name across ALL planet entries in the dump - independent of
@@ -408,6 +433,7 @@ def main():
     rows = load_rows(dump_path)
     system_rows = load_system_rows(dump_path)
     landmark_rows = load_poi_landmark_rows(dump_path)
+    explored_rows = load_explored_rows(dump_path)
 
     if args.dry_run:
         existing = db.get_galaxy_resource_keys()
@@ -423,6 +449,7 @@ def main():
             f" ({len(new_systems)} not previously known) for jump-hop distance."
         )
         print(f"Would add/refresh {len(landmark_rows)} POI landmarks (sun-side/lighting data).")
+        print(f"Would refresh explored status for {len(explored_rows)} planets.")
         return
 
     inserted = db.import_galaxy_resources(rows)
@@ -433,6 +460,11 @@ def main():
     db.import_galaxy_systems(system_rows)
     print(f"Refreshed position/neighbor data for {len(system_rows)} systems.")
     db.import_galaxy_poi_landmarks(landmark_rows)
+    updated_explored = db.update_galaxy_explored(explored_rows)
+    print(
+        f"Refreshed explored status on {updated_explored} existing resource rows"
+        f" across {len(explored_rows)} planets."
+    )
     print(f"Refreshed {len(landmark_rows)} POI landmarks (sun-side/lighting data).")
 
 

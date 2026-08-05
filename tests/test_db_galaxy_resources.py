@@ -62,6 +62,33 @@ def test_import_is_idempotent(db):
     assert db.import_galaxy_resources(rows) == 0
 
 
+def test_update_galaxy_explored_overwrites_rows_import_galaxy_resources_would_skip(db):
+    # Two resource rows on the same planet, imported with explored=None (as
+    # if the dump never carried the field yet). A fresh dump now confirms
+    # this planet has been explored - import_galaxy_resources itself would
+    # silently skip both rows (already-known keys), so update_galaxy_explored
+    # must be the thing that actually applies the change, to EVERY resource
+    # row for that planet.
+    db.import_galaxy_resources([
+        ("Sys1", "PlanetA", "Sec1", "Iron", 100, 1.0, "poi0", None, 0,
+         "PlanetTemperate", "Temperate", None, None, None, None),
+        ("Sys1", "PlanetA", "Sec1", "Gold", 10, 0.2, "general", None, 0,
+         "PlanetTemperate", "Temperate", None, None, None, None),
+        # a different planet, left alone to confirm the WHERE clause scopes
+        # correctly.
+        ("Sys2", "PlanetB", "Sec1", "Iron", 50, 0.5, "general", None, 0,
+         "PlanetTemperate", "Temperate", None, None, None, None),
+    ])
+    assert db.get_galaxy_sources_for_resource("Iron")[0][EXPLORED] is None
+
+    updated = db.update_galaxy_explored([("Sys1", "PlanetA", True)])
+    assert updated == 2  # both Iron and Gold rows on PlanetA
+
+    by_planet = {r[PLANET]: r for r in db.get_galaxy_sources_for_resource("Iron")}
+    assert by_planet["PlanetA"][EXPLORED] is True
+    assert by_planet["PlanetB"][EXPLORED] is None  # untouched
+
+
 def test_get_galaxy_sources_pure_single_poi_ranks_by_raw_node_count(db):
     # A single-POI pure row's poi_value is just its own node_count - no
     # on-planet confirmation needed, since resourceCounts is already an

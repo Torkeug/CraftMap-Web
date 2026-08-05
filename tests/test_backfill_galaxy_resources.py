@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.backfill_galaxy_resources import (  # noqa: E402
     composite_rows_for_planet,
+    load_explored_rows,
     load_poi_landmark_rows,
     load_rows,
     load_system_rows,
@@ -233,6 +234,27 @@ def test_load_rows_appends_composite_row_with_no_poi_tags(tmp_path):
     assert combo[5] == 0.5  # density - min across members
     assert combo[6] is None  # poi_tags
     assert combo[7] is None  # poi_area_density
+
+
+def test_load_explored_rows_extracts_one_per_planet(tmp_path):
+    dump = [
+        {"system_name": "Sys1", "planet_name": "PlanetA", "explored": True},
+        {"system_name": "Sys1", "planet_name": "PlanetB", "explored": False},
+        # no resourceCounts at all - must still contribute, same reasoning
+        # as load_system_rows (nothing to update in galaxy_resources yet,
+        # but harmless, and this planet may already have rows from an
+        # earlier dump).
+        {"system_name": "Sys2", "planet_name": "PlanetC", "explored": False},
+    ]
+    dump_path = tmp_path / "galaxy_resources.json"
+    dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+    rows = load_explored_rows(dump_path)
+    assert set(rows) == {
+        ("Sys1", "PlanetA", True),
+        ("Sys1", "PlanetB", False),
+        ("Sys2", "PlanetC", False),
+    }
 
 
 def test_load_system_rows_includes_planets_with_no_resource_counts(tmp_path):

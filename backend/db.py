@@ -1370,6 +1370,38 @@ def import_galaxy_resources(rows):
     return inserted
 
 
+def update_galaxy_explored(rows):
+    """Bulk UPDATE galaxy_resources.explored for rows ALREADY in the table,
+    keyed by (system_name, planet) - deliberately not folded into
+    import_galaxy_resources's own INSERT OR IGNORE. Every other column
+    there is a static, generation-time fact (is_asteroid/temperature/
+    planet_scale/...) that's correctly frozen at first import, so INSERT
+    OR IGNORE silently skipping an already-known planet/resource row is
+    exactly right for those - but explored is the one column that
+    genuinely changes as THIS player keeps exploring, so a fresh dump must
+    be able to update it on rows imported long ago, not just attach it to
+    brand-new ones.
+
+    `rows` is a list of (system_name, planet, explored) tuples (see
+    tools/backfill_galaxy_resources.py's load_explored_rows) - explored is
+    applied unconditionally to every existing resource row for that
+    planet (it's duplicated per-resource-row the same way is_asteroid
+    already is). A planet with no galaxy_resources rows yet (never had
+    any resourceCounts) is a harmless no-op. Returns the number of
+    resource rows actually touched (matches, not distinct planets - a
+    planet with 3 logged resources counts as 3)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.executemany(
+        "UPDATE galaxy_resources SET explored = ? WHERE system_name = ? AND planet = ?",
+        [(explored, system_name, planet) for system_name, planet, explored in rows],
+    )
+    conn.commit()
+    updated = conn.total_changes
+    conn.close()
+    return updated
+
+
 # Some resources are the same underlying deposit as another, just a bigger
 # node that yields more per gather - confirmed via data.cdb's `resource`
 # sheet: each variant's own row has an explicit `props.linkedResource`
