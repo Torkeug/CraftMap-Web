@@ -424,7 +424,28 @@
             : false;
 
         const jumpToReal = () => {
-          const target = tree.querySelector(`[data-key="${CSS.escape(rowKey)}"] > .bd-row`);
+          const targetNode = tree.querySelector(`[data-key="${CSS.escape(rowKey)}"]`);
+          if (!targetNode) return;
+          // The real row can be nested under a collapsed ancestor (most
+          // often the "Shared Components" sub-header) even though this
+          // cross-reference itself is visible via a different, already-
+          // expanded path - a collapsed ancestor's .bd-children is
+          // display:none (components.css), so scrollIntoView on the
+          // still-in-DOM-but-hidden row would otherwise silently no-op.
+          // Every ancestor here is guaranteed already loaded (not just
+          // collapsed) because this xref row lives in the same scope and
+          // was itself rendered from already-expanded content, so walking
+          // up and clicking each collapsed disclosure toggles it open
+          // synchronously with no pending onFirstExpand fetch to await.
+          let ancestor = targetNode.parentElement;
+          while (ancestor && ancestor !== tree) {
+            if (ancestor.classList.contains("bd-node") && ancestor.classList.contains("collapsed")) {
+              const disc = ancestor.querySelector(":scope > .bd-row > .disclosure");
+              if (disc) disc.click();
+            }
+            ancestor = ancestor.parentElement;
+          }
+          const target = targetNode.querySelector(":scope > .bd-row");
           if (!target) return;
           target.scrollIntoView({ behavior: "smooth", block: "center" });
           target.classList.remove("flash");
